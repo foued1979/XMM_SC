@@ -1,0 +1,336 @@
+{
+  "_format": "hh-sol-cache-2",
+  "files": {
+    "C:\\Project\\OneXMM - SC\\contracts\\Library.sol": {
+      "lastModificationDate": 1713085397526,
+      "contentHash": "4e96985f81ce1206d5b5278a98510c51",
+      "sourceName": "contracts/Library.sol",
+      "solcConfig": {
+        "version": "0.8.24",
+        "settings": {
+          "evmVersion": "paris",
+          "optimizer": {
+            "enabled": false,
+            "runs": 200
+          },
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [],
+      "versionPragmas": [
+        ">= 0.8.0"
+      ],
+      "artifacts": [
+        "Math"
+      ]
+    },
+    "C:\\Project\\OneXMM - SC\\node_modules\\hardhat\\console.sol": {
+      "lastModificationDate": 1712464611113,
+      "contentHash": "896f68942c3a20e9ae3c3c5bfd3add54",
+      "sourceName": "hardhat/console.sol",
+      "solcConfig": {
+        "version": "0.8.24",
+        "settings": {
+          "evmVersion": "paris",
+          "optimizer": {
+            "enabled": false,
+            "runs": 200
+          },
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [],
+      "versionPragmas": [
+        ">=0.4.22 <0.9.0"
+      ],
+      "artifacts": [
+        "console"
+      ]
+    },
+    "C:\\Project\\OneXMM - SC\\contracts\\LibTest.sol": {
+      "lastModificationDate": 1713085387660,
+      "contentHash": "cf044933316bcb501f6bdee134268cbd",
+      "sourceName": "contracts/LibTest.sol",
+      "solcConfig": {
+        "version": "0.8.24",
+        "settings": {
+          "evmVersion": "paris",
+          "optimizer": {
+            "enabled": false,
+            "runs": 200
+          },
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [
+        "./Library.sol"
+      ],
+      "versionPragmas": [
+        ">= 0.8.0"
+      ],
+      "artifacts": [
+        "LibTest"
+      ]
+    },
+    "C:\\Users\\Frederic\\OneXMM_SC\\contracts\\dependencies\\fixed_contributors.sol": {
+      "lastModificationDate": 1713102296126,
+      "contentHash": "d1ee313629fef4d5aa6fc73a7657b639",
+      "sourceName": "contracts/dependencies/fixed_contributors.sol",
+      "solcConfig": {
+        "version": "0.8.24",
+        "settings": {
+          "evmVersion": "paris",
+          "optimizer": {
+            "enabled": false,
+            "runs": 200
+          },
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [],
+      "versionPragmas": [
+        ">= 0.8.0"
+      ],
+      "artifacts": [
+        "FixedContributors"
+      ]
+    },
+    "C:\\Users\\Frederic\\OneXMM_SC\\contracts\\XMM.sol": {
+      "lastModificationDate": 1713184124542,
+      "contentHash": "0d9374bcfaae7f3f88f246d19d36be22",
+      "sourceName": "contracts/XMM.sol",
+      "solcConfig": {
+        "version": "0.8.24",
+        "settings": {
+          "evmVersion": "paris",
+          "optimizer": {
+            "enabled": false,
+            "runs": 200
+          },
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [
+        "./dependencies/fixed_contributors.sol",
+        "./dependencies/float_contributors.sol",
+        "./Library.sol",
+        "./structures.sol"
+      ],
+      "versionPragmas": [
+        ">= 0.8.0"
+      ],
+      "artifacts": [
+        "XMM"
+      ]
+    },
+    "C:\\Users\\Frederic\\OneXMM_SC\\contracts\\structures.sol": {
+      "lastModificationDate": 1713102140656,
+      "contentHash": "64302b9903542bce99bbe49e237a78a5",
+      "sourceName": "contracts/structures.sol",
+      "solcConfig": {
+        "version": "0.8.24",
+        "settings": {
+          "evmVersion": "paris",
+          "optimizer": {
+            "enabled": false,
+            "runs": 200
+          },
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [],
+      "versionPragmas": [
+        ">= 0.8.0"
+      ],
+      "artifacts": []
+    },
+    "C:\\Users\\Frederic\\OneXMM_SC\\contracts\\Library.sol": {
+      "lastModificationDate": 1713102704153,
+      "contentHash": "4e96985f81ce1206d5b5278a98510c51",
+      "sourceName": "contracts/Library.sol",
+      "solcConfig": {
+        "version": "0.8.24",
+        "settings": {
+          "evmVersion": "paris",
+          "optimizer": {
+            "enabled": false,
+            "runs": 200
+          },
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [],
+      "versionPragmas": [
+        ">= 0.8.0"
+      ],
+      "artifacts": [
+        "Math"
+      ]
+    },
+    "C:\\Users\\Frederic\\OneXMM_SC\\contracts\\dependencies\\float_contributors.sol": {
+      "lastModificationDate": 1713102298334,
+      "contentHash": "f6bd4a54dba700e45514856dfb37b007",
+      "sourceName": "contracts/dependencies/float_contributors.sol",
+      "solcConfig": {
+        "version": "0.8.24",
+        "settings": {
+          "evmVersion": "paris",
+          "optimizer": {
+            "enabled": false,
+            "runs": 200
+          },
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [],
+      "versionPragmas": [
+        ">= 0.8.0"
+      ],
+      "artifacts": [
+        "FloatContributors"
+      ]
+    },
+    "C:\\Users\\Frederic\\OneXMM_SC\\contracts\\LibTest.sol": {
+      "lastModificationDate": 1713085387660,
+      "contentHash": "cf044933316bcb501f6bdee134268cbd",
+      "sourceName": "contracts/LibTest.sol",
+      "solcConfig": {
+        "version": "0.8.24",
+        "settings": {
+          "evmVersion": "paris",
+          "optimizer": {
+            "enabled": false,
+            "runs": 200
+          },
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [
+        "./Library.sol"
+      ],
+      "versionPragmas": [
+        ">= 0.8.0"
+      ],
+      "artifacts": [
+        "LibTest"
+      ]
+    }
+  }
+}
