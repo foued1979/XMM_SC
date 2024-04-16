@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity >= 0.8.0;
 
+import "./FinancialLibrary.sol";
 import "./Library.sol";
 
 contract LibTest {
@@ -9,6 +10,10 @@ contract LibTest {
     constructor()
     {
         Owner = msg.sender;
+    }
+
+    function put(int64 forward, int64 volatility, int64 term) public pure returns(int64) {
+        return FinancialLib.put(forward, volatility, term);
     }
 
     function add(int64 a, int64 b) public pure returns(int64) {

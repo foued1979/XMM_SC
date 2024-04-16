@@ -295,9 +295,48 @@
       ]
     },
     "C:\\Users\\Frederic\\OneXMM_SC\\contracts\\LibTest.sol": {
-      "lastModificationDate": 1713085387660,
-      "contentHash": "cf044933316bcb501f6bdee134268cbd",
+      "lastModificationDate": 1713192267403,
+      "contentHash": "5fec8487344d0ae99c1ab410cb4068ed",
       "sourceName": "contracts/LibTest.sol",
+      "solcConfig": {
+        "version": "0.8.24",
+        "settings": {
+          "evmVersion": "paris",
+          "optimizer": {
+            "enabled": false,
+            "runs": 200
+          },
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [
+        "./FinancialLibrary.sol",
+        "./Library.sol"
+      ],
+      "versionPragmas": [
+        ">= 0.8.0"
+      ],
+      "artifacts": [
+        "LibTest"
+      ]
+    },
+    "C:\\Users\\Frederic\\OneXMM_SC\\contracts\\FinancialLibrary.sol": {
+      "lastModificationDate": 1713192865147,
+      "contentHash": "b4856d5a958f8794f450f9a475467efd",
+      "sourceName": "contracts/FinancialLibrary.sol",
       "solcConfig": {
         "version": "0.8.24",
         "settings": {
@@ -329,7 +368,7 @@
         ">= 0.8.0"
       ],
       "artifacts": [
-        "LibTest"
+        "FinancialLib"
       ]
     }
   }

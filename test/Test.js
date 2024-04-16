@@ -6,7 +6,7 @@ async function main() {
   const factory = await ethers.getContractFactory("LibTest");
   const lib = await factory.deploy();
 
-  var b = await lib.exp(dtoi(3.6248));
+  var b = await lib.put(dtoi(99), dtoi(0.50), dtoi(1.0/12));
 
   console.log(`Power test: ${itod(b)}`)
 }
