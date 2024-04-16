@@ -1,13 +1,10 @@
 # Sample Hardhat Project
 
-This project demonstrates a basic Hardhat use case. It comes with a sample contract, a test for that contract, and a Hardhat Ignition module that deploys that contract.
+To execute a file, without deploying on a local Hardhat node:
+<c>npx hardhat run {file_path}/{filename}</c>
 
-Try running some of the following tasks:
+To launch a Node: npx hardhat node
+To execute some code and deploy a contract on the local node:
+npx hardhat run {file_path}/{filename} --network localhost
 
-```shell
-npx hardhat help
-npx hardhat test
-REPORT_GAS=true npx hardhat test
-npx hardhat node
-npx hardhat ignition deploy ./ignition/modules/Lock.js
-```
+e.g. npx hardhat run ./my_tests/test.js --network localhost
