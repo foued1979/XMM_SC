@@ -1,44 +1,23 @@
 // SPDX-License-Identifier: MIT
 pragma solidity >= 0.8.0;
 
-import "./Library.sol";
+import "./math.sol";
 
 library FinancialLib {
-/**
- * Calculates d1.
- */
-  function d1 (int64 volatility, int64 term) internal pure returns(int64, int64) {
-    int64 vol_sqrtT = Math.mult(volatility, Math.sqrt(term));
-    return (vol_sqrtT >> 1, vol_sqrtT);
-  }
+    /// @notice Computes d1 and d2
+    function optionFactors (int64 forward, int64 strike, int64 volatility, int64 term) internal pure returns(int64, int64) {
+        int64 vol_sqrtT = Math.mult(volatility, Math.sqrt(term));
+        int64 d1 = Math.div(Math.ln(Math.div(forward, strike)), vol_sqrtT) + (vol_sqrtT >> 1);
+        return (d1, Math.sub(d1, vol_sqrtT));
+    }
 
-/**s
- * Calculates d2.
- */
-  function d2 (int64 volatility, int64 term) internal pure returns(int64) {
-    (int64 _d1, int64 vol_sqrtT) = d1(volatility, term);
-    return Math.sub(_d1, vol_sqrtT >> 1);
-  }
+    function put(int64 forward, int64 strike, int64 volatility, int64 term) internal pure returns(int64) {
+        (int64 d1, int64 d2) = optionFactors(forward, strike, volatility, term);
+        int64 f1 = Math.mult(forward, Math.sub(Math.One_32, cnsd(d1)));
+        int64 f2 = Math.mult(strike, Math.sub(Math.One_32, cnsd(d2)));
 
-function call(int64 forward, int64 volatility, int64 term) internal pure returns(int64) {
-    (int64 _d1, ) = d1(volatility, term);
-    int64 f1 = Math.mult(forward, cnsd(_d1));
-    int64 f2 = Math.mult(forward, cnsd(d2(volatility, term)));
-
-    return f1 - f2;
-}
-
-function put(int64 forward, int64 volatility, int64 term) internal pure returns(int64) {
-    (int64 _d1, ) = d1(volatility, term);
-    int64 f1 = Math.mult(forward, cnsd(Math.neg(_d1)));
-    int64 f2 = Math.mult(forward, cnsd(Math.neg(d2(volatility, term))));
-
-    return f2 - f1;
-}
-
-function straddle(int64 forward, int64 volatility, int64 term) internal pure returns(int64) {
-    return Math.add(call(forward, volatility, term), put(forward, volatility, term));
-}
+        return f2 - f1;
+    }
 
 int64 private constant sqrt_2 = 6074001000;
 
