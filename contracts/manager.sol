@@ -3,7 +3,7 @@ pragma solidity >= 0.8.0;
 
 import "./interfaces/ixmm.sol";
 import "./libraries/utils.sol";
-import "./structures.sol";
+import "./enums.sol";
 import "./xmm.sol";
 
 contract Manager {
@@ -39,17 +39,9 @@ contract Manager {
     function changeOwnership(address newOwner) external onlyOwner returns(bool) {
         Owner = newOwner;
 
-        try {
-            for (uint i = 0; i < _registeredTokens.length; i++) {
-                address[] storage currentTerms = _listOfXMMs[_registeredTokens[i]];
-
-                for (uint j = 0; j < 6; j++) {
-                    IXMM(currentTerms[j]).changeOwnership(newOwner);
-                }
-            }
-        }
-        catch  {
-            return false
+        for (uint i = 0; i < _registeredTokens.length; i++) {
+            try _changeOwnership(newOwner, _listOfXMMs[_registeredTokens[i]]) returns(bool success) { }
+            catch  { return false; } 
         }
 
         emit OwnerChanged(msg.sender, newOwner);
@@ -70,5 +62,11 @@ contract Manager {
         _listOfXMMs[token][term] = newXMM;
         emit XMMCreated(block.timestamp, token, term, newXMM);
         return newXMM;
+    }
+
+    function _changeOwnership(address newOwner, address[] xmms) private returns(bool) {
+        for (uint j = 0; j < 6; j++) {
+            IXMM(xmms[j]).changeOwnership(newOwner);
+        }
     }
 }

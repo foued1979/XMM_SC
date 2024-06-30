@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity >= 0.8.0;
 
-import "./structures.sol";
+import "../enums.sol";
 
 interface IXMM {
     /// @notice Gets the term of the XMM
