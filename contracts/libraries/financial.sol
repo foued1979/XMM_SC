@@ -1,22 +1,48 @@
 // SPDX-License-Identifier: MIT
 pragma solidity >= 0.8.0;
 
+import "./utils.sol";
 import "./math.sol";
+import "../enums.sol";
 
 library FinancialLib {
+    int64 private constant ONE_WEEK_EXPIRY = 82_369_236;
+    int64 private constant TWO_WEEKS_EXPIRY = 164_738_472;
+    int64 private constant THREE_WEEKS_EXPIRY = 247_107_707;
+    int64 private constant ONE_MONTH_EXPIRY = 353_011_011;
+    int64 private constant TWO_MONTHS_EXPIRY = 706_022_021;
+    int64 private constant THREE_MONTHS_EXPIRY = 1_059_033_032;
+
+    /// @notice Computes option expiry as a year fraction
+    function yearFraction(Terms term) internal pure returns(int64) {
+        if (term == Terms.OneWeek) return ONE_WEEK_EXPIRY;
+        if (term == Terms.TwoWeeks) return TWO_WEEKS_EXPIRY;
+        if (term == Terms.ThreeWeeks) return THREE_WEEKS_EXPIRY;
+        if (term == Terms.OneMonth) return ONE_MONTH_EXPIRY;
+        if (term == Terms.TwoMonths) return TWO_MONTHS_EXPIRY;
+
+        return THREE_MONTHS_EXPIRY;
+    }
+
+    /// @notice Computes the timestamp of position expiry
+    function optionMaturity(uint blockTimestamp, Terms term) internal pure returns(uint) {
+        return Utils.toExpiry(Utils.getTimeStamp(blockTimestamp), term);
+    }
+
     /// @notice Computes d1 and d2
-    function optionFactors (int64 forward, int64 strike, int64 volatility, int64 term) internal pure returns(int64, int64) {
+    function optionFactors(int64 forward, int64 strike, int64 volatility, int64 term) internal pure returns(int64, int64) {
         int64 vol_sqrtT = Math.mult(volatility, Math.sqrt(term));
         int64 d1 = Math.div(Math.ln(Math.div(forward, strike)), vol_sqrtT) + (vol_sqrtT >> 1);
         return (d1, Math.sub(d1, vol_sqrtT));
     }
 
-    function put(int64 forward, int64 strike, int64 volatility, int64 term) internal pure returns(int64) {
-        (int64 d1, int64 d2) = optionFactors(forward, strike, volatility, term);
+    /// @notice Computes the value of a Put option
+    function putPremium(int64 forward, int64 strike, int64 volatility, int64 expiry) internal pure returns(int64) {
+        (int64 d1, int64 d2) = optionFactors(forward, strike, volatility, expiry);
         int64 f1 = Math.mult(forward, Math.sub(Math.One_32, cnsd(d1)));
         int64 f2 = Math.mult(strike, Math.sub(Math.One_32, cnsd(d2)));
 
-        return f2 - f1;
+        return Math.div(f2 - f1, strike);
     }
 
 int64 private constant sqrt_2 = 6074001000;

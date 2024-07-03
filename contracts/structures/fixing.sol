@@ -3,8 +3,9 @@ pragma solidity >= 0.8.0;
 
 struct Fixing {
     uint timestamp;
-    uint64 forward;
-    uint64 strike;
-    uint64 volatility;
-    uint64 discountRate;
+    int64 spot;
+    int64 strike;
+    int64 volatility;
+    int64 premium;
+    int64 discountRate;
 }

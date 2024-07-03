@@ -1,11 +1,13 @@
 // SPDX-License-Identifier: MIT
 pragma solidity >= 0.8.0;
 
+import "./fixing.sol";
 import "../enums.sol";
 
 struct Position {
     uint32 positionIndex;
     LongShort position;
-    uint fixingIndex;
-    uint256 amount;
+    Fixing fixing;
+    uint expiry;
+    uint128 amount;
 }
