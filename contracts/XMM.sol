@@ -5,6 +5,7 @@ import "./interfaces/ierc20.sol";
 import "./interfaces/ixmm.sol";
 import "./libraries/financial.sol";
 import "./libraries/math.sol";
+import "./libraries/safemath.sol";
 import "./libraries/utils.sol";
 import "./structures/fixing.sol";
 import "./structures/position.sol";
@@ -20,7 +21,12 @@ contract XMM is IXMM {
      * The modifiers *
      *****************/
     modifier onlyOwner {
-        require(msg.sender == _owner);
+        require(msg.sender == _owner, "Only owner");
+        _;
+    }
+
+    modifier hasMinDeposit(uint128 amount) {
+        require(amount >= MinDeposit, "Min deposit");
         _;
     }
 
@@ -29,10 +35,12 @@ contract XMM is IXMM {
      ***********************/
     // Private properties
     address private _owner;
+
+    uint8 private _decimals;
+
     uint private _fixingUpdateInterval;
     uint private _expiryInterval;
     int64 private _expiryYearFraction;
-
     int64 private _acrualYF;
     
     uint private _lastFixingIndex;
@@ -50,33 +58,43 @@ contract XMM is IXMM {
     /// @notice The token which managed by the XMM
     address public Token;
 
+    /// @notice The minimum deposit size
+    uint64 public MinDeposit;
+
     /// @notice The list of fixings
     Fixing[] public Fixings;
 
     /// @notice The total amount of long positions
-    uint256 public TotalLongPositions;
-    int64[] private _longIndex; 
+    uint128 public TotalLongPositions;
+    uint128 private _marginCallLong;
+    int64 private _longRatio;
+    int64[] private _longIndex;
 
     /// @notice The total amount of short positions
-    uint256 public TotalShortPositions;
+    uint128 public TotalShortPositions;
+    uint128 private _marginCallShort;
+    int64 private _shortRatio;
     int64[] private _shortIndex;
 
     /*************
      * Functions *
      *************/
-    constructor(address token, Terms term, Fixing memory fixing) {
+    constructor(address token, uint8 decimals, Terms term, uint64 minDeposit, Fixing memory fixing) {
         _owner = msg.sender;
         Token = token;
+        _decimals = decimals;
         Term = term;
+        MinDeposit = minDeposit;
+
         StartDate = Utils.getTimeStamp(block.timestamp);
 
         (_fixingUpdateInterval, _expiryInterval, _expiryYearFraction) = Utils.getTermInformation(term);
-        _acrualYF = Math.div(int64(_fixingUpdateInterval * (2 ** 32)), int64(_expiryInterval * (2 ** 32)));
+        _acrualYF = Math.div(int64(_fixingUpdateInterval << 32), int64(_expiryInterval << 32));
 
         _lastFixing = 0;
         Fixings.push(fixing);
-        _longIndex[0] = 1 << 32;
-        _shortIndex[0] = 1 << 32;
+        _longIndex[0] = Math.One_32;
+        _shortIndex[0] = Math.One_32;
     }
 
     /// @notice Gets the term of the XMM
@@ -92,7 +110,7 @@ contract XMM is IXMM {
     /// @notice Executes a deposit to the XMM from msg.sender
     /// @param longShort 0 if long 1 if short
     /// @param amount The amount to be deposited
-    function deposit(LongShort longShort, uint128 amount) external {
+    function deposit(LongShort longShort, uint128 amount) external hasMinDeposit(amount) {
         (bool success, bytes memory res) = Token.call(abi.encodeWithSelector(IERC20.balanceOf.selector, msg.sender));
 
         if (success) {
@@ -108,10 +126,12 @@ contract XMM is IXMM {
                 _positions[msg.sender].push(position);
                 
                 if (longShort == LongShort.Long) {
-                    TotalLongPositions += amount;
+                    TotalLongPositions = SafeMath.add(TotalLongPositions, amount);
                 } else {
-                    TotalShortPositions += amount;
+                    TotalShortPositions = SafeMath.add(TotalShortPositions, amount);
                 }
+
+                getRatios();
 
                 emit Deposit(block.timestamp, msg.sender, position);
             }
@@ -136,16 +156,17 @@ contract XMM is IXMM {
     /// @param positionIndex The index of the position
     /// @param amount The reduction amount. If amount is bigger than position amount, the position is closed.
     // A position that is closed leads to re-organization of existing positions.
-    function reducePosition(uint32 positionIndex, uint256 amount) external {
+    function reducePosition(uint32 positionIndex, uint128 amount) external {
         if (_positions[msg.sender].length > positionIndex) {
-            (LongShort ls, uint32 index, uint256 finalAmount, bool toDelete) = Utils.reducePosition(_positions[msg.sender][positionIndex], amount);
+            (LongShort ls, uint32 index, uint128 finalAmount, bool toDelete) = Utils.reducePosition(_positions[msg.sender][positionIndex], amount);
 
             if (ls == LongShort.Long) {
-                TotalLongPositions -= finalAmount;
+                TotalLongPositions = SafeMath.sub(TotalLongPositions, finalAmount);
             } else {
-                TotalShortPositions -= finalAmount;
+                TotalShortPositions = SafeMath.sub(TotalShortPositions, finalAmount);
             }
 
+            getRatios();
             if (toDelete) Utils.removePositionFromArray(index, _positions[msg.sender]);
 
             code if reduce => need to pay
@@ -186,25 +207,59 @@ contract XMM is IXMM {
         if (spotPerf > 0) spotPerf = 0;
         
         int64 shortPerf = Math.add(spotPerf, discountRatePerf);
+        int64 longPerf = Math.mult(_longRatio, Math.sub(premiumPerf, shortPerf));
 
         if (shortPerf < premiumPerf) {
-            transferShortToLong(Math.sub(premiumPerf, shortPerf));
+            transferShortToLong(uint64(longPerf));
+            shortPerf = Math.mult(_shortRatio, Math.sub(shortPerf, premiumPerf));
         } else {
-            transferLongToShort(Math.sub(shortPerf, premiumPerf);
+            shortPerf = Math.mult(_shortRatio, Math.sub(shortPerf, premiumPerf));
+            transferLongToShort(uint64(shortPerf));
         }
         
-        int64 longRateFactor = Math.mult(_longIndex[_longIndex.length - 1], Math.add(Math.One_32, Math.sub(premiumPerf, discountRatePerf)));
-        int64 shortRateFactor = Math.mult(_shortIndex[_shortIndex.length - 1], Math.sub(Math.One_32, Math.sub(premiumPerf, discountRatePerf)));
+        int64 longRateFactor = Math.mult(_longIndex[_longIndex.length - 1], Math.add(Math.One_32, longPerf));
+        int64 shortRateFactor = Math.mult(_shortIndex[_shortIndex.length - 1], Math.add(Math.One_32, shortPerf));
 
         _longIndex.push(longRateFactor);
         _shortIndex.push(shortRateFactor);
     }
 
-    function transferShortToLong(int64 netPerf) private {
+    function transferShortToLong(uint64 netPerf) private {
+        uint128 transfer = uint128(TotalShortPositions >> Math.max(int8(_decimals - 2), 0));
+        transfer = uint128((transfer * netPerf) >> 32);
 
+        if (_marginCallLong > transfer) {
+            _marginCallLong = SafeMath.sub(_marginCallLong, transfer);
+        } else {
+            transfer = SafeMath.sub(transfer, _marginCallLong)
+            _marginCallShort = SafeMath.add(_marginCallShort, transfer);
+        }
     }
 
-    function transferLongToShort(int64 netPerf) private {
+    function transferLongToShort(uint64 netPerf) private {
+        uint128 transfer = uint128(TotalLongPositions >> Math.max(int8(_decimals - 2), 0));
+        transfer = uint128((transfer * netPerf) >> 32);
 
+        if (_marginCallShort > transfer) {
+            _marginCallShort = SafeMath.sub(_marginCallShort, transfer);
+        } else {
+            transfer = SafeMath.sub(transfer, _marginCallShort)
+            _marginCallLong = SafeMath.add(_marginCallLong, transfer);
+        }
+    }
+
+    function getRatios() private {
+        _longRatio = getLongRatio();
+        _shortRatio = getShortRatio();
+    }
+
+    function getLongRatio() private pure return(int64) {
+        uint256 short = uint256(TotalShortPositions) << 32;
+        return int64(uint64(short / TotalLongPositions));
+    }
+
+    function getShortRatio() private pure returns(int64) {
+        uint256 long = uint256(TotalLongPositions) << 32;
+        return int64(uint64(long / TotalShortPositions));
     }
 }

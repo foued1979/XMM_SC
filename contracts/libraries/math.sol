@@ -28,6 +28,10 @@ library Math {
   int64 internal constant One_32 = 0x100000000;
   int128 internal constant One_64 = 0x10000000000000000;
 
+  function max(int8 x, int8 l) internal pure returns(uint8) {
+    return x > l ? uint8(x) : uint8(l);
+  }
+
   /**
   * @notice Calculates x + y.
   */
