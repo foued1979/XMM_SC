@@ -53,14 +53,13 @@ contract XMM is IXMM {
     /// @notice The list of fixings
     Fixing[] public Fixings;
 
-    /// @notice The rate index
-    uint64[] public RateIndex;
-
     /// @notice The total amount of long positions
     uint256 public TotalLongPositions;
+    int64[] private _longIndex; 
 
     /// @notice The total amount of short positions
     uint256 public TotalShortPositions;
+    int64[] private _shortIndex;
 
     /*************
      * Functions *
@@ -76,7 +75,8 @@ contract XMM is IXMM {
 
         _lastFixing = 0;
         Fixings.push(fixing);
-        RateIndex[0] = 1 << 32;
+        _longIndex[0] = 1 << 32;
+        _shortIndex[0] = 1 << 32;
     }
 
     /// @notice Gets the term of the XMM
@@ -182,17 +182,29 @@ contract XMM is IXMM {
         int64 premiumPerf = Math.mult(lastFixing.premium, _acrualYF);
         int64 discountRatePerf = Math.mult(lastFixing.discountRate, Utils.ONE_DAY_YF);
 
-        int64 spotPerf = Math.sub(lastFixing.spot, prevFixing.spot);
+        int64 spotPerf = Math.div(Math.sub(lastFixing.spot, prevFixing.spot), prevFixing.spot);
+        if (spotPerf > 0) spotPerf = 0;
         
-        if (spotPerf > 0) {
-            
-        } else {
+        int64 shortPerf = Math.add(spotPerf, discountRatePerf);
 
+        if (shortPerf < premiumPerf) {
+            transferShortToLong(Math.sub(premiumPerf, shortPerf));
+        } else {
+            transferLongToShort(Math.sub(shortPerf, premiumPerf);
         }
         
+        int64 longRateFactor = Math.mult(_longIndex[_longIndex.length - 1], Math.add(Math.One_32, Math.sub(premiumPerf, discountRatePerf)));
+        int64 shortRateFactor = Math.mult(_shortIndex[_shortIndex.length - 1], Math.sub(Math.One_32, Math.sub(premiumPerf, discountRatePerf)));
+
+        _longIndex.push(longRateFactor);
+        _shortIndex.push(shortRateFactor);
     }
 
-    function transferShortToLong(int64 netPremiumPerf) private {
+    function transferShortToLong(int64 netPerf) private {
+
+    }
+
+    function transferLongToShort(int64 netPerf) private {
 
     }
 }
