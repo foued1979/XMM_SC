@@ -9,6 +9,7 @@ contract Token is ERC20, ITradable {
     /// @notice The Allocated event is triggered when Owner allocates some token to
     /// a beneficiary
     event Allocated(uint indexed timestamp, address indexed beneficiary, uint256 amount);
+    event Withdrawn(uint indexed timestamp, address indexed from, uint256 amount);
 
     /*************
      * Modifiers *
@@ -98,10 +99,14 @@ contract Token is ERC20, ITradable {
         }
         
         (bool success, bytes memory res) = payable(address(this)).call{gas: maxGas, value:amountETH} ("");
+        
 
         if (success) {
             AvailableQuantityOfETH = SafeMath.SafeAdd(AvailableQuantityOfETH, amountETH);
             AllocatedAmount = SafeMath.SafeAdd(AllocatedAmount, amountToken);
+
+            emit Deposited(block.timestamp, msg.sender, amountETH, amountToken);
+            emit Allocated(block.timestamp, msg.sender, amountToken);
             _balances[msg.sender] += amountToken;
         }
 
@@ -136,6 +141,9 @@ contract Token is ERC20, ITradable {
             AllocatedAmount = SafeMath.SafeSub(AllocatedAmount, amountToken);
             _balances[from] = SafeMath.SafeSub(_balances[from], amountToken);
             AvailableQuantityOfETH = SafeMath.SafeSub(AvailableQuantityOfETH, amountETH);
+
+            emit ChangedBack(block.timestamp, from, amountETH, amountToken);
+            emit Withdrawn(block.timestamp, from, amountToken);
         }
 
         return success;

@@ -4,6 +4,7 @@ pragma solidity >= 0.8.0;
 import "./interfaces/ierc20.sol";
 import "./interfaces/ixmm.sol";
 import "./libraries/financial.sol";
+import "./libraries/math.sol";
 import "./libraries/utils.sol";
 import "./structures/fixing.sol";
 import "./structures/position.sol";
@@ -28,9 +29,11 @@ contract XMM is IXMM {
      ***********************/
     // Private properties
     address private _owner;
-    uint private _fixinUpdateInterval;
-    uint private _timestampInterval;
-    uint64 private _expiryYearFraction;
+    uint private _fixingUpdateInterval;
+    uint private _expiryInterval;
+    int64 private _expiryYearFraction;
+
+    int64 private _acrualYF;
     
     uint private _lastFixingIndex;
 
@@ -68,7 +71,8 @@ contract XMM is IXMM {
         Term = term;
         StartDate = Utils.getTimeStamp(block.timestamp);
 
-        (_fixinUpdateInterval, _timestampInterval, _expiryYearFraction) = Utils.getTermInformation(term);
+        (_fixingUpdateInterval, _expiryInterval, _expiryYearFraction) = Utils.getTermInformation(term);
+        _acrualYF = Math.div(int64(_fixingUpdateInterval * (2 ** 32)), int64(_expiryInterval * (2 ** 32)));
 
         _lastFixing = 0;
         Fixings.push(fixing);
@@ -99,8 +103,8 @@ contract XMM is IXMM {
 
             if (success) {
                 uint positionIndex = uint32(_positions[msg.sender].length);
-                Fixing storage fixing = Fixings[Utils.getFixingIndex(block.timestamp, StartDate)];
-                Position storage position = Position(positionIndex, longShort, fixing, Utils.toExpiry(fixing.timestamp, Term), amount);
+                Fixing storage fixing = Fixings[Utils.getFixingIndex(block.timestamp, StartDate, _fixingUpdateInterval)];
+                Position storage position = Position(positionIndex, longShort, fixing, fixing.timestamp + _expiryInterval, amount);
                 _positions[msg.sender].push(position);
                 
                 if (longShort == LongShort.Long) {
@@ -163,22 +167,32 @@ contract XMM is IXMM {
     /// @notice Sets the latest fixing for the XMM
     function setFixing(address token, int64 spot, int64 strike, uint64 volatility, int64 discountRate) external onlyOwner {
         require(token == Token, "Wrong token");
-        int64 optionPremium = FinancialLib.putPremium(spot, strike, volatility, FinancialLib.yearFraction(Term));
+        int64 optionPremium = FinancialLib.putPremium(spot, strike, volatility, _expiryYearFraction);
         Fixing memory fixing = Fixing(timestamp, spot, strike, volatility, optionPremium, discountRate);
+
+        executeMarginCalls(Fixings[_lastFixingIndex].spot, fixing);
         
         _lastFixingIndex += 1;
         if (_lastFixingIndex == Utils.MAX_NUMBER_FIXINGS) _lastFixingIndex = 0;
         Fixings[_lastFixingIndex] = fixing;
     }
 
-    function executeMarginCalls(uint lastFixingIndex, Fixing memory lastFixing) private {
-        uint prevFixingIndex = lastFixingIndex == 0 ? Utils.MAX_NUMBER_FIXINGS - 1 : lastFixingIndex - 1;
-        Fixing storage preFixing = Fixings[prevFixingIndex];
-
-        int64 premiumPerf = lastFixing.premium - prevFixing.premium;
-        int64 spotPerf = lastFixing.spot - prevFixing.spot;
-
-        if (spotPerf > 0) spotPerf = 0;
+    function executeMarginCalls(uint64 prevSpot, Fixing memory lastFixing) private {
         
+        int64 premiumPerf = Math.mult(lastFixing.premium, _acrualYF);
+        int64 discountRatePerf = Math.mult(lastFixing.discountRate, Utils.ONE_DAY_YF);
+
+        int64 spotPerf = Math.sub(lastFixing.spot, prevFixing.spot);
+        
+        if (spotPerf > 0) {
+            
+        } else {
+
+        }
+        
+    }
+
+    function transferShortToLong(int64 netPremiumPerf) private {
+
     }
 }

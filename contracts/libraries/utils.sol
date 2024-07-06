@@ -16,7 +16,7 @@ library Utils {
     uint internal constant THREE_MONTHS_TIMESTAMP_INTERVAL = 7_776_000;
     uint internal constant ONE_YEAR_TIMESTAMP_INTERVAL = 31_536_000;
 
-    int64 private constant ONE_DAY_YF = 11_767_034;
+    int64 internal constant ONE_DAY_YF = 11_767_034;
     int64 private constant ONE_WEEK_YF = 82_369_236;
     int64 private constant TWO_WEEKS_YF = 164_738_472;
     int64 private constant THREE_WEEKS_YF = 247_107_707;
@@ -29,7 +29,7 @@ library Utils {
     uint private constant FOUR_HOURS_UPDATE_INTERVAL = 14_400;
 
     /// @notice Computes option expiry as a year fraction
-    function getTermInformation(Terms term) internal pure returns(uint updateInterval, uint timestampInterval, int64 yearFraction) {
+    function getTermInformation(Terms term) internal pure returns(uint updateInterval, uint expiryInterval, int64 expiryYF) {
         if (term == Terms.OneDay) return (ONE_HOUR_UPDATE_INTERVAL, ONE_DAY_TIMESTAMP_INTERVAL, ONE_DAY_YF);
         if (term == Terms.OneWeek) return (TWO_HOURS_UPDATE_INTERVAL, ONE_WEEK_TIMESTAMP_INTERVAL, ONE_WEEK_YF);
         if (term == Terms.TwoWeeks) return (TWO_HOURS_UPDATE_INTERVAL, TWO_WEEKS_TIMESTAMP_INTERVAL, TWO_WEEKS_YF);

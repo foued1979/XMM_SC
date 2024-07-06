@@ -2,8 +2,8 @@
 pragma solidity >= 0.8.0;
 
 interface ITradable {
-    event Deposit(uint indexed timestamp, address indexed from, uint256 amount);
-    event Changed(uint indexed timestamp, address indexed beneficiary, uint256 amount);
+    event Deposited(uint indexed timestamp, address indexed from, uint256 amountETH, uint256 amountToken);
+    event ChangedBack(uint indexed timestamp, address indexed beneficiary, uint256 amountETH, uint256 amountTokens);
 
     /// @notice Sets the change authorization status
     function setChangeAuthorization(bool status) external;
