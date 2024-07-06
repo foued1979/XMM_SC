@@ -6,27 +6,9 @@ import "./math.sol";
 import "../enums.sol";
 
 library FinancialLib {
-    int64 private constant ONE_WEEK_EXPIRY = 82_369_236;
-    int64 private constant TWO_WEEKS_EXPIRY = 164_738_472;
-    int64 private constant THREE_WEEKS_EXPIRY = 247_107_707;
-    int64 private constant ONE_MONTH_EXPIRY = 353_011_011;
-    int64 private constant TWO_MONTHS_EXPIRY = 706_022_021;
-    int64 private constant THREE_MONTHS_EXPIRY = 1_059_033_032;
-
-    /// @notice Computes option expiry as a year fraction
-    function yearFraction(Terms term) internal pure returns(int64) {
-        if (term == Terms.OneWeek) return ONE_WEEK_EXPIRY;
-        if (term == Terms.TwoWeeks) return TWO_WEEKS_EXPIRY;
-        if (term == Terms.ThreeWeeks) return THREE_WEEKS_EXPIRY;
-        if (term == Terms.OneMonth) return ONE_MONTH_EXPIRY;
-        if (term == Terms.TwoMonths) return TWO_MONTHS_EXPIRY;
-
-        return THREE_MONTHS_EXPIRY;
-    }
-
     /// @notice Computes the timestamp of position expiry
-    function optionMaturity(uint blockTimestamp, Terms term) internal pure returns(uint) {
-        return Utils.toExpiry(Utils.getTimeStamp(blockTimestamp), term);
+    function optionMaturity(uint blockTimestamp, uint fixingUpdateInterval, uint expiry) internal pure returns(uint) {
+        return Utils.getTimeStamp(blockTimestamp, fixingUpdateInterval) + expiry;
     }
 
     /// @notice Computes d1 and d2

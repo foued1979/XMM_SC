@@ -5,26 +5,39 @@ import "../structures/position.sol";
 import "../enums.sol";
 
 library Utils {
-    uint internal constant UPDATE_INTERVAL = 14_400;
     uint internal constant MAX_NUMBER_FIXINGS = 4_380;
 
-    uint internal constant ONE_WEEK_TIME_INTERVAL = 604_800;
-    uint internal constant TWO_WEEKS_TIME_INTERVAL = 1_209_600;
-    uint internal constant THREE_WEEKS_TIME_INTERVAL = 1_814_400;
-    uint internal constant ONE_MONTH_TIME_INTERVAL = 2_592_000;
-    uint internal constant TWO_MONTHS_TIME_INTERVAL = 5_184_000;
-    uint internal constant THREE_MONTHS_TIME_INTERVAL = 7_776_000;
-    uint internal constant ONE_YEAR_TIME_INTERVAL = 31_536_000;
+    uint internal constant ONE_DAY_TIMESTAMP_INTERVAL = 86_400;
+    uint internal constant ONE_WEEK_TIMESTAMP_INTERVAL = 604_800;
+    uint internal constant TWO_WEEKS_TIMESTAMP_INTERVAL = 1_209_600;
+    uint internal constant THREE_WEEKS_TIMESTAMP_INTERVAL = 1_814_400;
+    uint internal constant ONE_MONTH_TIMESTAMP_INTERVAL = 2_592_000;
+    uint internal constant TWO_MONTHS_TIMESTAMP_INTERVAL = 5_184_000;
+    uint internal constant THREE_MONTHS_TIMESTAMP_INTERVAL = 7_776_000;
+    uint internal constant ONE_YEAR_TIMESTAMP_INTERVAL = 31_536_000;
 
-    /// @notice Gets the term value
-    function toExpiry(uint positionStartDate, Terms term) internal pure returns(uint) {
-        if (term == Terms.OneWeek) return positionStartDate + ONE_WEEK_TIME_INTERVAL;
-        if (term == Terms.TwoWeeks) return positionStartDate + TWO_WEEKS_TIME_INTERVAL;
-        if (term == Terms.ThreeWeeks) return positionStartDate + THREE_WEEKS_TIME_INTERVAL;
-        if (term == Terms.OneMonth) return positionStartDate + ONE_MONTH_TIME_INTERVAL;
-        if (term == Terms.TwoMonths) return positionStartDate + TWO_MONTHS_TIME_INTERVAL;
-        
-        return positionStartDate + THREE_MONTHS_TIME_INTERVAL;
+    int64 private constant ONE_DAY_YF = 11_767_034;
+    int64 private constant ONE_WEEK_YF = 82_369_236;
+    int64 private constant TWO_WEEKS_YF = 164_738_472;
+    int64 private constant THREE_WEEKS_YF = 247_107_707;
+    int64 private constant ONE_MONTH_YF = 353_011_011; // 30 days
+    int64 private constant TWO_MONTHS_YF = 706_022_021; // 60 days
+    int64 private constant THREE_MONTHS_YF = 1_059_033_032; // 90 days
+
+    uint private constant ONE_HOUR_UPDATE_INTERVAL = 3_600;
+    uint private constant TWO_HOURS_UPDATE_INTERVAL = 7_200;
+    uint private constant FOUR_HOURS_UPDATE_INTERVAL = 14_400;
+
+    /// @notice Computes option expiry as a year fraction
+    function getTermInformation(Terms term) internal pure returns(uint updateInterval, uint timestampInterval, int64 yearFraction) {
+        if (term == Terms.OneDay) return (ONE_HOUR_UPDATE_INTERVAL, ONE_DAY_TIMESTAMP_INTERVAL, ONE_DAY_YF);
+        if (term == Terms.OneWeek) return (TWO_HOURS_UPDATE_INTERVAL, ONE_WEEK_TIMESTAMP_INTERVAL, ONE_WEEK_YF);
+        if (term == Terms.TwoWeeks) return (TWO_HOURS_UPDATE_INTERVAL, TWO_WEEKS_TIMESTAMP_INTERVAL, TWO_WEEKS_YF);
+        if (term == Terms.ThreeWeeks) return (FOUR_HOURS_UPDATE_INTERVAL, THREE_WEEKS_TIMESTAMP_INTERVAL, THREE_WEEKS_YF);
+        if (term == Terms.OneMonth) return (FOUR_HOURS_UPDATE_INTERVAL, ONE_MONTH_TIMESTAMP_INTERVAL, ONE_MONTH_YF);
+        if (term == Terms.TwoMonths) return (FOUR_HOURS_UPDATE_INTERVAL, TWO_MONTHS_TIMESTAMP_INTERVAL, TWO_MONTHS_YF);
+
+        return (FOUR_HOURS_UPDATE_INTERVAL, THREE_MONTHS_TIMESTAMP_INTERVAL, THREE_MONTHS_YF);
     }
 
     /// @notice Checks if an address is in an array of addresses
@@ -37,14 +50,14 @@ library Utils {
     }
 
     /// @notice Gets the start date of an XMM
-    function getTimeStamp(uint blockTimestamp) internal pure returns(uint) {
-        return uint(blockTimestamp / UPDATE_INTERVAL) * UPDATE_INTERVAL;
+    function getTimeStamp(uint blockTimestamp, uint updateInterval) internal pure returns(uint) {
+        return uint(blockTimestamp / updateInterval) * updateInterval;
     }
 
     /// @notice Gets the fixing index corresponding to the block timestamp
-    function getFixingIndex(uint blockTimestamp, uint startDate) internal pure returns(uint) {
-        uint offset = uint(blockTimestamp / UPDATE_INTERVAL) - uint(startDate / UPDATE_INTERVAL);
-        return offset - (offset / MAX_NUMBER_FIXINGS) * MAX_NUMBER_FIXINGS;
+    function getFixingIndex(uint blockTimestamp, uint startDate, uint updateInterval) internal pure returns(uint) {
+        uint offset = uint((blockTimestamp - startDate) / updateInterval);
+        return offset - uint(offset / MAX_NUMBER_FIXINGS) * MAX_NUMBER_FIXINGS;
     }
 
     /// @notice Reduces the amount of a position

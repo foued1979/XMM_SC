@@ -28,6 +28,10 @@ contract XMM is IXMM {
      ***********************/
     // Private properties
     address private _owner;
+    uint private _fixinUpdateInterval;
+    uint private _timestampInterval;
+    uint64 private _expiryYearFraction;
+    
     uint private _lastFixingIndex;
 
     // The positions by depositors
@@ -60,10 +64,11 @@ contract XMM is IXMM {
      *************/
     constructor(address token, Terms term, Fixing memory fixing) {
         _owner = msg.sender;
-        Term = term;
         Token = token;
-
+        Term = term;
         StartDate = Utils.getTimeStamp(block.timestamp);
+
+        (_fixinUpdateInterval, _timestampInterval, _expiryYearFraction) = Utils.getTermInformation(term);
 
         _lastFixing = 0;
         Fixings.push(fixing);
