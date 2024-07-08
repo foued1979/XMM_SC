@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity >= 0.8.0;
 
+import "./math.sol";
 import "../structures/position.sol";
 import "../enums.sol";
 
@@ -47,6 +48,13 @@ library Utils {
         }
 
         return false;
+    }
+
+    function getProRata(uint tradeTimestamp, Position storage position, uint positionTerm) internal view returns(int64) {
+        int64 holdingPeriod = int64(uint64(tradeTimestamp - position.startDate)) << 32;
+        if (holdingPeriod > Math.One_32) return Math.One_32;
+
+        return Math.div(holdingPeriod, int64(uint64(positionTerm)));
     }
 
     /// @notice Gets the start date of an XMM

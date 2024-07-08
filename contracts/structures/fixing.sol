@@ -7,5 +7,4 @@ struct Fixing {
     int64 strike;
     int64 volatility;
     int64 premium;
-    int64 discountRate;
 }

@@ -2,7 +2,6 @@
 pragma solidity >= 0.8.0;
 
 import "./interfaces/ierc20.sol";
-import "./interfaces/ixmm.sol";
 import "./libraries/financial.sol";
 import "./libraries/math.sol";
 import "./libraries/safemath.sol";
@@ -11,11 +10,12 @@ import "./structures/fixing.sol";
 import "./structures/position.sol";
 import "./enums.sol";
 
-contract XMM is IXMM {
+contract XMM {
     /**********
      * Events *
      **********/
-     event Deposit(uint timestamp, address from, Position position);
+     event Deposit(address indexed from, uint indexed timestamp, Position position);
+     event PositionReduced(address indexed from, uint indexed timestamp, uint128 amount);
 
     /*****************
      * The modifiers *
@@ -68,13 +68,13 @@ contract XMM is IXMM {
     uint128 public TotalLongPositions;
     uint128 private _marginCallLong;
     int64 private _longRatio;
-    int64[] private _longIndex;
+    int64[] private _longRateIndex;
 
     /// @notice The total amount of short positions
     uint128 public TotalShortPositions;
     uint128 private _marginCallShort;
     int64 private _shortRatio;
-    int64[] private _shortIndex;
+    int64[] private _shortRateIndex;
 
     /*************
      * Functions *
@@ -86,15 +86,15 @@ contract XMM is IXMM {
         Term = term;
         MinDeposit = minDeposit;
 
-        StartDate = Utils.getTimeStamp(block.timestamp);
+        StartDate = Utils.getTimeStamp(block.timestamp, _fixingUpdateInterval);
 
         (_fixingUpdateInterval, _expiryInterval, _expiryYearFraction) = Utils.getTermInformation(term);
-        _acrualYF = Math.div(int64(_fixingUpdateInterval << 32), int64(_expiryInterval << 32));
+        _acrualYF = Math.div(int64(uint64(_fixingUpdateInterval) << 32), int64(uint64(_expiryInterval) << 32));
 
-        _lastFixing = 0;
+        _lastFixingIndex = 0;
         Fixings.push(fixing);
-        _longIndex[0] = Math.One_32;
-        _shortIndex[0] = Math.One_32;
+        _longRateIndex[0] = Math.One_32;
+        _shortRateIndex[0] = Math.One_32;
     }
 
     /// @notice Gets the term of the XMM
@@ -120,20 +120,21 @@ contract XMM is IXMM {
             (success, res) = Token.call(abi.encodeWithSelector(IERC20.transfer.selector, address(this), uint256(amount)));
 
             if (success) {
-                uint positionIndex = uint32(_positions[msg.sender].length);
-                Fixing storage fixing = Fixings[Utils.getFixingIndex(block.timestamp, StartDate, _fixingUpdateInterval)];
-                Position storage position = Position(positionIndex, longShort, fixing, fixing.timestamp + _expiryInterval, amount);
+                uint32 positionIndex = uint32(_positions[msg.sender].length);
+                int64 index0 = longShort == LongShort.Long ? _longRateIndex[_lastFixingIndex] : _shortRateIndex[_lastFixingIndex];
+                uint timestamp = Fixings[_lastFixingIndex].timestamp;
+                Position memory position = Position(positionIndex, longShort, index0, timestamp, timestamp + _expiryInterval, amount);
                 _positions[msg.sender].push(position);
                 
                 if (longShort == LongShort.Long) {
-                    TotalLongPositions = SafeMath.add(TotalLongPositions, amount);
+                    TotalLongPositions = SafeMath.SafeAdd(TotalLongPositions, amount);
                 } else {
-                    TotalShortPositions = SafeMath.add(TotalShortPositions, amount);
+                    TotalShortPositions = SafeMath.SafeAdd(TotalShortPositions, amount);
                 }
 
                 getRatios();
 
-                emit Deposit(block.timestamp, msg.sender, position);
+                emit Deposit(msg.sender, block.timestamp, position);
             }
         }
     }
@@ -158,18 +159,25 @@ contract XMM is IXMM {
     // A position that is closed leads to re-organization of existing positions.
     function reducePosition(uint32 positionIndex, uint128 amount) external {
         if (_positions[msg.sender].length > positionIndex) {
-            (LongShort ls, uint32 index, uint128 finalAmount, bool toDelete) = Utils.reducePosition(_positions[msg.sender][positionIndex], amount);
+            Position storage position = _positions[msg.sender][positionIndex];
+            (LongShort ls, uint32 index, uint128 finalAmount, bool toDelete) = Utils.reducePosition(position, amount);
+
+            int64 proRata = Utils.getProRata(Utils.getTimeStamp(block.timestamp, _fixingUpdateInterval), position, _expiryInterval);
+            int64 rate = getRate(ls, proRata, position.index0);
 
             if (ls == LongShort.Long) {
-                TotalLongPositions = SafeMath.sub(TotalLongPositions, finalAmount);
+                TotalLongPositions = SafeMath.SafeSub(TotalLongPositions, finalAmount);
             } else {
-                TotalShortPositions = SafeMath.sub(TotalShortPositions, finalAmount);
+                TotalShortPositions = SafeMath.SafeSub(TotalShortPositions, finalAmount);
             }
 
             getRatios();
             if (toDelete) Utils.removePositionFromArray(index, _positions[msg.sender]);
 
-            code if reduce => need to pay
+            finalAmount = uint128(int128(((int256(int128(finalAmount)) << 32) * rate) >> 32));
+            (bool success, bytes memory res) = Token.call(abi.encodeWithSelector(IERC20.transferFrom.selector, address(this), msg.sender, finalAmount));
+
+            if (success) emit PositionReduced(msg.sender, block.timestamp, finalAmount);
         }
     }
 
@@ -186,10 +194,10 @@ contract XMM is IXMM {
     }
 
     /// @notice Sets the latest fixing for the XMM
-    function setFixing(address token, int64 spot, int64 strike, uint64 volatility, int64 discountRate) external onlyOwner {
+    function setFixing(address token, int64 spot, int64 strike, int64 volatility) external onlyOwner {
         require(token == Token, "Wrong token");
         int64 optionPremium = FinancialLib.putPremium(spot, strike, volatility, _expiryYearFraction);
-        Fixing memory fixing = Fixing(timestamp, spot, strike, volatility, optionPremium, discountRate);
+        Fixing memory fixing = Fixing(Utils.getTimeStamp(block.timestamp, _fixingUpdateInterval), spot, strike, volatility, optionPremium);
 
         executeMarginCalls(Fixings[_lastFixingIndex].spot, fixing);
         
@@ -198,30 +206,31 @@ contract XMM is IXMM {
         Fixings[_lastFixingIndex] = fixing;
     }
 
-    function executeMarginCalls(uint64 prevSpot, Fixing memory lastFixing) private {
-        
+    function executeMarginCalls(int64 prevSpot, Fixing memory lastFixing) private {
         int64 premiumPerf = Math.mult(lastFixing.premium, _acrualYF);
-        int64 discountRatePerf = Math.mult(lastFixing.discountRate, Utils.ONE_DAY_YF);
+        // Sanity check - the premium perf should always be positive.
+        if (premiumPerf < 0) premiumPerf = 0;
 
-        int64 spotPerf = Math.div(Math.sub(lastFixing.spot, prevFixing.spot), prevFixing.spot);
-        if (spotPerf > 0) spotPerf = 0;
-        
-        int64 shortPerf = Math.add(spotPerf, discountRatePerf);
-        int64 longPerf = Math.mult(_longRatio, Math.sub(premiumPerf, shortPerf));
+        int64 longRateFactor = 0;
+        int64 shortRateFactor = 0;
+        int64 adjustedRate = 0;
 
-        if (shortPerf < premiumPerf) {
-            transferShortToLong(uint64(longPerf));
-            shortPerf = Math.mult(_shortRatio, Math.sub(shortPerf, premiumPerf));
+        // If spot went up, the Short positions pay the Long positions
+        if (Math.sub(lastFixing.spot, prevSpot) > 0) {
+            adjustedRate = Math.mult(_longRatio, premiumPerf);
+            longRateFactor = Math.mult(_longRateIndex[_longRateIndex.length - 1], Math.add(Math.One_32, adjustedRate));
+            shortRateFactor = Math.mult(_shortRateIndex[_shortRateIndex.length - 1], Math.sub(Math.One_32, adjustedRate));
+            transferShortToLong(uint64(adjustedRate));
+        // Else, Long positions pay Short positions
         } else {
-            shortPerf = Math.mult(_shortRatio, Math.sub(shortPerf, premiumPerf));
-            transferLongToShort(uint64(shortPerf));
+            adjustedRate = Math.mult(_shortRatio, premiumPerf);
+            longRateFactor = Math.mult(_longRateIndex[_longRateIndex.length - 1], Math.sub(Math.One_32, adjustedRate));
+            shortRateFactor = Math.mult(_shortRateIndex[_shortRateIndex.length - 1], Math.add(Math.One_32, adjustedRate));
+            transferLongToShort(uint64(adjustedRate));
         }
-        
-        int64 longRateFactor = Math.mult(_longIndex[_longIndex.length - 1], Math.add(Math.One_32, longPerf));
-        int64 shortRateFactor = Math.mult(_shortIndex[_shortIndex.length - 1], Math.add(Math.One_32, shortPerf));
 
-        _longIndex.push(longRateFactor);
-        _shortIndex.push(shortRateFactor);
+        _longRateIndex.push(longRateFactor);
+        _shortRateIndex.push(shortRateFactor);
     }
 
     function transferShortToLong(uint64 netPerf) private {
@@ -229,10 +238,10 @@ contract XMM is IXMM {
         transfer = uint128((transfer * netPerf) >> 32);
 
         if (_marginCallLong > transfer) {
-            _marginCallLong = SafeMath.sub(_marginCallLong, transfer);
+            _marginCallLong = SafeMath.SafeSub(_marginCallLong, transfer);
         } else {
-            transfer = SafeMath.sub(transfer, _marginCallLong)
-            _marginCallShort = SafeMath.add(_marginCallShort, transfer);
+            transfer = SafeMath.SafeSub(transfer, _marginCallLong);
+            _marginCallShort = SafeMath.SafeAdd(_marginCallShort, transfer);
         }
     }
 
@@ -241,11 +250,16 @@ contract XMM is IXMM {
         transfer = uint128((transfer * netPerf) >> 32);
 
         if (_marginCallShort > transfer) {
-            _marginCallShort = SafeMath.sub(_marginCallShort, transfer);
+            _marginCallShort = SafeMath.SafeSub(_marginCallShort, transfer);
         } else {
-            transfer = SafeMath.sub(transfer, _marginCallShort)
-            _marginCallLong = SafeMath.add(_marginCallLong, transfer);
+            transfer = SafeMath.SafeSub(transfer, _marginCallShort);
+            _marginCallLong = SafeMath.SafeAdd(_marginCallLong, transfer);
         }
+    }
+
+    function getRate(LongShort longShort, int64 proRata, int64 index0) private view returns(int64) {
+        int64 currentIndex = longShort == LongShort.Long ? _longRateIndex[_lastFixingIndex] : _shortRateIndex[_lastFixingIndex];
+        return Math.mult(proRata, Math.div(currentIndex, index0));
     }
 
     function getRatios() private {
@@ -253,12 +267,12 @@ contract XMM is IXMM {
         _shortRatio = getShortRatio();
     }
 
-    function getLongRatio() private pure return(int64) {
+    function getLongRatio() private view returns(int64) {
         uint256 short = uint256(TotalShortPositions) << 32;
         return int64(uint64(short / TotalLongPositions));
     }
 
-    function getShortRatio() private pure returns(int64) {
+    function getShortRatio() private view returns(int64) {
         uint256 long = uint256(TotalLongPositions) << 32;
         return int64(uint64(long / TotalShortPositions));
     }

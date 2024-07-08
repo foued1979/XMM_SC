@@ -7,7 +7,8 @@ import "../enums.sol";
 struct Position {
     uint32 positionIndex;
     LongShort position;
-    Fixing fixing;
+    int64 index0;
+    uint startDate;
     uint expiry;
     uint128 amount;
 }
