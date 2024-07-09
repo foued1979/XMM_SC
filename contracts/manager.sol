@@ -31,8 +31,8 @@ contract Manager {
     mapping(address => address[7]) private _listOfXMMs;
     address[] private _registeredTokens;
 
-    constructor() {
-        Owner = msg.sender;
+    constructor(address owner) {
+        Owner = owner;
     }
 
     function changeOwnership(address newOwner) external onlyOwner {
@@ -55,19 +55,23 @@ contract Manager {
         emit OwnerChanged(block.timestamp, token, msg.sender, newOwner);
     }
 
+    function getXMMPools(address token) external view returns(address[7] memory) {
+        return _listOfXMMs[token];
+    }
+
     /// @notice Creates a new XMM
     /// @param token The token to deposit
     /// @param term The term of the expected deposits
-    function createXMM(address token, uint8 decimals, Terms term, uint64 minDeposit, Fixing memory fixing) external onlyOwner returns(address) {
+    function createXMMPool(address token, uint8 decimals, Terms term, uint64 minDeposit, Fixing memory fixing) external onlyOwner {
         require(_listOfXMMs[token][uint(term)] == address(0x0), "xmm already exists");
 
         if (!Utils.itemExistsInArray(token, _registeredTokens)) {
             _registeredTokens.push(token);
         }
 
-        address newXMM = address(new XMM(token, decimals, term, minDeposit, fixing));
-        _listOfXMMs[token][uint(term)] = newXMM;
-        emit XMMCreated(block.timestamp, token, term, newXMM);
-        return newXMM;
+        XMMPool newXMM = new XMMPool(token, decimals, term, minDeposit, fixing);
+        address newXMMAddress = address(newXMM);
+        _listOfXMMs[token][uint(term)] = newXMMAddress;
+        emit XMMCreated(block.timestamp, token, term, newXMMAddress);
     }
 }

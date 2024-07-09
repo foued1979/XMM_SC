@@ -10,7 +10,7 @@ import "./structures/fixing.sol";
 import "./structures/position.sol";
 import "./enums.sol";
 
-contract XMM {
+contract XMMPool {
     /**********
      * Events *
      **********/
@@ -21,7 +21,7 @@ contract XMM {
      * The modifiers *
      *****************/
     modifier onlyOwner {
-        require(msg.sender == _owner, "Only owner");
+        require(msg.sender == Owner, "Only owner");
         _;
     }
 
@@ -30,12 +30,12 @@ contract XMM {
         _;
     }
 
+    address public Owner;
+
     /***********************
      * Contract Properties *
      ***********************/
     // Private properties
-    address private _owner;
-
     uint8 private _decimals;
 
     uint private _fixingUpdateInterval;
@@ -80,21 +80,20 @@ contract XMM {
      * Functions *
      *************/
     constructor(address token, uint8 decimals, Terms term, uint64 minDeposit, Fixing memory fixing) {
-        _owner = msg.sender;
+        Owner = msg.sender;
         Token = token;
         _decimals = decimals;
         Term = term;
         MinDeposit = minDeposit;
 
-        StartDate = Utils.getTimeStamp(block.timestamp, _fixingUpdateInterval);
-
         (_fixingUpdateInterval, _expiryInterval, _expiryYearFraction) = Utils.getTermInformation(term);
+        StartDate = Utils.getTimeStamp(block.timestamp, _fixingUpdateInterval);
         _acrualYF = Math.div(int64(uint64(_fixingUpdateInterval) << 32), int64(uint64(_expiryInterval) << 32));
 
         _lastFixingIndex = 0;
         Fixings.push(fixing);
-        _longRateIndex[0] = Math.One_32;
-        _shortRateIndex[0] = Math.One_32;
+        _longRateIndex.push(Math.One_32);
+        _shortRateIndex.push(Math.One_32);
     }
 
     /// @notice Gets the term of the XMM
@@ -104,7 +103,7 @@ contract XMM {
 
     /// @notice Changes the ownership of the contract
     function changeOwnership(address newOwner) external {
-        if (msg.sender == _owner) _owner = newOwner;
+        if (msg.sender == Owner) Owner = newOwner;
     }
 
     /// @notice Executes a deposit to the XMM from msg.sender
@@ -127,9 +126,9 @@ contract XMM {
                 _positions[msg.sender].push(position);
                 
                 if (longShort == LongShort.Long) {
-                    TotalLongPositions = SafeMath.SafeAdd(TotalLongPositions, amount);
+                    TotalLongPositions = SafeMath.SafeAdd128(TotalLongPositions, amount);
                 } else {
-                    TotalShortPositions = SafeMath.SafeAdd(TotalShortPositions, amount);
+                    TotalShortPositions = SafeMath.SafeAdd128(TotalShortPositions, amount);
                 }
 
                 getRatios();
@@ -166,16 +165,16 @@ contract XMM {
             int64 rate = getRate(ls, proRata, position.index0);
 
             if (ls == LongShort.Long) {
-                TotalLongPositions = SafeMath.SafeSub(TotalLongPositions, finalAmount);
+                TotalLongPositions = SafeMath.SafeSub128(TotalLongPositions, finalAmount);
             } else {
-                TotalShortPositions = SafeMath.SafeSub(TotalShortPositions, finalAmount);
+                TotalShortPositions = SafeMath.SafeSub128(TotalShortPositions, finalAmount);
             }
 
             getRatios();
             if (toDelete) Utils.removePositionFromArray(index, _positions[msg.sender]);
 
             finalAmount = uint128(int128(((int256(int128(finalAmount)) << 32) * rate) >> 32));
-            (bool success, bytes memory res) = Token.call(abi.encodeWithSelector(IERC20.transferFrom.selector, address(this), msg.sender, finalAmount));
+            (bool success, bytes memory res) = Token.delegatecall(abi.encodeWithSelector(IERC20.transfer.selector, msg.sender, finalAmount));
 
             if (success) emit PositionReduced(msg.sender, block.timestamp, finalAmount);
         }
@@ -238,10 +237,10 @@ contract XMM {
         transfer = uint128((transfer * netPerf) >> 32);
 
         if (_marginCallLong > transfer) {
-            _marginCallLong = SafeMath.SafeSub(_marginCallLong, transfer);
+            _marginCallLong = SafeMath.SafeSub128(_marginCallLong, transfer);
         } else {
-            transfer = SafeMath.SafeSub(transfer, _marginCallLong);
-            _marginCallShort = SafeMath.SafeAdd(_marginCallShort, transfer);
+            transfer = SafeMath.SafeSub128(transfer, _marginCallLong);
+            _marginCallShort = SafeMath.SafeAdd128(_marginCallShort, transfer);
         }
     }
 
@@ -250,10 +249,10 @@ contract XMM {
         transfer = uint128((transfer * netPerf) >> 32);
 
         if (_marginCallShort > transfer) {
-            _marginCallShort = SafeMath.SafeSub(_marginCallShort, transfer);
+            _marginCallShort = SafeMath.SafeSub128(_marginCallShort, transfer);
         } else {
-            transfer = SafeMath.SafeSub(transfer, _marginCallShort);
-            _marginCallLong = SafeMath.SafeAdd(_marginCallLong, transfer);
+            transfer = SafeMath.SafeSub128(transfer, _marginCallShort);
+            _marginCallLong = SafeMath.SafeAdd128(_marginCallLong, transfer);
         }
     }
 
