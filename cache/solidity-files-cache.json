@@ -188,51 +188,6 @@
         "ITradable"
       ]
     },
-    "C:\\Users\\Frederic\\XMM_SC\\contracts\\xmm.sol": {
-      "lastModificationDate": 1720539594214,
-      "contentHash": "5cb0dfb655113924172b2b180eba8d56",
-      "sourceName": "contracts/xmm.sol",
-      "solcConfig": {
-        "version": "0.8.24",
-        "settings": {
-          "optimizer": {
-            "enabled": true,
-            "runs": 200
-          },
-          "evmVersion": "paris",
-          "outputSelection": {
-            "*": {
-              "*": [
-                "abi",
-                "evm.bytecode",
-                "evm.deployedBytecode",
-                "evm.methodIdentifiers",
-                "metadata"
-              ],
-              "": [
-                "ast"
-              ]
-            }
-          }
-        }
-      },
-      "imports": [
-        "./interfaces/ierc20.sol",
-        "./libraries/financial.sol",
-        "./libraries/math.sol",
-        "./libraries/safemath.sol",
-        "./libraries/utils.sol",
-        "./structures/fixing.sol",
-        "./structures/position.sol",
-        "./enums.sol"
-      ],
-      "versionPragmas": [
-        ">= 0.8.0"
-      ],
-      "artifacts": [
-        "XMMPool"
-      ]
-    },
     "C:\\Users\\Frederic\\XMM_SC\\contracts\\libraries\\math.sol": {
       "lastModificationDate": 1720281600578,
       "contentHash": "9ed815b16c566df8e84ed88629a745ca",
@@ -310,8 +265,8 @@
       ]
     },
     "C:\\Users\\Frederic\\XMM_SC\\contracts\\libraries\\utils.sol": {
-      "lastModificationDate": 1720451774235,
-      "contentHash": "a83b8bae6cee611f01eab6c2d497d9d1",
+      "lastModificationDate": 1720628545613,
+      "contentHash": "798b2f748d7192030d55fc0efc6a8f87",
       "sourceName": "contracts/libraries/utils.sol",
       "solcConfig": {
         "version": "0.8.24",
@@ -455,8 +410,8 @@
       "artifacts": []
     },
     "C:\\Users\\Frederic\\XMM_SC\\contracts\\manager.sol": {
-      "lastModificationDate": 1720539469266,
-      "contentHash": "6080ef4dd7379e45b2fd7ab0e98ad3c9",
+      "lastModificationDate": 1720626149507,
+      "contentHash": "96a778ec0ec1f4c8f49c7193ff498fd0",
       "sourceName": "contracts/manager.sol",
       "solcConfig": {
         "version": "0.8.24",
@@ -483,10 +438,10 @@
         }
       },
       "imports": [
-        "./interfaces/ixmm.sol",
+        "./interfaces/ixmmpool.sol",
         "./libraries/utils.sol",
         "./enums.sol",
-        "./xmm.sol"
+        "./xmmpool.sol"
       ],
       "versionPragmas": [
         ">= 0.8.0"
@@ -495,10 +450,56 @@
         "Manager"
       ]
     },
-    "C:\\Users\\Frederic\\XMM_SC\\contracts\\interfaces\\ixmm.sol": {
-      "lastModificationDate": 1720452723838,
-      "contentHash": "934e0f73e822690bc52223243032cc7e",
-      "sourceName": "contracts/interfaces/ixmm.sol",
+    "C:\\Users\\Frederic\\XMM_SC\\contracts\\xmmpool.sol": {
+      "lastModificationDate": 1720628681597,
+      "contentHash": "101aa62447283a79e8054c6dfc96b970",
+      "sourceName": "contracts/xmmpool.sol",
+      "solcConfig": {
+        "version": "0.8.24",
+        "settings": {
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "evmVersion": "paris",
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [
+        "./interfaces/ierc20.sol",
+        "./interfaces/ixmmpool.sol",
+        "./libraries/financial.sol",
+        "./libraries/math.sol",
+        "./libraries/safemath.sol",
+        "./libraries/utils.sol",
+        "./structures/fixing.sol",
+        "./structures/position.sol",
+        "./enums.sol"
+      ],
+      "versionPragmas": [
+        ">= 0.8.0"
+      ],
+      "artifacts": [
+        "XMMPool"
+      ]
+    },
+    "C:\\Users\\Frederic\\XMM_SC\\contracts\\interfaces\\ixmmpool.sol": {
+      "lastModificationDate": 1720624545820,
+      "contentHash": "8b68382ec59a4e5cfcac481bdc3e41ac",
+      "sourceName": "contracts/interfaces/ixmmpool.sol",
       "solcConfig": {
         "version": "0.8.24",
         "settings": {
@@ -528,7 +529,7 @@
         ">= 0.8.0"
       ],
       "artifacts": [
-        "IXMM"
+        "IXMMPool"
       ]
     }
   }

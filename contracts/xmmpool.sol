@@ -2,6 +2,7 @@
 pragma solidity >= 0.8.0;
 
 import "./interfaces/ierc20.sol";
+import "./interfaces/ixmmpool.sol";
 import "./libraries/financial.sol";
 import "./libraries/math.sol";
 import "./libraries/safemath.sol";
@@ -10,7 +11,7 @@ import "./structures/fixing.sol";
 import "./structures/position.sol";
 import "./enums.sol";
 
-contract XMMPool {
+contract XMMPool is IXMMPool {
     /**********
      * Events *
      **********/
@@ -27,6 +28,11 @@ contract XMMPool {
 
     modifier hasMinDeposit(uint128 amount) {
         require(amount >= MinDeposit, "Min deposit");
+        _;
+    }
+
+    modifier isRightToken(address token) {
+        require(token == Token, "Wrong token");
         _;
     }
 
@@ -99,6 +105,11 @@ contract XMMPool {
     /// @notice Gets the term of the XMM
     function getTerm() external view returns(Terms) {
         return Term;
+    }
+
+    /// @notice Gets the fixings
+    function getFixings() external view returns(Fixing[] memory) {
+        return Fixings;
     }
 
     /// @notice Changes the ownership of the contract
@@ -193,10 +204,9 @@ contract XMMPool {
     }
 
     /// @notice Sets the latest fixing for the XMM
-    function setFixing(address token, int64 spot, int64 strike, int64 volatility) external onlyOwner {
-        require(token == Token, "Wrong token");
+    function setFixing(address token, int64 spot, int64 strike, int64 volatility) external onlyOwner isRightToken(token) {
         int64 optionPremium = FinancialLib.putPremium(spot, strike, volatility, _expiryYearFraction);
-        Fixing memory fixing = Fixing(Utils.getTimeStamp(block.timestamp, _fixingUpdateInterval), spot, strike, volatility, optionPremium);
+        Fixing memory fixing = Fixing(Utils.getNextFixingTimeStamp(block.timestamp, _fixingUpdateInterval, Fixings[_lastFixingIndex].timestamp), spot, strike, volatility, optionPremium);
 
         executeMarginCalls(Fixings[_lastFixingIndex].spot, fixing);
         
