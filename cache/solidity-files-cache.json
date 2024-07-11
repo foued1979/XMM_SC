@@ -2,8 +2,8 @@
   "_format": "hh-sol-cache-2",
   "files": {
     "C:\\Users\\Frederic\\XMM_SC\\contracts\\base\\erc20.sol": {
-      "lastModificationDate": 1720098023863,
-      "contentHash": "4a92269fc8dfe05e90cf7e398a8a98c8",
+      "lastModificationDate": 1720708382837,
+      "contentHash": "b4052605150d086bb390a2f45e659efd",
       "sourceName": "contracts/base/erc20.sol",
       "solcConfig": {
         "version": "0.8.24",
@@ -77,8 +77,8 @@
       ]
     },
     "C:\\Users\\Frederic\\XMM_SC\\contracts\\libraries\\safemath.sol": {
-      "lastModificationDate": 1720537848564,
-      "contentHash": "d6858bd1632e4449e544a9523ad3f041",
+      "lastModificationDate": 1720708772034,
+      "contentHash": "0140e8ea1fa78aa2211fd9c0c76aaf3b",
       "sourceName": "contracts/libraries/safemath.sol",
       "solcConfig": {
         "version": "0.8.24",
@@ -113,8 +113,8 @@
       ]
     },
     "C:\\Users\\Frederic\\XMM_SC\\contracts\\token.sol": {
-      "lastModificationDate": 1720261202679,
-      "contentHash": "ceca17dfb4bcbf94eaf46fb998d6d1c2",
+      "lastModificationDate": 1720709611067,
+      "contentHash": "837fefc7c87ac7bc6c50dd184420fc28",
       "sourceName": "contracts/token.sol",
       "solcConfig": {
         "version": "0.8.24",

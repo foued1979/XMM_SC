@@ -5,24 +5,37 @@ import "../interfaces/ierc20.sol";
 import "../libraries/safemath.sol";
 
 contract ERC20 is IERC20 {
+    /*************
+     * Modifiers *
+     *************/
+    modifier onlyOwner {
+        require(msg.sender == Owner, "No auth.");
+        _;
+    }
+    
     /**************
      * Properties *
      **************/
     // Public Properties
+
     address public Owner;
+    string public Symbol;
     uint256 public TotalSupply;
+    uint8 public Decimals;
 
     // Private Fields
     mapping(address => uint256) internal _balances;
     mapping(address => mapping(address => uint256)) private _allowances;
 
-    constructor(address owner, uint256 initialSupply) {
-        Owner = owner;
-        TotalSupply = initialSupply;
+    constructor(string memory symbol, uint32 initialSupply, uint8 decimals) {
+        Owner = msg.sender;
+        Symbol = symbol;
+        TotalSupply = uint256(initialSupply) * (10 ** decimals);
+        Decimals = decimals;
     }
 
     /// @notice Returns the value of tokens in existence.
-    function totalSupply() external view returns (uint256) {
+    function totalSupply() external view returns(uint256) {
         return TotalSupply;
     }
 

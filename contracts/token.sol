@@ -14,11 +14,6 @@ contract Token is ERC20, ITradable {
     /*************
      * Modifiers *
      *************/
-    modifier onlyOwner {
-        require(msg.sender == Owner, "No auth.");
-        _;
-    }
-
     modifier isAllowed {
         require(ChangeIsAllowed, "Not allowed");
         _;
@@ -28,9 +23,7 @@ contract Token is ERC20, ITradable {
      * Properties *
      **************/
      // Public Properties
-    string public Symbol;
     string public Name;
-    uint8 public Decimals;
 
     // Public properties linked to ITradable
     bool public ChangeIsAllowed;
@@ -43,11 +36,14 @@ contract Token is ERC20, ITradable {
     // Private Fields
     uint256 public AllocatedAmount;
 
-    constructor(string memory symbol, string memory name, uint8 decimals, address owner, uint256 initialSupply) 
-        ERC20(owner, initialSupply) payable { 
-        Symbol = symbol;
+    constructor(string memory symbol, string memory name, uint32 initialSupply, uint8 decimals, uint32 initialOwnerAllocation) 
+        ERC20(symbol, initialSupply, decimals) payable {
         Name = name;
-        Decimals = decimals;
+        AllocatedAmount = 0;
+
+        ExchangeRate = 1;
+        require(initialOwnerAllocation < (initialSupply / 5), "Not fair");
+        allocateToOwner(uint256(initialOwnerAllocation) * uint256(10 ** decimals));
     }
 
     /// @notice Burns a number of token
@@ -63,10 +59,13 @@ contract Token is ERC20, ITradable {
     /// @param to The beneficiary
     /// @param amount The amount
     function allocate(address to, uint256 amount) external onlyOwner {
-        uint256 newAllocation = SafeMath.SafeAdd(AllocatedAmount, amount); 
+        require(to != Owner, "No no");
+
+        uint256 newAllocation = SafeMath.SafeAdd(AllocatedAmount, amount);
         require(newAllocation < TotalSupply, "Insufficient supply");
 
-        _balances[to] = SafeMath.SafeAdd(_balances[to], amount);
+        uint256 prevBalance = _balances[to];
+        _balances[to] = SafeMath.SafeAdd(prevBalance, amount);
         AllocatedAmount = newAllocation;
         emit Allocated(block.timestamp, to, amount);
     }
@@ -79,6 +78,7 @@ contract Token is ERC20, ITradable {
     /// @notice Updates the exchange rate between ETH and the Token
     function updateExchangeRate(uint64 exchangeRate) external onlyOwner {
         ExchangeRate = exchangeRate;
+        this.setChangeAuthorization(true);
     }
     
     /// @notice Returns the quantity of ETH available for change against Token
@@ -147,5 +147,17 @@ contract Token is ERC20, ITradable {
         }
 
         return success;
+    }
+
+    /// @notice Allocates a number of token to the owner
+    /// @param amount The amount
+    function allocateToOwner(uint256 amount) private {
+        uint256 newAllocation = SafeMath.SafeAdd(AllocatedAmount, amount);
+        require(newAllocation < TotalSupply, "Insufficient supply");
+
+        uint256 prevBalance = _balances[Owner];
+        _balances[Owner] = SafeMath.SafeAdd(prevBalance, amount);
+        AllocatedAmount = newAllocation;
+        emit Allocated(block.timestamp, Owner, amount);
     }
 }
