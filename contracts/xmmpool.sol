@@ -11,6 +11,8 @@ import "./structures/fixing.sol";
 import "./structures/position.sol";
 import "./enums.sol";
 
+import "hardhat/console.sol";
+
 contract XMMPool is IXMMPool {
     /**********
      * Events *
@@ -31,12 +33,13 @@ contract XMMPool is IXMMPool {
         _;
     }
 
-    modifier isRightToken(address token) {
-        require(token == Token, "Wrong token");
+    modifier isActive {
+        require(IsActivated, "Not activated");
         _;
     }
 
     address public Owner;
+    bool public IsActivated;
 
     /***********************
      * Contract Properties *
@@ -85,7 +88,7 @@ contract XMMPool is IXMMPool {
     /*************
      * Functions *
      *************/
-    constructor(address token, uint8 decimals, Terms term, uint64 minDeposit, Fixing memory fixing) {
+    constructor(address token, uint8 decimals, Terms term, uint64 minDeposit) {
         Owner = msg.sender;
         Token = token;
         _decimals = decimals;
@@ -96,10 +99,10 @@ contract XMMPool is IXMMPool {
         StartDate = Utils.getTimeStamp(block.timestamp, _fixingUpdateInterval);
         _acrualYF = Math.div(int64(uint64(_fixingUpdateInterval) << 32), int64(uint64(_expiryInterval) << 32));
 
-        _lastFixingIndex = 0;
-        Fixings.push(fixing);
         _longRateIndex.push(Math.One_32);
         _shortRateIndex.push(Math.One_32);
+
+        getRatios();
     }
 
     /// @notice Gets the term of the XMM
@@ -120,7 +123,7 @@ contract XMMPool is IXMMPool {
     /// @notice Executes a deposit to the XMM from msg.sender
     /// @param longShort 0 if long 1 if short
     /// @param amount The amount to be deposited
-    function deposit(LongShort longShort, uint128 amount) external hasMinDeposit(amount) {
+    function deposit(LongShort longShort, uint128 amount) external isActive hasMinDeposit(amount) {
         (bool success, bytes memory res) = Token.call(abi.encodeWithSelector(IERC20.balanceOf.selector, msg.sender));
 
         if (success) {
@@ -182,6 +185,7 @@ contract XMMPool is IXMMPool {
             }
 
             getRatios();
+
             if (toDelete) Utils.removePositionFromArray(index, _positions[msg.sender]);
 
             finalAmount = uint128(int128(((int256(int128(finalAmount)) << 32) * rate) >> 32));
@@ -203,8 +207,19 @@ contract XMMPool is IXMMPool {
         return _positions[msg.sender][positionIndex];
     }
 
+    /// @notice Sets the first fixing and activates the pool
+    function setFirstFixing(int64 spot, int64 strike, int64 volatility) external onlyOwner {
+        int64 optionPremium = FinancialLib.putPremium(spot, strike, volatility, _expiryYearFraction);
+        Fixing memory fixing = Fixing(Utils.getTimeStamp(block.timestamp, _fixingUpdateInterval), spot, strike, volatility, optionPremium);
+
+        _lastFixingIndex = 0;
+        Fixings.push(fixing);
+
+        IsActivated = true;
+    }
+
     /// @notice Sets the latest fixing for the XMM
-    function setFixing(address token, int64 spot, int64 strike, int64 volatility) external onlyOwner isRightToken(token) {
+    function setFixing(int64 spot, int64 strike, int64 volatility) external onlyOwner {
         int64 optionPremium = FinancialLib.putPremium(spot, strike, volatility, _expiryYearFraction);
         Fixing memory fixing = Fixing(Utils.getNextFixingTimeStamp(block.timestamp, _fixingUpdateInterval, Fixings[_lastFixingIndex].timestamp), spot, strike, volatility, optionPremium);
 
@@ -212,20 +227,31 @@ contract XMMPool is IXMMPool {
         
         _lastFixingIndex += 1;
         if (_lastFixingIndex == Utils.MAX_NUMBER_FIXINGS) _lastFixingIndex = 0;
-        Fixings[_lastFixingIndex] = fixing;
+        if (Fixings.length < Utils.MAX_NUMBER_FIXINGS) Fixings.push(fixing);
+        else Fixings[_lastFixingIndex] = fixing;
     }
 
     function executeMarginCalls(int64 prevSpot, Fixing memory lastFixing) private {
         int64 premiumPerf = Math.mult(lastFixing.premium, _acrualYF);
-        // Sanity check - the premium perf should always be positive.
-        if (premiumPerf < 0) premiumPerf = 0;
 
         int64 longRateFactor = 0;
         int64 shortRateFactor = 0;
         int64 adjustedRate = 0;
 
+        int64 spotPerf = Math.sub(lastFixing.spot, prevSpot);
+
+        if (spotPerf == 0 || premiumPerf <= 0) {
+            longRateFactor = _longRateIndex[_longRateIndex.length - 1];
+            shortRateFactor = _shortRateIndex[_shortRateIndex.length - 1];
+
+            _longRateIndex.push(longRateFactor);
+            _shortRateIndex.push(shortRateFactor);
+
+            return;
+        }
+
         // If spot went up, the Short positions pay the Long positions
-        if (Math.sub(lastFixing.spot, prevSpot) > 0) {
+        if (spotPerf > 0) {
             adjustedRate = Math.mult(_longRatio, premiumPerf);
             longRateFactor = Math.mult(_longRateIndex[_longRateIndex.length - 1], Math.add(Math.One_32, adjustedRate));
             shortRateFactor = Math.mult(_shortRateIndex[_shortRateIndex.length - 1], Math.sub(Math.One_32, adjustedRate));
@@ -243,10 +269,12 @@ contract XMMPool is IXMMPool {
     }
 
     function transferShortToLong(uint64 netPerf) private {
-        uint128 transfer = uint128(TotalShortPositions >> Math.max(int8(_decimals - 2), 0));
-        transfer = uint128((transfer * netPerf) >> 32);
+        if (netPerf == 0 || TotalShortPositions == 0) return;
 
-        if (_marginCallLong > transfer) {
+        uint128 transfer = uint128(TotalShortPositions >> Math.max(int8(_decimals - 2), 0));
+        transfer = uint128((uint256(transfer) * netPerf) >> 32);
+
+        if (_marginCallLong >= transfer) {
             _marginCallLong = SafeMath.SafeSub128(_marginCallLong, transfer);
         } else {
             transfer = SafeMath.SafeSub128(transfer, _marginCallLong);
@@ -255,10 +283,12 @@ contract XMMPool is IXMMPool {
     }
 
     function transferLongToShort(uint64 netPerf) private {
+        if (netPerf == 0 || TotalLongPositions == 0) return;
+
         uint128 transfer = uint128(TotalLongPositions >> Math.max(int8(_decimals - 2), 0));
         transfer = uint128((transfer * netPerf) >> 32);
 
-        if (_marginCallShort > transfer) {
+        if (_marginCallShort >= transfer) {
             _marginCallShort = SafeMath.SafeSub128(_marginCallShort, transfer);
         } else {
             transfer = SafeMath.SafeSub128(transfer, _marginCallShort);
@@ -277,11 +307,13 @@ contract XMMPool is IXMMPool {
     }
 
     function getLongRatio() private view returns(int64) {
+        if (TotalLongPositions == 0) return 1;
         uint256 short = uint256(TotalShortPositions) << 32;
         return int64(uint64(short / TotalLongPositions));
     }
 
     function getShortRatio() private view returns(int64) {
+        if (TotalShortPositions == 0) return 1;
         uint256 long = uint256(TotalLongPositions) << 32;
         return int64(uint64(long / TotalShortPositions));
     }

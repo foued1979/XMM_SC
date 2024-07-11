@@ -5,6 +5,8 @@ import "./math.sol";
 import "../structures/position.sol";
 import "../enums.sol";
 
+import "hardhat/console.sol";
+
 library Utils {
     uint internal constant MAX_NUMBER_FIXINGS = 4_380;
 
@@ -64,7 +66,10 @@ library Utils {
 
     /// @notice Gets the start date of an XMM
     function getNextFixingTimeStamp(uint blockTimestamp, uint updateInterval, uint prevFixingTimestamp) internal pure returns(uint) {
+        console.log("block ts: %s", blockTimestamp);
+        console.log("Update: %s", updateInterval);
         uint ts = uint(blockTimestamp / updateInterval) * updateInterval;
+        console.log("Ts: %s", ts);
         if (ts == prevFixingTimestamp) ts += updateInterval;
         return ts;
     }

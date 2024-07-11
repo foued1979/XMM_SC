@@ -44,12 +44,6 @@ describe('Test pool', function () {
         
         expect((await xmmPool.Token()).toLowerCase()).to.be.equal('0xaaaaaaaaaa0000000000aaaaaaaaaa0000000000');
       });
-
-      it('Should deploy, have right fixing', async function () {
-        const [ owner, xmmPool ] = await loadFixture(getXmmPool);
-        
-        expect((await xmmPool.getFixings())[0].timestamp).to.equal(1_720_504_800);
-      });
   });
 
   async function getXmmPools() {
@@ -66,9 +60,9 @@ describe('Test pool', function () {
       "premium": 4_294_967_296
     };
   
-    await manager.createXMMPool('0xaaaaaaaaaa0000000000aaaaaaaaaa0000000000', 18, 0, 2 ** 32, firstFixing);
-    await manager.createXMMPool('0xaaaaaaaaaa0000000000aaaaaaaaaa0000000000', 18, 2, 2 ** 32, firstFixing);
-    await manager.createXMMPool('0xaaaaaaaaaa0000000000aaaaaaaaaa0000000000', 18, 4, 2 ** 32, firstFixing);
+    await manager.createXMMPool('0xaaaaaaaaaa0000000000aaaaaaaaaa0000000000', 18, 0, 2 ** 32);
+    await manager.createXMMPool('0xaaaaaaaaaa0000000000aaaaaaaaaa0000000000', 18, 2, 2 ** 32);
+    await manager.createXMMPool('0xaaaaaaaaaa0000000000aaaaaaaaaa0000000000', 18, 4, 2 ** 32);
     const pools = await manager.getXMMPools('0xaaaaaaaaaa0000000000aaaaaaaaaa0000000000');
     
     var poolAddress = pools[0];
@@ -80,24 +74,54 @@ describe('Test pool', function () {
     poolAddress = pools[4];
     const xmmPool3 = await ethers.getContractAt("XMMPool", poolAddress);
     
-    return [ xmmPool1, xmmPool2, xmmPool3 ];
+    return [ manager, xmmPool1, xmmPool2, xmmPool3 ];
   }
 
   describe('Test adding fixing', function () {
-    it('ON Pool should have additional fixing with proper timestamp', async function () {
-      const [ xmmPool1, xmmPool2, xmmPool3 ] = await loadFixture(getXmmPools);
+    it('First fixings should activate only the created pools', async function() {
+      const [ manager, xmmPool1, xmmPool2, xmmPool3 ] = await loadFixture(getXmmPools);
 
-      const firstFixing = {
+      const firstFixings = {
         "timestamp": 1_720_504_800,
         "spot": 180_388_626_432_000,
-        "strike": 179_529_632_972_800,
-        "volatility": 1_868_310_774,
-        "premium": 4_294_967_296
+        "strikes": [179_529_632_972_800, 179_529_632_972_800, 179_529_632_972_800, 179_529_632_972_800, 179_529_632_972_800, 179_529_632_972_800, 179_529_632_972_800 ],
+        "volatilities": [ 1_868_310_774, 1_868_310_774, 1_868_310_774, 1_868_310_774, 1_868_310_774, 1_868_310_774, 1_868_310_774 ],
       };
 
-      await xmmPool1.setFixing('0xaaaaaaaaaa0000000000aaaaaaaaaa0000000000',  181_462_368_256_000, 179_529_632_972_800, 1_868_310_774);
-      const fixings = await xmmPool1.getFixings();
+      await manager.setFirstFixings('0xaaaaaaaaaa0000000000aaaaaaaaaa0000000000', firstFixings.spot, firstFixings.strikes, firstFixings.volatilities);
 
-      console.log(fixings);
+      expect((await xmmPool1.getFixings()).length).to.equal(1);
+      expect(await xmmPool1.IsActivated()).to.equal(true);
+    });
+
+    it('ON Pool should have additional fixing with proper timestamp', async function () {
+      const [ manager, xmmPool1, xmmPool2, xmmPool3 ] = await loadFixture(getXmmPools);
+
+      const firstFixings = {
+        "timestamp": 1_720_504_800,
+        "spot": 180_388_626_432_000,
+        "strikes": [179_529_632_972_800, 179_529_632_972_800, 179_529_632_972_800, 179_529_632_972_800, 179_529_632_972_800, 179_529_632_972_800, 179_529_632_972_800 ],
+        "volatilities": [ 1_868_310_774, 1_868_310_774, 1_868_310_774, 1_868_310_774, 1_868_310_774, 1_868_310_774, 1_868_310_774 ],
+      };
+
+      await manager.setFirstFixings('0xaaaaaaaaaa0000000000aaaaaaaaaa0000000000', firstFixings.spot, firstFixings.strikes, firstFixings.volatilities);
+
+      const strikes = [ 179_529_632_972_800, 179_529_632_972_800, 179_529_632_972_800, 179_529_632_972_800, 179_529_632_972_800, 179_529_632_972_800, 179_529_632_972_800 ];
+      const vols = [ 1_868_310_774, 1_868_310_774, 1_868_310_774, 1_868_310_774, 1_868_310_774, 1_868_310_774, 1_868_310_774 ];
+
+      await manager.setFixings('0xaaaaaaaaaa0000000000aaaaaaaaaa0000000000',  181_462_368_256_000, strikes, vols);
+      await manager.setFixings('0xaaaaaaaaaa0000000000aaaaaaaaaa0000000000',  181_422_368_256_000, strikes, vols);
+
+      const fixingsPool1 = await xmmPool1.getFixings();
+      const fixingsPool2 = await xmmPool2.getFixings();
+
+      expect(fixingsPool1.length).to.equal(3);
+      expect(fixingsPool2.length).to.equal(3);
+
+      expect(fixingsPool1[1].spot).to.equal(181_462_368_256_000);
+      expect(fixingsPool2[1].spot).to.equal(181_462_368_256_000);
+      expect(fixingsPool1[2].timestamp).to.equal(fixingsPool1[1].timestamp + 3_600n);
+      expect(fixingsPool2[2].timestamp).to.equal(fixingsPool2[1].timestamp + 7_200n);
+      expect(fixingsPool1[0].premium).to.not.equal(fixingsPool1[1].premium);
     });
   });

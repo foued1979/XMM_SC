@@ -51,16 +51,36 @@ contract Manager {
     /// @notice Creates a new XMM
     /// @param token The token to deposit
     /// @param term The term of the expected deposits
-    function createXMMPool(address token, uint8 decimals, Terms term, uint64 minDeposit, Fixing memory fixing) external onlyOwner {
+    function createXMMPool(address token, uint8 decimals, Terms term, uint64 minDeposit) external onlyOwner {
         require(_listOfXMMs[token][uint(term)] == address(0x0), "xmm pool already exists");
 
         if (!Utils.itemExistsInArray(token, _registeredTokens)) {
             _registeredTokens.push(token);
         }
 
-        XMMPool newXMM = new XMMPool(token, decimals, term, minDeposit, fixing);
+        XMMPool newXMM = new XMMPool(token, decimals, term, minDeposit);
         address newXMMAddress = address(newXMM);
         _listOfXMMs[token][uint(term)] = newXMMAddress;
         emit XMMCreated(block.timestamp, token, term, newXMMAddress);
+    }
+
+    /// @notice Sets the first fixings for a token and activates the pools
+    function setFirstFixings(address token, int64 spot, int64[7] memory strikes, int64[7] memory volatilities) external onlyOwner {
+        address[7] storage xmmPools = _listOfXMMs[token];
+
+        for (uint8 i = 0; i < 7; i++) {
+            if (address(xmmPools[i]) == address(0x0)) continue;
+            IXMMPool(xmmPools[i]).setFirstFixing(spot, strikes[i], volatilities[i]);
+        }
+    }
+
+    /// @notice Sets the fixings for a token
+    function setFixings(address token, int64 spot, int64[7] memory strikes, int64[7] memory volatilities) external onlyOwner {
+        address[7] storage xmmPools = _listOfXMMs[token];
+
+        for (uint8 i = 0; i < 7; i++) {
+            if (address(xmmPools[i]) == address(0x0)) continue;
+            IXMMPool(xmmPools[i]).setFixing(spot, strikes[i], volatilities[i]);
+        }
     }
 }
