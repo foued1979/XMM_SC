@@ -5,6 +5,8 @@ import "./base/erc20.sol";
 import "./interfaces/itradable.sol";
 import "./libraries/safemath.sol";
 
+import "hardhat/console.sol";
+
 contract Token is ERC20, ITradable {
     /// @notice The Allocated event is triggered when Owner allocates some token to
     /// a beneficiary
@@ -31,7 +33,7 @@ contract Token is ERC20, ITradable {
 
     // The exchange rate represents a real number with 4 digits precision
     uint64 public ExchangeRate;
-    uint16 private constant _precision = 10_000;
+    uint16 private _precision = 10_000;
 
     // Private Fields
     uint256 public AllocatedAmount;
@@ -41,7 +43,7 @@ contract Token is ERC20, ITradable {
         Name = name;
         AllocatedAmount = 0;
 
-        ExchangeRate = 1;
+        ExchangeRate = 30_000_000;
         require(initialOwnerAllocation < (initialSupply / 5), "Not fair");
         allocateToOwner(uint256(initialOwnerAllocation) * uint256(10 ** decimals));
     }
@@ -49,7 +51,7 @@ contract Token is ERC20, ITradable {
     /// @notice Burns a number of token
     /// @param amount The amount to be allocated
     function burn(uint256 amount) external onlyOwner {
-        require(amount <= TotalSupply);
+        require(amount <= SafeMath.SafeSub(TotalSupply, AllocatedAmount), "Burn failed");
 
         uint256 newSupply = SafeMath.SafeSub(TotalSupply, amount);
         TotalSupply = newSupply;
@@ -60,11 +62,11 @@ contract Token is ERC20, ITradable {
     /// @param amount The amount
     function allocate(address to, uint256 amount) external onlyOwner {
         require(to != Owner, "No no");
+        require(amount <= SafeMath.SafeSub(TotalSupply, AllocatedAmount), "Insufficient supply");
 
         uint256 newAllocation = SafeMath.SafeAdd(AllocatedAmount, amount);
-        require(newAllocation < TotalSupply, "Insufficient supply");
-
         uint256 prevBalance = _balances[to];
+
         _balances[to] = SafeMath.SafeAdd(prevBalance, amount);
         AllocatedAmount = newAllocation;
         emit Allocated(block.timestamp, to, amount);
@@ -78,7 +80,7 @@ contract Token is ERC20, ITradable {
     /// @notice Updates the exchange rate between ETH and the Token
     function updateExchangeRate(uint64 exchangeRate) external onlyOwner {
         ExchangeRate = exchangeRate;
-        this.setChangeAuthorization(true);
+        ChangeIsAllowed = true;
     }
     
     /// @notice Returns the quantity of ETH available for change against Token
@@ -88,27 +90,27 @@ contract Token is ERC20, ITradable {
 
     /// @notice Enables a user to deposit ETH and receive Tokens in exchange
     /// The conversion rate applies at a fixed rate, updated by Owner
-    function depositEther(uint256 maxGas) external payable isAllowed returns(uint256) {
+    function depositEther() external payable isAllowed returns(uint256) {
         uint256 amountETH = msg.value;
-        uint256 amountToken = (amountETH * ExchangeRate) / _precision;
+        if (amountETH == 0) return 0;
+
+        uint256 amountToken = (amountETH * uint256(ExchangeRate * uint64(Decimals))) / uint256(_precision * uint16(18));
         uint256 tokenAvailable = SafeMath.SafeSub(TotalSupply, AllocatedAmount);
         
         if (amountToken > tokenAvailable) {
-            amountETH = (uint256(amountToken) * _precision) / ExchangeRate;
+            amountETH = (tokenAvailable * uint256(_precision * uint16(18))) / uint256(ExchangeRate * uint64(Decimals));
             amountToken = tokenAvailable;
+
+            address payable receiver = payable(msg.sender);
+            receiver.transfer(msg.value - amountETH);
         }
         
-        (bool success, bytes memory res) = payable(address(this)).call{gas: maxGas, value:amountETH} ("");
-        
+        AvailableQuantityOfETH = SafeMath.SafeAdd(AvailableQuantityOfETH, amountETH);
+        AllocatedAmount = SafeMath.SafeAdd(AllocatedAmount, amountToken);
 
-        if (success) {
-            AvailableQuantityOfETH = SafeMath.SafeAdd(AvailableQuantityOfETH, amountETH);
-            AllocatedAmount = SafeMath.SafeAdd(AllocatedAmount, amountToken);
-
-            emit Deposited(block.timestamp, msg.sender, amountETH, amountToken);
-            emit Allocated(block.timestamp, msg.sender, amountToken);
-            _balances[msg.sender] += amountToken;
-        }
+        emit Deposited(block.timestamp, msg.sender, amountETH, amountToken);
+        emit Allocated(block.timestamp, msg.sender, amountToken);
+        _balances[msg.sender] += amountToken;
 
         return amountToken;
     }

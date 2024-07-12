@@ -49,4 +49,80 @@ describe('Test token', function () {
       expect(await token.balanceOf(owner)).to.equal(ownerAmount - transfer);
       expect(await token.AllocatedAmount()).to.equal(ownerAmount);
     });
+
+    it('Owner cannot transfer to himself', async function() {
+      const [ owner, token ] = await loadFixture(_deploy);
+
+      const ownerAmount = 250_000n * BigInt(10 ** 18);
+
+      const transfer = 20n * BigInt(10 ** 18);
+      expect(await token.transfer(owner.address, transfer)).to.be.revertedWith('No no');
+    });
+
+    it('Cannot allocate more than available', async function() {
+
+      const [ owner, token ] = await loadFixture(_deploy);
+
+      const totalSupply = await token.totalSupply();
+      const ownerBalance = await token.balanceOf(owner.address);
+
+      await expect(token.allocate("0x1234567890123456789012345678901234567890", totalSupply)).to.be.revertedWith("Insufficient supply");
+      await expect(token.allocate("0x1234567890123456789012345678901234567890", totalSupply -  ownerBalance + 1n)).to.be.revertedWith("Insufficient supply");
+
+      await token.allocate("0x1234567890123456789012345678901234567890", totalSupply -  ownerBalance);
+      const newBalance = await token.balanceOf("0x1234567890123456789012345678901234567890");
+
+      expect(newBalance + ownerBalance).to.equal(totalSupply);
+      await expect(token.allocate("0x1234567890123456789012345678901234567890", 1n)).to.be.revertedWith("Insufficient supply");
+    });
+
+    it('Burn is working properly', async function() {
+      const [ owner, token ] = await loadFixture(_deploy);
+      const totalSupply = await token.totalSupply();
+
+      await expect(token.burn(totalSupply)).to.be.revertedWith("Burn failed");
+      const burntAmt = 250_000n * BigInt(10 ** 18);
+      await token.burn(burntAmt);
+
+      const newTotalSupply = await token.totalSupply();
+      expect(newTotalSupply).to.equal(totalSupply - burntAmt);
+
+      await token.allocate("0x1234567890123456789012345678901234567890", burntAmt);
+      await expect(token.burn(newTotalSupply - burntAmt)).to.be.revertedWith("Burn failed");
+    });
+  });
+
+  describe('Test allowances', function() {
+    it('Approve and Allowance work as expeced', async function() {
+      const [ owner, token ] = await loadFixture(_deploy);
+      const [ owner1, spender1 ] = await ethers.getSigners();
+
+      const newBalance = 2_500n * BigInt(10 ** 18);
+      await token.allocate(spender1.address, newBalance);
+
+      await token.connect(spender1).approve(owner, newBalance / 2n);
+      const allowance = await token.allowance(spender1, owner1);
+
+      expect(allowance).to.equal(newBalance / 2n);
+      await token.connect(owner).transferFrom(spender1, "0x1234567890123456789012345678901234567890", newBalance / 4n);
+      const balance90 = await token.balanceOf("0x1234567890123456789012345678901234567890");
+
+      expect(balance90).to.equal(newBalance / 4n);
+      await expect(token.transferFrom(spender1, "0x1234567890123456789012345678901234567890", newBalance)).to.be.revertedWith("Insufficient allowance");
+      await expect(token.transferFrom(spender1, "0x1234567890123456789012345678901234567890", newBalance / 2n)).to.be.revertedWith("Insufficient allowance");
+
+      await token.connect(spender1).approve(owner, newBalance);
+      await expect(token.transferFrom(spender1, "0x1234567890123456789012345678901234567890", 3n * newBalance / 4n + 1n)).to.be.revertedWith("Insufficient funds");
+    });
+  });
+
+  describe('Test payable', function() {
+    it('Deposit is working properly', async function() {
+      const [ owner, token ] = await loadFixture(_deploy);
+      const [ owner1, spender1 ] = await ethers.getSigners();
+
+      var eth = ethers.parseEther("1.0");
+
+      await expect(token.connect(spender1).depositEther({ value: eth })).to.be.revertedWith('Not allowed');
+    });
   });

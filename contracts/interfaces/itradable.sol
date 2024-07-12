@@ -16,7 +16,7 @@ interface ITradable {
 
     /// @notice Enables a user to deposit ETH and receive Tokens in exchange
     /// The conversion rate applies at a fixed rate, updated by Owner
-    function depositEther(uint256 maxGas) external payable returns(uint256);
+    function depositEther() external payable returns(uint256);
 
     /// @notice Enables a user to sell back an amount of Tokens against ETH
     /// if there is enough ETH available, and if the change is authorized
