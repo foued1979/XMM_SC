@@ -11,8 +11,6 @@ import "./structures/fixing.sol";
 import "./structures/position.sol";
 import "./enums.sol";
 
-import "hardhat/console.sol";
-
 contract XMMPool is IXMMPool {
     /**********
      * Events *

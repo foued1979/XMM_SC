@@ -113,8 +113,8 @@
       ]
     },
     "C:\\Users\\Frederic\\XMM_SC\\contracts\\token.sol": {
-      "lastModificationDate": 1720801940449,
-      "contentHash": "b56e67cfd206f63b433353722fdd3bbd",
+      "lastModificationDate": 1720843731997,
+      "contentHash": "d1fb4eec6cc40920b20bb5c0fc60a368",
       "sourceName": "contracts/token.sol",
       "solcConfig": {
         "version": "0.8.24",
@@ -154,8 +154,8 @@
       ]
     },
     "C:\\Users\\Frederic\\XMM_SC\\contracts\\interfaces\\itradable.sol": {
-      "lastModificationDate": 1720801617911,
-      "contentHash": "8f53cb77ce1ad3438920eaca8f9ab552",
+      "lastModificationDate": 1720841636434,
+      "contentHash": "41b54f48cd86018d6ca9bb80479b2c48",
       "sourceName": "contracts/interfaces/itradable.sol",
       "solcConfig": {
         "version": "0.8.24",

@@ -21,12 +21,12 @@ interface ITradable {
     /// @notice Enables a user to sell back an amount of Tokens against ETH
     /// if there is enough ETH available, and if the change is authorized
     /// @param amountToken The amount of tokens to be exchanged
-    function sellBack(uint128 amountToken) external payable returns(bool);
+    function sellBack(uint128 amountToken) external;
 
     /// @notice Enables the Owner to buy back tokens from a user, in exchange of ETH
     /// and at a specified rate
     /// @param from The beneficiary
     /// @param amountToken The amount of tokens
     /// @param rate The conversion rate
-    function buyBack(address payable from, uint128 amountToken, uint64 rate) external payable returns(bool);
+    function buyBack(address payable from, uint128 amountToken, uint64 rate) external;
 }

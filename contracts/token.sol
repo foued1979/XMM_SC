@@ -5,8 +5,6 @@ import "./base/erc20.sol";
 import "./interfaces/itradable.sol";
 import "./libraries/safemath.sol";
 
-import "hardhat/console.sol";
-
 contract Token is ERC20, ITradable {
     /// @notice The Allocated event is triggered when Owner allocates some token to
     /// a beneficiary
@@ -29,7 +27,6 @@ contract Token is ERC20, ITradable {
 
     // Public properties linked to ITradable
     bool public ChangeIsAllowed;
-    uint256 public AvailableQuantityOfETH;
 
     // The exchange rate represents a real number with 4 digits precision
     uint64 public ExchangeRate;
@@ -38,14 +35,14 @@ contract Token is ERC20, ITradable {
     // Private Fields
     uint256 public AllocatedAmount;
 
-    constructor(string memory symbol, string memory name, uint32 initialSupply, uint8 decimals, uint32 initialOwnerAllocation) 
-        ERC20(symbol, initialSupply, decimals) payable {
+    constructor(string memory symbol, string memory name, uint32 initialSupply, uint32 initialOwnerAllocation) 
+        ERC20(symbol, initialSupply, uint8(18)) payable {
         Name = name;
         AllocatedAmount = 0;
 
         ExchangeRate = 30_000_000;
         require(initialOwnerAllocation < (initialSupply / 5), "Not fair");
-        allocateToOwner(uint256(initialOwnerAllocation) * uint256(10 ** decimals));
+        allocateToOwner(uint256(initialOwnerAllocation) * uint256(10 ** 18));
     }
 
     /// @notice Burns a number of token
@@ -65,10 +62,10 @@ contract Token is ERC20, ITradable {
         require(amount <= SafeMath.SafeSub(TotalSupply, AllocatedAmount), "Insufficient supply");
 
         uint256 newAllocation = SafeMath.SafeAdd(AllocatedAmount, amount);
-        uint256 prevBalance = _balances[to];
 
-        _balances[to] = SafeMath.SafeAdd(prevBalance, amount);
+        _balances[to] = SafeMath.SafeAdd(_balances[to], amount);
         AllocatedAmount = newAllocation;
+
         emit Allocated(block.timestamp, to, amount);
     }
 
@@ -85,7 +82,7 @@ contract Token is ERC20, ITradable {
     
     /// @notice Returns the quantity of ETH available for change against Token
     function getAvailableQuantityOfETH() external view returns(uint256) {
-        return AvailableQuantityOfETH;
+        return address(this).balance;
     }
 
     /// @notice Enables a user to deposit ETH and receive Tokens in exchange
@@ -94,22 +91,22 @@ contract Token is ERC20, ITradable {
         uint256 amountETH = msg.value;
         if (amountETH == 0) return 0;
 
-        uint256 amountToken = (amountETH * uint256(ExchangeRate * uint64(Decimals))) / uint256(_precision * uint16(18));
+        uint256 amountToken = (amountETH * uint256(ExchangeRate)) / uint256(_precision);
         uint256 tokenAvailable = SafeMath.SafeSub(TotalSupply, AllocatedAmount);
         
         if (amountToken > tokenAvailable) {
-            amountETH = (tokenAvailable * uint256(_precision * uint16(18))) / uint256(ExchangeRate * uint64(Decimals));
+            amountETH = (tokenAvailable * uint256(_precision)) / uint256(ExchangeRate);
             amountToken = tokenAvailable;
 
             address payable receiver = payable(msg.sender);
             receiver.transfer(msg.value - amountETH);
         }
         
-        AvailableQuantityOfETH = SafeMath.SafeAdd(AvailableQuantityOfETH, amountETH);
         AllocatedAmount = SafeMath.SafeAdd(AllocatedAmount, amountToken);
 
         emit Deposited(block.timestamp, msg.sender, amountETH, amountToken);
         emit Allocated(block.timestamp, msg.sender, amountToken);
+
         _balances[msg.sender] += amountToken;
 
         return amountToken;
@@ -118,8 +115,24 @@ contract Token is ERC20, ITradable {
     /// @notice Enables a user to sell back an amount of Tokens against ETH
     /// if there is enough ETH available, and if the change is authorized
     /// @param amountToken The amount of tokens to be exchanged
-    function sellBack(uint128 amountToken) external payable isAllowed returns(bool) {
-        return this.buyBack(payable(msg.sender), amountToken, ExchangeRate);
+    function sellBack(uint128 amountToken) external isAllowed {
+        require(_balances[msg.sender] >= amountToken, "Insufficient balance");
+
+        uint256 amountETH = (uint256(amountToken) * uint256(_precision)) / uint256(ExchangeRate);
+        uint256 availableQuantityOfETH = address(this).balance;
+
+        if (amountETH > availableQuantityOfETH) {
+            amountETH = availableQuantityOfETH;
+            amountToken = uint128((amountETH * uint256(ExchangeRate)) / uint256(_precision));
+        }
+        
+        payable(msg.sender).transfer(amountETH);
+        
+        AllocatedAmount = SafeMath.SafeSub(AllocatedAmount, uint256(amountToken));
+        _balances[msg.sender] = SafeMath.SafeSub(_balances[msg.sender], uint256(amountToken));
+
+        emit ChangedBack(block.timestamp, msg.sender, amountETH, amountToken);
+        emit Withdrawn(block.timestamp, msg.sender, amountToken);
     }
 
     /// @notice Enables the Owner to buy back tokens from a user, in exchange of ETH
@@ -127,28 +140,24 @@ contract Token is ERC20, ITradable {
     /// @param from The beneficiary
     /// @param amountToken The amount of tokens
     /// @param rate The conversion rate
-    function buyBack(address payable from, uint128 amountToken, uint64 rate) external payable onlyOwner returns(bool) {
+    function buyBack(address payable from, uint128 amountToken, uint64 rate) external onlyOwner {
         require(_balances[from] >= amountToken, "Insufficient balance");
 
-        uint256 amountETH = (uint256(amountToken) * _precision) / rate;
+        uint256 amountETH = (uint256(amountToken) * uint256(_precision)) / uint256(rate);
+        uint256 availableQuantityOfETH = address(this).balance;
 
-        if (amountETH > AvailableQuantityOfETH) {
-            amountETH = AvailableQuantityOfETH;
-            amountToken = uint128((amountETH * rate) / _precision);
+        if (amountETH > availableQuantityOfETH) {
+            amountETH = availableQuantityOfETH;
+            amountToken = uint128((amountETH * uint256(rate)) / uint256(_precision));
         }
 
-        (bool success, bytes memory res) = from.call{gas: 35000, value:amountETH} ("");
+        from.transfer(amountETH);
 
-        if (success) {
-            AllocatedAmount = SafeMath.SafeSub(AllocatedAmount, amountToken);
-            _balances[from] = SafeMath.SafeSub(_balances[from], amountToken);
-            AvailableQuantityOfETH = SafeMath.SafeSub(AvailableQuantityOfETH, amountETH);
+        AllocatedAmount = SafeMath.SafeSub(AllocatedAmount, uint256(amountToken));
+        _balances[from] = SafeMath.SafeSub(_balances[from], uint256(amountToken));
 
-            emit ChangedBack(block.timestamp, from, amountETH, amountToken);
-            emit Withdrawn(block.timestamp, from, amountToken);
-        }
-
-        return success;
+        emit ChangedBack(block.timestamp, from, amountETH, amountToken);
+        emit Withdrawn(block.timestamp, from, amountToken);
     }
 
     /// @notice Allocates a number of token to the owner
