@@ -5,6 +5,8 @@ import "./utils.sol";
 import "./math.sol";
 import "../enums.sol";
 
+import "hardhat/console.sol";
+
 library FinancialLib {
     /// @notice Computes the timestamp of position expiry
     function optionMaturity(uint blockTimestamp, uint fixingUpdateInterval, uint expiry) internal pure returns(uint) {
@@ -19,12 +21,15 @@ library FinancialLib {
     }
 
     /// @notice Computes the value of a Put option
-    function putPremium(int64 forward, int64 strike, int64 volatility, int64 expiry) internal pure returns(int64) {
+    function putPremium(int64 forward, int64 strike, int64 volatility, int64 expiry) external pure returns(int64) {
         (int64 d1, int64 d2) = optionFactors(forward, strike, volatility, expiry);
+        console.log(uint64(cnsd(d1)));
+        console.log(uint64(cnsd(d2)));
         int64 f1 = Math.mult(forward, Math.sub(Math.One_32, cnsd(d1)));
         int64 f2 = Math.mult(strike, Math.sub(Math.One_32, cnsd(d2)));
 
-        return Math.div(f2 - f1, strike);
+        int64 val = Math.sub(f2, f1);
+        return Math.div((val < 0 ? int64(0) : val), strike);
     }
 
 int64 private constant sqrt_2 = 6074001000;

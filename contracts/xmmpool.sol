@@ -3,7 +3,6 @@ pragma solidity >= 0.8.0;
 
 import "./interfaces/ierc20.sol";
 import "./interfaces/ixmmpool.sol";
-import "./libraries/financial.sol";
 import "./libraries/math.sol";
 import "./libraries/safemath.sol";
 import "./libraries/utils.sol";
@@ -66,7 +65,7 @@ contract XMMPool is IXMMPool {
     address public Token;
 
     /// @notice The minimum deposit size
-    uint64 public MinDeposit;
+    uint128 public MinDeposit;
 
     /// @notice The list of fixings
     Fixing[] public Fixings;
@@ -91,7 +90,7 @@ contract XMMPool is IXMMPool {
         Token = token;
         _decimals = decimals;
         Term = term;
-        MinDeposit = minDeposit;
+        MinDeposit = (uint128(minDeposit) * uint128(10 ** decimals)) / uint128(2 ** 32);
 
         (_fixingUpdateInterval, _expiryInterval, _expiryYearFraction) = Utils.getTermInformation(term);
         StartDate = Utils.getTimeStamp(block.timestamp, _fixingUpdateInterval);
@@ -122,18 +121,23 @@ contract XMMPool is IXMMPool {
     /// @param longShort 0 if long 1 if short
     /// @param amount The amount to be deposited
     function deposit(LongShort longShort, uint128 amount) external isActive hasMinDeposit(amount) {
-        (bool success, bytes memory res) = Token.call(abi.encodeWithSelector(IERC20.balanceOf.selector, msg.sender));
+        (, bytes memory res) = Token.call(abi.encodeWithSelector(IERC20.balanceOf.selector, msg.sender));
+        (bool success, bytes memory allowanceBytes) = Token.call(abi.encodeWithSelector(IERC20.allowance.selector, msg.sender, address(this)));
 
         if (success) {
             uint256 balance = abi.decode(res, (uint256));
+            uint256 allowance = abi.decode(allowanceBytes, (uint256));
+
             require(balance >= amount, "Insufficient balance");
+            require(allowance >= amount, "Insufficient allowance");
 
-            (success, res) = Token.call(abi.encodeWithSelector(IERC20.transfer.selector, address(this), uint256(amount)));
+            (success, res) = Token.call(abi.encodeWithSelector(IERC20.transferFrom.selector, msg.sender, address(this), uint256(amount)));
 
-            if (success) {
+            if (success && abi.decode(res, (bool))) {
                 uint32 positionIndex = uint32(_positions[msg.sender].length);
-                int64 index0 = longShort == LongShort.Long ? _longRateIndex[_lastFixingIndex] : _shortRateIndex[_lastFixingIndex];
+                int64 index0 = (longShort == LongShort.Long ? _longRateIndex[_lastFixingIndex] : _shortRateIndex[_lastFixingIndex]);
                 uint timestamp = Fixings[_lastFixingIndex].timestamp;
+
                 Position memory position = Position(positionIndex, longShort, index0, timestamp, timestamp + _expiryInterval, amount);
                 _positions[msg.sender].push(position);
                 
@@ -206,8 +210,9 @@ contract XMMPool is IXMMPool {
     }
 
     /// @notice Sets the first fixing and activates the pool
-    function setFirstFixing(int64 spot, int64 strike, int64 volatility) external onlyOwner {
-        int64 optionPremium = FinancialLib.putPremium(spot, strike, volatility, _expiryYearFraction);
+    function setFirstFixing(int64 spot, int64 strike, int64 volatility, int64 optionPremium) external onlyOwner {
+        if (Fixings.length > 0) return;
+
         Fixing memory fixing = Fixing(Utils.getTimeStamp(block.timestamp, _fixingUpdateInterval), spot, strike, volatility, optionPremium);
 
         _lastFixingIndex = 0;
@@ -217,11 +222,16 @@ contract XMMPool is IXMMPool {
     }
 
     /// @notice Sets the latest fixing for the XMM
-    function setFixing(int64 spot, int64 strike, int64 volatility) external onlyOwner {
-        int64 optionPremium = FinancialLib.putPremium(spot, strike, volatility, _expiryYearFraction);
-        Fixing memory fixing = Fixing(Utils.getNextFixingTimeStamp(block.timestamp, _fixingUpdateInterval, Fixings[_lastFixingIndex].timestamp), spot, strike, volatility, optionPremium);
+    function setFixing(int64 spot, int64 strike, int64 volatility, int64 optionPremium) external onlyOwner {
+        Fixing storage lastFixing = Fixings[_lastFixingIndex];
+        uint nextFixingTimestamp = Utils.getTimeStamp(block.timestamp, _fixingUpdateInterval);
 
-        executeMarginCalls(Fixings[_lastFixingIndex].spot, fixing);
+        // Next fixing timestamp must be after the last fixing
+        if (nextFixingTimestamp <= lastFixing.timestamp) return;
+
+        Fixing memory fixing = Fixing(nextFixingTimestamp, spot, strike, volatility, optionPremium);
+
+        executeMarginCalls(lastFixing.spot, lastFixing.timestamp, fixing);
         
         _lastFixingIndex += 1;
         if (_lastFixingIndex == Utils.MAX_NUMBER_FIXINGS) _lastFixingIndex = 0;
@@ -229,8 +239,9 @@ contract XMMPool is IXMMPool {
         else Fixings[_lastFixingIndex] = fixing;
     }
 
-    function executeMarginCalls(int64 prevSpot, Fixing memory lastFixing) private {
-        int64 premiumPerf = Math.mult(lastFixing.premium, _acrualYF);
+    function executeMarginCalls(int64 prevSpot, uint prevFixingTimestamp, Fixing memory lastFixing) private {
+        int64 d = int64(uint64((lastFixing.timestamp - prevFixingTimestamp) / _fixingUpdateInterval)) << 32;
+        int64 premiumPerf = Math.mult(lastFixing.premium, Math.mult(d, _acrualYF));
 
         int64 longRateFactor = 0;
         int64 shortRateFactor = 0;
@@ -305,13 +316,13 @@ contract XMMPool is IXMMPool {
     }
 
     function getLongRatio() private view returns(int64) {
-        if (TotalLongPositions == 0) return 1;
+        if (TotalLongPositions == 0) return 0;
         uint256 short = uint256(TotalShortPositions) << 32;
         return int64(uint64(short / TotalLongPositions));
     }
 
     function getShortRatio() private view returns(int64) {
-        if (TotalShortPositions == 0) return 1;
+        if (TotalShortPositions == 0) return 0;
         uint256 long = uint256(TotalLongPositions) << 32;
         return int64(uint64(long / TotalShortPositions));
     }

@@ -2,8 +2,8 @@
   "_format": "hh-sol-cache-2",
   "files": {
     "C:\\Users\\Frederic\\XMM_SC\\contracts\\base\\erc20.sol": {
-      "lastModificationDate": 1720708382837,
-      "contentHash": "b4052605150d086bb390a2f45e659efd",
+      "lastModificationDate": 1720852774397,
+      "contentHash": "cf06dae0db513770c1af5be6138e43f5",
       "sourceName": "contracts/base/erc20.sol",
       "solcConfig": {
         "version": "0.8.24",
@@ -31,7 +31,8 @@
       },
       "imports": [
         "../interfaces/ierc20.sol",
-        "../libraries/safemath.sol"
+        "../libraries/safemath.sol",
+        "hardhat/console.sol"
       ],
       "versionPragmas": [
         ">= 0.8.0"
@@ -77,8 +78,8 @@
       ]
     },
     "C:\\Users\\Frederic\\XMM_SC\\contracts\\libraries\\safemath.sol": {
-      "lastModificationDate": 1720708772034,
-      "contentHash": "0140e8ea1fa78aa2211fd9c0c76aaf3b",
+      "lastModificationDate": 1720851770954,
+      "contentHash": "b5d67cfffc849574f9fb99ada709ae7f",
       "sourceName": "contracts/libraries/safemath.sol",
       "solcConfig": {
         "version": "0.8.24",
@@ -113,8 +114,8 @@
       ]
     },
     "C:\\Users\\Frederic\\XMM_SC\\contracts\\token.sol": {
-      "lastModificationDate": 1720843731997,
-      "contentHash": "d1fb4eec6cc40920b20bb5c0fc60a368",
+      "lastModificationDate": 1720844087131,
+      "contentHash": "876f6f5f0f097ff7207ce508221a4a37",
       "sourceName": "contracts/token.sol",
       "solcConfig": {
         "version": "0.8.24",
@@ -143,8 +144,7 @@
       "imports": [
         "./base/erc20.sol",
         "./interfaces/itradable.sol",
-        "./libraries/safemath.sol",
-        "hardhat/console.sol"
+        "./libraries/safemath.sol"
       ],
       "versionPragmas": [
         ">= 0.8.0"
@@ -226,8 +226,8 @@
       ]
     },
     "C:\\Users\\Frederic\\XMM_SC\\contracts\\libraries\\financial.sol": {
-      "lastModificationDate": 1720260131372,
-      "contentHash": "dc4522dbf2630efb04e709c3aa218938",
+      "lastModificationDate": 1720854582648,
+      "contentHash": "08650bfa31dca063875cc64ecfb5936f",
       "sourceName": "contracts/libraries/financial.sol",
       "solcConfig": {
         "version": "0.8.24",
@@ -256,7 +256,8 @@
       "imports": [
         "./utils.sol",
         "./math.sol",
-        "../enums.sol"
+        "../enums.sol",
+        "hardhat/console.sol"
       ],
       "versionPragmas": [
         ">= 0.8.0"
@@ -266,8 +267,8 @@
       ]
     },
     "C:\\Users\\Frederic\\XMM_SC\\contracts\\libraries\\utils.sol": {
-      "lastModificationDate": 1720704726088,
-      "contentHash": "4fb0817a3b348b2c900c8cfbee0298f7",
+      "lastModificationDate": 1720858179733,
+      "contentHash": "a83b8bae6cee611f01eab6c2d497d9d1",
       "sourceName": "contracts/libraries/utils.sol",
       "solcConfig": {
         "version": "0.8.24",
@@ -296,8 +297,7 @@
       "imports": [
         "./math.sol",
         "../structures/position.sol",
-        "../enums.sol",
-        "hardhat/console.sol"
+        "../enums.sol"
       ],
       "versionPragmas": [
         ">= 0.8.0"
@@ -412,8 +412,8 @@
       "artifacts": []
     },
     "C:\\Users\\Frederic\\XMM_SC\\contracts\\manager.sol": {
-      "lastModificationDate": 1720705719760,
-      "contentHash": "0404a5c0faa37a31c2beb53d0619f467",
+      "lastModificationDate": 1720854735935,
+      "contentHash": "9085e966c01090d3fa5f4f330610d081",
       "sourceName": "contracts/manager.sol",
       "solcConfig": {
         "version": "0.8.24",
@@ -453,8 +453,8 @@
       ]
     },
     "C:\\Users\\Frederic\\XMM_SC\\contracts\\xmmpool.sol": {
-      "lastModificationDate": 1720706493463,
-      "contentHash": "97c8521cbb516b3bb1160aba3b57113d",
+      "lastModificationDate": 1720858365704,
+      "contentHash": "c6aa70e32c4a3173f790c306d0726fe2",
       "sourceName": "contracts/xmmpool.sol",
       "solcConfig": {
         "version": "0.8.24",
@@ -483,14 +483,12 @@
       "imports": [
         "./interfaces/ierc20.sol",
         "./interfaces/ixmmpool.sol",
-        "./libraries/financial.sol",
         "./libraries/math.sol",
         "./libraries/safemath.sol",
         "./libraries/utils.sol",
         "./structures/fixing.sol",
         "./structures/position.sol",
-        "./enums.sol",
-        "hardhat/console.sol"
+        "./enums.sol"
       ],
       "versionPragmas": [
         ">= 0.8.0"
@@ -500,8 +498,8 @@
       ]
     },
     "C:\\Users\\Frederic\\XMM_SC\\contracts\\interfaces\\ixmmpool.sol": {
-      "lastModificationDate": 1720705521353,
-      "contentHash": "c543b0db3b72ed2f8e0844f4da5f831e",
+      "lastModificationDate": 1720854664290,
+      "contentHash": "5a715ab35af2be76645aa477db543805",
       "sourceName": "contracts/interfaces/ixmmpool.sol",
       "solcConfig": {
         "version": "0.8.24",

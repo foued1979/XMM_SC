@@ -2,6 +2,8 @@ const { loadFixture } = require('@nomicfoundation/hardhat-network-helpers');
 const { ethers } = require('hardhat');
 const { expect } = require('chai');
 
+const minDeposit = 0.5 * (2 ** 32);
+
 async function _deploy() {
   const [owner] = await ethers.getSigners();
 
@@ -15,8 +17,8 @@ describe('Test pools creation', function () {
   it('Should deploy but pool is not activated', async function () {
     const { owner, manager } = await loadFixture(_deploy);
   
-    await manager.createXMMPool('0xaaaaaaaaaa0000000000aaaaaaaaaa0000000000', 18, 0, 2 ** 32);
-    await manager.createXMMPool('0xaaaaaaaaaa0000000000bbbbbbbbbb0000000000', 18, 1, 2 ** 32);
+    await manager.createXMMPool('0xaaaaaaaaaa0000000000aaaaaaaaaa0000000000', 18, 0, minDeposit);
+    await manager.createXMMPool('0xaaaaaaaaaa0000000000bbbbbbbbbb0000000000', 18, 1, minDeposit);
   
     const poolsToken1 = await manager.getXMMPools('0xaaaaaaaaaa0000000000aaaaaaaaaa0000000000');
     const poolsToken2 = await manager.getXMMPools('0xaaaaaaaaaa0000000000bbbbbbbbbb0000000000');
@@ -31,8 +33,8 @@ describe('Test pools creation', function () {
   it('Should deploy, have right owner and 1 pool for 2 tokens', async function () {
     const { owner, manager } = await loadFixture(_deploy);
   
-    await manager.createXMMPool('0xaaaaaaaaaa0000000000aaaaaaaaaa0000000000', 18, 0, 2 ** 32);
-    await manager.createXMMPool('0xaaaaaaaaaa0000000000bbbbbbbbbb0000000000', 18, 1, 2 ** 32);
+    await manager.createXMMPool('0xaaaaaaaaaa0000000000aaaaaaaaaa0000000000', 18, 0, minDeposit);
+    await manager.createXMMPool('0xaaaaaaaaaa0000000000bbbbbbbbbb0000000000', 18, 1, minDeposit);
   
     const poolsToken1 = await manager.getXMMPools('0xaaaaaaaaaa0000000000aaaaaaaaaa0000000000');
     const poolsToken2 = await manager.getXMMPools('0xaaaaaaaaaa0000000000bbbbbbbbbb0000000000');
@@ -48,10 +50,10 @@ describe('Test pools creation', function () {
   it('Should deploy, have 4 pools for 1 tokens', async function () {
     const { owner, manager } = await loadFixture(_deploy);
   
-    await manager.createXMMPool('0xaaaaaaaaaa0000000000aaaaaaaaaa0000000000', 18, 0, 2 ** 32);
-    await manager.createXMMPool('0xaaaaaaaaaa0000000000aaaaaaaaaa0000000000', 18, 1, 2 ** 32);
-    await manager.createXMMPool('0xaaaaaaaaaa0000000000aaaaaaaaaa0000000000', 18, 2, 2 ** 32);
-    await manager.createXMMPool('0xaaaaaaaaaa0000000000aaaaaaaaaa0000000000', 18, 3, 2 ** 32);
+    await manager.createXMMPool('0xaaaaaaaaaa0000000000aaaaaaaaaa0000000000', 18, 0, minDeposit);
+    await manager.createXMMPool('0xaaaaaaaaaa0000000000aaaaaaaaaa0000000000', 18, 1, minDeposit);
+    await manager.createXMMPool('0xaaaaaaaaaa0000000000aaaaaaaaaa0000000000', 18, 2, minDeposit);
+    await manager.createXMMPool('0xaaaaaaaaaa0000000000aaaaaaaaaa0000000000', 18, 3, minDeposit);
   
     const poolsToken1 = await manager.getXMMPools('0xaaaaaaaaaa0000000000aaaaaaaaaa0000000000');
     const registeredTokens = await manager.getRegisteredTokens();
@@ -69,7 +71,18 @@ describe('Test pools creation', function () {
   it('Should deploy, and throw an error if 2 identical pools are created', async function () {
     const { owner, manager } = await loadFixture(_deploy);
   
-    await manager.createXMMPool('0xaaaaaaaaaa0000000000aaaaaaaaaa0000000000', 18, 0, 2 ** 32);
-    await expect(manager.createXMMPool('0xaaaaaaaaaa0000000000aaaaaaaaaa0000000000', 18, 0, 2 ** 32)).to.be.revertedWith('xmm pool already exists');
+    await manager.createXMMPool('0xaaaaaaaaaa0000000000aaaaaaaaaa0000000000', 18, 0, minDeposit);
+    await expect(manager.createXMMPool('0xaaaaaaaaaa0000000000aaaaaaaaaa0000000000', 18, 0, minDeposit)).to.be.revertedWith('xmm pool already exists');
   });
+
+  it('MinDeposit is as expected', async function() {
+    const { owner, manager } = await loadFixture(_deploy);
+  
+    await manager.createXMMPool('0xaaaaaaaaaa0000000000aaaaaaaaaa0000000000', 18, 0, minDeposit);
+    const poolsTokenAddr = await manager.getXMMPools('0xaaaaaaaaaa0000000000aaaaaaaaaa0000000000');
+    const xmmPoolToken = await ethers.getContractAt("XMMPool", poolsTokenAddr[0]);
+    const minDepositRecorded = await xmmPoolToken.MinDeposit();
+    
+    expect(minDepositRecorded).to.equal(500_000_000_000_000_000n);
+  })
 });

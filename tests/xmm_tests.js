@@ -1,6 +1,7 @@
 const { loadFixture } = require('@nomicfoundation/hardhat-network-helpers');
 const { ethers } = require('hardhat');
 const { expect } = require('chai');
+const { time } =  require("@nomicfoundation/hardhat-network-helpers");
 
 async function getXmmPool() {
   const [owner] = await ethers.getSigners();
@@ -86,9 +87,10 @@ describe('Test pool', function () {
         "spot": 180_388_626_432_000,
         "strikes": [179_529_632_972_800, 179_529_632_972_800, 179_529_632_972_800, 179_529_632_972_800, 179_529_632_972_800, 179_529_632_972_800, 179_529_632_972_800 ],
         "volatilities": [ 1_868_310_774, 1_868_310_774, 1_868_310_774, 1_868_310_774, 1_868_310_774, 1_868_310_774, 1_868_310_774 ],
+        "premia": [ 4_294_967_296, 4_294_967_296, 4_294_967_296, 4_294_967_296, 4_294_967_296, 4_294_967_296, 4_294_967_296 ]
       };
 
-      await manager.setFirstFixings('0xaaaaaaaaaa0000000000aaaaaaaaaa0000000000', firstFixings.spot, firstFixings.strikes, firstFixings.volatilities);
+      await manager.setFirstFixings('0xaaaaaaaaaa0000000000aaaaaaaaaa0000000000', firstFixings.spot, firstFixings.strikes, firstFixings.volatilities, firstFixings.premia);
 
       expect((await xmmPool1.getFixings()).length).to.equal(1);
       expect(await xmmPool1.IsActivated()).to.equal(true);
@@ -102,26 +104,31 @@ describe('Test pool', function () {
         "spot": 180_388_626_432_000,
         "strikes": [179_529_632_972_800, 179_529_632_972_800, 179_529_632_972_800, 179_529_632_972_800, 179_529_632_972_800, 179_529_632_972_800, 179_529_632_972_800 ],
         "volatilities": [ 1_868_310_774, 1_868_310_774, 1_868_310_774, 1_868_310_774, 1_868_310_774, 1_868_310_774, 1_868_310_774 ],
+        "premia": [ 4_294_967_296, 4_294_967_296, 4_294_967_296, 4_294_967_296, 4_294_967_296, 4_294_967_296, 4_294_967_296 ]
       };
 
-      await manager.setFirstFixings('0xaaaaaaaaaa0000000000aaaaaaaaaa0000000000', firstFixings.spot, firstFixings.strikes, firstFixings.volatilities);
+      await manager.setFirstFixings('0xaaaaaaaaaa0000000000aaaaaaaaaa0000000000', firstFixings.spot, firstFixings.strikes, firstFixings.volatilities, firstFixings.premia);
 
       const strikes = [ 179_529_632_972_800, 179_529_632_972_800, 179_529_632_972_800, 179_529_632_972_800, 179_529_632_972_800, 179_529_632_972_800, 179_529_632_972_800 ];
       const vols = [ 1_868_310_774, 1_868_310_774, 1_868_310_774, 1_868_310_774, 1_868_310_774, 1_868_310_774, 1_868_310_774 ];
+      const premia = [ 4_294_967_296, 4_294_967_296, 4_294_967_296, 4_294_967_296, 4_294_967_296, 4_294_967_296, 4_294_967_296 ];
 
-      await manager.setFixings('0xaaaaaaaaaa0000000000aaaaaaaaaa0000000000',  181_462_368_256_000, strikes, vols);
-      await manager.setFixings('0xaaaaaaaaaa0000000000aaaaaaaaaa0000000000',  181_422_368_256_000, strikes, vols);
+      await time.increase(3601);
+      await manager.setFixings('0xaaaaaaaaaa0000000000aaaaaaaaaa0000000000',  181_462_368_256_000, strikes, vols, premia);
+      
+      await time.increase(3600);
+      await manager.setFixings('0xaaaaaaaaaa0000000000aaaaaaaaaa0000000000',  181_422_368_256_000, strikes, vols, premia);
 
       const fixingsPool1 = await xmmPool1.getFixings();
       const fixingsPool2 = await xmmPool2.getFixings();
 
       expect(fixingsPool1.length).to.equal(3);
-      expect(fixingsPool2.length).to.equal(3);
+      expect(fixingsPool2.length).to.equal(2);
 
       expect(fixingsPool1[1].spot).to.equal(181_462_368_256_000);
-      expect(fixingsPool2[1].spot).to.equal(181_462_368_256_000);
+      expect(fixingsPool2[1].spot).to.equal(181_422_368_256_000);
       expect(fixingsPool1[2].timestamp).to.equal(fixingsPool1[1].timestamp + 3_600n);
-      expect(fixingsPool2[2].timestamp).to.equal(fixingsPool2[1].timestamp + 7_200n);
-      expect(fixingsPool1[0].premium).to.not.equal(fixingsPool1[1].premium);
+      expect(fixingsPool1[2].timestamp).to.equal(fixingsPool1[0].timestamp + 7_200n);
+      expect(fixingsPool2[1].timestamp).to.equal(fixingsPool2[0].timestamp + 7_200n);
     });
   });

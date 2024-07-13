@@ -4,6 +4,8 @@ pragma solidity >= 0.8.0;
 import "../interfaces/ierc20.sol";
 import "../libraries/safemath.sol";
 
+import "hardhat/console.sol";
+
 contract ERC20 is IERC20 {
     /*************
      * Modifiers *
@@ -82,18 +84,18 @@ contract ERC20 is IERC20 {
     /// @notice Moves a `value` amount of tokens from `from` to `to` using the
     /// allowance mechanism. `value` is then deducted from the caller's
     /// allowance.
-    function transferFrom(address from, address to, uint256 amount) external returns (bool) {
-        require(_allowances[from][msg.sender] >= amount, "Insufficient allowance");
-        require(_balances[from] >= amount, "Insufficient funds");
-
+    function transferFrom(address from, address to, uint256 amount) external returns (bool res) {
+        require(res = (_allowances[from][msg.sender] >= amount), "Insufficient allowance");
+        require(res = (res && (_balances[from] >= amount)), "Insufficient funds");
+        
         uint256 newFromBalance = SafeMath.SafeSub(_balances[from], amount);
         uint256 newToBalance = SafeMath.SafeAdd(_balances[to], amount);
         
         _balances[from] = newFromBalance;
         _balances[to] = newToBalance;
-        emit Transfer(from, to, amount);
 
-        _allowances[from][msg.sender] -= amount;
+        emit Transfer(from, to, amount);
+        _allowances[from][msg.sender] = SafeMath.SubOr0(_allowances[from][msg.sender], amount);
 
         return true;
     }

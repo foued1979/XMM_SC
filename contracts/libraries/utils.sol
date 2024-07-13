@@ -62,13 +62,6 @@ library Utils {
         return uint(blockTimestamp / updateInterval) * updateInterval;
     }
 
-    /// @notice Gets the start date of an XMM
-    function getNextFixingTimeStamp(uint blockTimestamp, uint updateInterval, uint prevFixingTimestamp) internal pure returns(uint) {
-        uint ts = uint(blockTimestamp / updateInterval) * updateInterval;
-        if (ts == prevFixingTimestamp) ts += updateInterval;
-        return ts;
-    }
-
     /// @notice Gets the fixing index corresponding to the block timestamp
     function getFixingIndex(uint blockTimestamp, uint startDate, uint updateInterval) internal pure returns(uint) {
         uint offset = uint((blockTimestamp - startDate) / updateInterval);

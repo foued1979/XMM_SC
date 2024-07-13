@@ -65,22 +65,22 @@ contract Manager {
     }
 
     /// @notice Sets the first fixings for a token and activates the pools
-    function setFirstFixings(address token, int64 spot, int64[7] memory strikes, int64[7] memory volatilities) external onlyOwner {
+    function setFirstFixings(address token, int64 spot, int64[7] memory strikes, int64[7] memory volatilities, int64[7] memory optionPremia) external onlyOwner {
         address[7] storage xmmPools = _listOfXMMs[token];
 
         for (uint8 i = 0; i < 7; i++) {
             if (address(xmmPools[i]) == address(0x0)) continue;
-            IXMMPool(xmmPools[i]).setFirstFixing(spot, strikes[i], volatilities[i]);
+            IXMMPool(xmmPools[i]).setFirstFixing(spot, strikes[i], volatilities[i], optionPremia[i]);
         }
     }
 
     /// @notice Sets the fixings for a token
-    function setFixings(address token, int64 spot, int64[7] memory strikes, int64[7] memory volatilities) external onlyOwner {
+    function setFixings(address token, int64 spot, int64[7] memory strikes, int64[7] memory volatilities, int64[7] memory optionPremia) external onlyOwner {
         address[7] storage xmmPools = _listOfXMMs[token];
 
         for (uint8 i = 0; i < 7; i++) {
             if (address(xmmPools[i]) == address(0x0)) continue;
-            IXMMPool(xmmPools[i]).setFixing(spot, strikes[i], volatilities[i]);
+            IXMMPool(xmmPools[i]).setFixing(spot, strikes[i], volatilities[i], optionPremia[i]);
         }
     }
 }
