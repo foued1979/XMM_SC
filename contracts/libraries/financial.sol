@@ -9,8 +9,8 @@ import "hardhat/console.sol";
 
 library FinancialLib {
     /// @notice Computes the timestamp of position expiry
-    function optionMaturity(uint blockTimestamp, uint fixingUpdateInterval, uint expiry) internal pure returns(uint) {
-        return Utils.getTimeStamp(blockTimestamp, fixingUpdateInterval) + expiry;
+    function optionMaturity(uint blockTimestamp, uint startDate, uint fixingUpdateInterval, uint expiry) internal pure returns(uint) {
+        return Utils.getTimeStamp(blockTimestamp, startDate, fixingUpdateInterval) + expiry;
     }
 
     /// @notice Computes d1 and d2

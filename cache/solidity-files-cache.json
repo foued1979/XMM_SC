@@ -190,8 +190,8 @@
       ]
     },
     "C:\\Users\\Frederic\\XMM_SC\\contracts\\libraries\\math.sol": {
-      "lastModificationDate": 1720281600578,
-      "contentHash": "9ed815b16c566df8e84ed88629a745ca",
+      "lastModificationDate": 1720862670495,
+      "contentHash": "46e380f3bd9fa01063caeb55f7190d54",
       "sourceName": "contracts/libraries/math.sol",
       "solcConfig": {
         "version": "0.8.24",
@@ -226,8 +226,8 @@
       ]
     },
     "C:\\Users\\Frederic\\XMM_SC\\contracts\\libraries\\financial.sol": {
-      "lastModificationDate": 1720854582648,
-      "contentHash": "08650bfa31dca063875cc64ecfb5936f",
+      "lastModificationDate": 1720863655208,
+      "contentHash": "157c456de4f7011fd46779f3af057534",
       "sourceName": "contracts/libraries/financial.sol",
       "solcConfig": {
         "version": "0.8.24",
@@ -267,8 +267,8 @@
       ]
     },
     "C:\\Users\\Frederic\\XMM_SC\\contracts\\libraries\\utils.sol": {
-      "lastModificationDate": 1720858179733,
-      "contentHash": "a83b8bae6cee611f01eab6c2d497d9d1",
+      "lastModificationDate": 1720863516757,
+      "contentHash": "d00db3f1750e451317579492de9d3231",
       "sourceName": "contracts/libraries/utils.sol",
       "solcConfig": {
         "version": "0.8.24",
@@ -307,8 +307,8 @@
       ]
     },
     "C:\\Users\\Frederic\\XMM_SC\\contracts\\structures\\fixing.sol": {
-      "lastModificationDate": 1720449910764,
-      "contentHash": "c8abe841774fb2ff7bfdd1e30c85492b",
+      "lastModificationDate": 1720862402219,
+      "contentHash": "2b09ca3aca3b6177b4bcf35eb4e61eb1",
       "sourceName": "contracts/structures/fixing.sol",
       "solcConfig": {
         "version": "0.8.24",
@@ -412,8 +412,8 @@
       "artifacts": []
     },
     "C:\\Users\\Frederic\\XMM_SC\\contracts\\manager.sol": {
-      "lastModificationDate": 1720854735935,
-      "contentHash": "9085e966c01090d3fa5f4f330610d081",
+      "lastModificationDate": 1720867681004,
+      "contentHash": "b57cbed44bffdb0548849f1540ea507f",
       "sourceName": "contracts/manager.sol",
       "solcConfig": {
         "version": "0.8.24",
@@ -453,8 +453,8 @@
       ]
     },
     "C:\\Users\\Frederic\\XMM_SC\\contracts\\xmmpool.sol": {
-      "lastModificationDate": 1720858365704,
-      "contentHash": "c6aa70e32c4a3173f790c306d0726fe2",
+      "lastModificationDate": 1720868398306,
+      "contentHash": "943a6e921769cb810f388db72d875b35",
       "sourceName": "contracts/xmmpool.sol",
       "solcConfig": {
         "version": "0.8.24",
@@ -498,8 +498,8 @@
       ]
     },
     "C:\\Users\\Frederic\\XMM_SC\\contracts\\interfaces\\ixmmpool.sol": {
-      "lastModificationDate": 1720854664290,
-      "contentHash": "5a715ab35af2be76645aa477db543805",
+      "lastModificationDate": 1720862457609,
+      "contentHash": "c6f93ad2c9a608959447f952cf9b9f19",
       "sourceName": "contracts/interfaces/ixmmpool.sol",
       "solcConfig": {
         "version": "0.8.24",

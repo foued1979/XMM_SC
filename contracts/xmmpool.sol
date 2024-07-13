@@ -93,7 +93,8 @@ contract XMMPool is IXMMPool {
         MinDeposit = (uint128(minDeposit) * uint128(10 ** decimals)) / uint128(2 ** 32);
 
         (_fixingUpdateInterval, _expiryInterval, _expiryYearFraction) = Utils.getTermInformation(term);
-        StartDate = Utils.getTimeStamp(block.timestamp, _fixingUpdateInterval);
+        StartDate = Utils.getTimeStamp(block.timestamp, 0, _fixingUpdateInterval);
+
         _acrualYF = Math.div(int64(uint64(_fixingUpdateInterval) << 32), int64(uint64(_expiryInterval) << 32));
 
         _longRateIndex.push(Math.One_32);
@@ -177,7 +178,7 @@ contract XMMPool is IXMMPool {
             Position storage position = _positions[msg.sender][positionIndex];
             (LongShort ls, uint32 index, uint128 finalAmount, bool toDelete) = Utils.reducePosition(position, amount);
 
-            int64 proRata = Utils.getProRata(Utils.getTimeStamp(block.timestamp, _fixingUpdateInterval), position, _expiryInterval);
+            int64 proRata = Utils.getProRata(Utils.getTimeStamp(block.timestamp, StartDate, _fixingUpdateInterval), position, _expiryInterval);
             int64 rate = getRate(ls, proRata, position.index0);
 
             if (ls == LongShort.Long) {
@@ -210,10 +211,12 @@ contract XMMPool is IXMMPool {
     }
 
     /// @notice Sets the first fixing and activates the pool
-    function setFirstFixing(int64 spot, int64 strike, int64 volatility, int64 optionPremium) external onlyOwner {
+    function setFirstFixing(uint64 spot, uint64 strike, uint64 volatility, int64 optionPremium) external onlyOwner {
         if (Fixings.length > 0) return;
 
-        Fixing memory fixing = Fixing(Utils.getTimeStamp(block.timestamp, _fixingUpdateInterval), spot, strike, volatility, optionPremium);
+        uint firstTimestamp = Utils.getTimeStamp(block.timestamp, StartDate, Utils.ONE_HOUR_UPDATE_INTERVAL);
+        
+        Fixing memory fixing = Fixing(firstTimestamp, spot, strike, volatility, optionPremium);
 
         _lastFixingIndex = 0;
         Fixings.push(fixing);
@@ -222,15 +225,13 @@ contract XMMPool is IXMMPool {
     }
 
     /// @notice Sets the latest fixing for the XMM
-    function setFixing(int64 spot, int64 strike, int64 volatility, int64 optionPremium) external onlyOwner {
+    function setFixing(uint64 spot, uint64 strike, uint64 volatility, int64 optionPremium) external onlyOwner {
         Fixing storage lastFixing = Fixings[_lastFixingIndex];
-        uint nextFixingTimestamp = Utils.getTimeStamp(block.timestamp, _fixingUpdateInterval);
-
+        uint nextFixingTimestamp = Utils.getTimeStamp(block.timestamp, lastFixing.timestamp, _fixingUpdateInterval);
+        
         // Next fixing timestamp must be after the last fixing
-        if (nextFixingTimestamp <= lastFixing.timestamp) return;
-
+        if (nextFixingTimestamp < lastFixing.timestamp + _fixingUpdateInterval) return;
         Fixing memory fixing = Fixing(nextFixingTimestamp, spot, strike, volatility, optionPremium);
-
         executeMarginCalls(lastFixing.spot, lastFixing.timestamp, fixing);
         
         _lastFixingIndex += 1;
@@ -239,7 +240,7 @@ contract XMMPool is IXMMPool {
         else Fixings[_lastFixingIndex] = fixing;
     }
 
-    function executeMarginCalls(int64 prevSpot, uint prevFixingTimestamp, Fixing memory lastFixing) private {
+    function executeMarginCalls(uint64 prevSpot, uint prevFixingTimestamp, Fixing memory lastFixing) private {
         int64 d = int64(uint64((lastFixing.timestamp - prevFixingTimestamp) / _fixingUpdateInterval)) << 32;
         int64 premiumPerf = Math.mult(lastFixing.premium, Math.mult(d, _acrualYF));
 
@@ -247,7 +248,7 @@ contract XMMPool is IXMMPool {
         int64 shortRateFactor = 0;
         int64 adjustedRate = 0;
 
-        int64 spotPerf = Math.sub(lastFixing.spot, prevSpot);
+        int64 spotPerf = Math.subu(lastFixing.spot, prevSpot);
 
         if (spotPerf == 0 || premiumPerf <= 0) {
             longRateFactor = _longRateIndex[_longRateIndex.length - 1];

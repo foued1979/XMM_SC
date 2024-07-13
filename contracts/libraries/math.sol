@@ -48,6 +48,15 @@ library Math {
   /**
   * @notice Calculates x - y.
   */
+  function subu(uint64 x, uint64 y) internal pure returns (int64) {
+    unchecked {
+      int72 res = int72(int64(x)) - int64(y);
+      
+      require (res >= MIN_32x32 && res <= MAX_32x32);
+      return int64(res);
+    }
+  }
+
   function sub(int64 x, int64 y) internal pure returns (int64) {
     unchecked {
       int72 res = int72(x) - y;

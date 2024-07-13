@@ -106,7 +106,7 @@ describe('Test pool', function () {
         "volatilities": [ 1_868_310_774, 1_868_310_774, 1_868_310_774, 1_868_310_774, 1_868_310_774, 1_868_310_774, 1_868_310_774 ],
         "premia": [ 4_294_967_296, 4_294_967_296, 4_294_967_296, 4_294_967_296, 4_294_967_296, 4_294_967_296, 4_294_967_296 ]
       };
-
+      
       await manager.setFirstFixings('0xaaaaaaaaaa0000000000aaaaaaaaaa0000000000', firstFixings.spot, firstFixings.strikes, firstFixings.volatilities, firstFixings.premia);
 
       const strikes = [ 179_529_632_972_800, 179_529_632_972_800, 179_529_632_972_800, 179_529_632_972_800, 179_529_632_972_800, 179_529_632_972_800, 179_529_632_972_800 ];
@@ -116,14 +116,22 @@ describe('Test pool', function () {
       await time.increase(3601);
       await manager.setFixings('0xaaaaaaaaaa0000000000aaaaaaaaaa0000000000',  181_462_368_256_000, strikes, vols, premia);
       
-      await time.increase(3600);
+      await time.increase(3601);
       await manager.setFixings('0xaaaaaaaaaa0000000000aaaaaaaaaa0000000000',  181_422_368_256_000, strikes, vols, premia);
+
+      await time.increase(3601);
+      await manager.setFixings('0xaaaaaaaaaa0000000000aaaaaaaaaa0000000000',  181_402_368_256_000, strikes, vols, premia);
+
+      await time.increase(3601);
+      await manager.setFixings('0xaaaaaaaaaa0000000000aaaaaaaaaa0000000000',  180_802_368_256_000, strikes, vols, premia);
 
       const fixingsPool1 = await xmmPool1.getFixings();
       const fixingsPool2 = await xmmPool2.getFixings();
 
-      expect(fixingsPool1.length).to.equal(3);
-      expect(fixingsPool2.length).to.equal(2);
+      //console.log(fixingsPool2);
+
+      expect(fixingsPool1.length).to.equal(5);
+      expect(fixingsPool2.length).to.equal(3);
 
       expect(fixingsPool1[1].spot).to.equal(181_462_368_256_000);
       expect(fixingsPool2[1].spot).to.equal(181_422_368_256_000);

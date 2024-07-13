@@ -25,7 +25,7 @@ library Utils {
     int64 private constant TWO_MONTHS_YF = 706_022_021; // 60 days
     int64 private constant THREE_MONTHS_YF = 1_059_033_032; // 90 days
 
-    uint private constant ONE_HOUR_UPDATE_INTERVAL = 3_600;
+    uint internal constant ONE_HOUR_UPDATE_INTERVAL = 3_600;
     uint private constant TWO_HOURS_UPDATE_INTERVAL = 7_200;
     uint private constant FOUR_HOURS_UPDATE_INTERVAL = 14_400;
 
@@ -58,8 +58,8 @@ library Utils {
     }
 
     /// @notice Gets the start date of an XMM
-    function getTimeStamp(uint blockTimestamp, uint updateInterval) internal pure returns(uint) {
-        return uint(blockTimestamp / updateInterval) * updateInterval;
+    function getTimeStamp(uint blockTimestamp, uint startDate, uint updateInterval) internal pure returns(uint) {
+        return startDate + uint((blockTimestamp - startDate) / updateInterval) * updateInterval;
     }
 
     /// @notice Gets the fixing index corresponding to the block timestamp
