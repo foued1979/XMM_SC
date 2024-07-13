@@ -187,7 +187,7 @@ contract XMMPool is IXMMPool {
             if (toDelete) Utils.removePositionFromArray(index, _positions[msg.sender]);
 
             finalAmount = uint128(int128(((int256(int128(finalAmount)) << 32) * rate) >> 32));
-            (bool success, bytes memory res) = Token.delegatecall(abi.encodeWithSelector(IERC20.transfer.selector, msg.sender, finalAmount));
+            (bool success, ) = Token.delegatecall(abi.encodeWithSelector(IERC20.transfer.selector, msg.sender, finalAmount));
 
             if (success) emit PositionReduced(msg.sender, block.timestamp, finalAmount);
         }
