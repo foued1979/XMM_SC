@@ -1,15 +1,20 @@
 // SPDX-License-Identifier: MIT
 pragma solidity >= 0.8.0;
 
-interface ITradable {
+interface IExchangeable {
     event Deposited(uint indexed timestamp, address indexed from, uint256 amountETH, uint256 amountToken);
-    event ChangedBack(uint indexed timestamp, address indexed beneficiary, uint256 amountETH, uint256 amountTokens);
+    /// @notice The Allocated event is triggered when Owner allocates some token to
+    /// a beneficiary
+    event Allocated(uint indexed timestamp, address indexed beneficiary, uint256 amount);
+    event ChangedBack(uint indexed timestamp, address indexed beneficiary, uint256 amountTokens);
+    event ChangedBackFor(uint indexed timestamp, address indexed beneficiary, address tokenReceived, uint256 amount);
+    event Withdrawn(uint indexed timestamp, address indexed from, uint256 amount);    
 
     /// @notice Sets the change authorization status
-    function setChangeAuthorization(bool status) external;
+    function setETHChangeAuthorization(bool status) external;
 
     /// @notice Updates the exchange rate between ETH and the Token
-    function updateExchangeRate(uint64 exchangeRate) external;
+    function updateETHExchangeRate(uint64 exchangeRate) external;
 
     /// @notice Returns the quantity of ETH available for change against Token
     function getAvailableQuantityOfETH() external view returns(uint256);

@@ -25,16 +25,17 @@ library Utils {
     int64 private constant TWO_MONTHS_YF = 706_022_021; // 60 days
     int64 private constant THREE_MONTHS_YF = 1_059_033_032; // 90 days
 
+    uint private constant THIRTY_MINUTES_UPDATE_INTERVAL = 1_800;
     uint internal constant ONE_HOUR_UPDATE_INTERVAL = 3_600;
     uint private constant TWO_HOURS_UPDATE_INTERVAL = 7_200;
     uint private constant FOUR_HOURS_UPDATE_INTERVAL = 14_400;
 
     /// @notice Computes option expiry as a year fraction
     function getTermInformation(Terms term) internal pure returns(uint updateInterval, uint expiryInterval, int64 expiryYF) {
-        if (term == Terms.OneDay) return (ONE_HOUR_UPDATE_INTERVAL, ONE_DAY_TIMESTAMP_INTERVAL, ONE_DAY_YF);
-        if (term == Terms.OneWeek) return (TWO_HOURS_UPDATE_INTERVAL, ONE_WEEK_TIMESTAMP_INTERVAL, ONE_WEEK_YF);
+        if (term == Terms.OneDay) return (THIRTY_MINUTES_UPDATE_INTERVAL, ONE_DAY_TIMESTAMP_INTERVAL, ONE_DAY_YF);
+        if (term == Terms.OneWeek) return (ONE_HOUR_UPDATE_INTERVAL, ONE_WEEK_TIMESTAMP_INTERVAL, ONE_WEEK_YF);
         if (term == Terms.TwoWeeks) return (TWO_HOURS_UPDATE_INTERVAL, TWO_WEEKS_TIMESTAMP_INTERVAL, TWO_WEEKS_YF);
-        if (term == Terms.ThreeWeeks) return (FOUR_HOURS_UPDATE_INTERVAL, THREE_WEEKS_TIMESTAMP_INTERVAL, THREE_WEEKS_YF);
+        if (term == Terms.ThreeWeeks) return (TWO_HOURS_UPDATE_INTERVAL, THREE_WEEKS_TIMESTAMP_INTERVAL, THREE_WEEKS_YF);
         if (term == Terms.OneMonth) return (FOUR_HOURS_UPDATE_INTERVAL, ONE_MONTH_TIMESTAMP_INTERVAL, ONE_MONTH_YF);
         if (term == Terms.TwoMonths) return (FOUR_HOURS_UPDATE_INTERVAL, TWO_MONTHS_TIMESTAMP_INTERVAL, TWO_MONTHS_YF);
 

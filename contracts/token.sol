@@ -2,20 +2,25 @@
 pragma solidity >= 0.8.0;
 
 import "./base/erc20.sol";
-import "./interfaces/itradable.sol";
+import "./interfaces/iexchangeable.sol";
 import "./libraries/safemath.sol";
 
-contract Token is ERC20, ITradable {
-    /// @notice The Allocated event is triggered when Owner allocates some token to
-    /// a beneficiary
-    event Allocated(uint indexed timestamp, address indexed beneficiary, uint256 amount);
-    event Withdrawn(uint indexed timestamp, address indexed from, uint256 amount);
-
+contract Token is ERC20, IExchangeable {
     /*************
      * Modifiers *
      *************/
     modifier isAllowed {
         require(ChangeIsAllowed, "Not allowed");
+        _;
+    }
+
+    modifier isAllowedForToken(address token) {
+        require(_tokenIsApproved[token] && _changeIsAllowed[token], "Not allozed");
+        _;
+    }
+
+    modifier tokenIsApproved(address token) {
+        require(_tokenIsApproved[token], "Not approved");
         _;
     }
 
@@ -25,12 +30,18 @@ contract Token is ERC20, ITradable {
      // Public Properties
     string public Name;
 
-    // Public properties linked to ITradable
+    // Public properties linked to IExchangeable
     bool public ChangeIsAllowed;
 
     // The exchange rate represents a real number with 4 digits precision
     uint64 public ExchangeRate;
     uint16 private _precision = 10_000;
+
+    // Parameters to manage other token exchanges
+    mapping(address => bool) _tokenIsApproved;
+    mapping(address => uint64) _exchangeRates;
+    mapping(address => bool) _changeIsAllowed;
+    address[] ApprovedTokens;
 
     // Private Fields
     uint256 public AllocatedAmount;
@@ -69,20 +80,55 @@ contract Token is ERC20, ITradable {
         emit Allocated(block.timestamp, to, amount);
     }
 
-    /// @notice Sets the change authorization status
-    function setChangeAuthorization(bool status) external onlyOwner {
+    /// @notice Sets the change authorization status for ETH
+    function setETHChangeAuthorization(bool status) external onlyOwner {
         ChangeIsAllowed = status;
     }
 
+    /// @notice Sets the change authorization status for a token
+    function setChangeAuthorization(address tokenToBeReceived, bool status) external onlyOwner tokenIsApproved(tokenToBeReceived) {
+        changeIsAllowed[tokenToBeReceived] = status;
+    }
+
     /// @notice Updates the exchange rate between ETH and the Token
-    function updateExchangeRate(uint64 exchangeRate) external onlyOwner {
+    function updateETHExchangeRate(uint64 exchangeRate) external onlyOwner {
         ExchangeRate = exchangeRate;
         ChangeIsAllowed = true;
+    }
+
+    /// @notice Updates the exchange rate between a token and our Token
+    /// @param  tokenToBeReceived The token to be received in exchange of our Token
+    /// @param  exchangeRate The exchange rate
+    function updateExchangeRate(address tokenToBeReceived, uint64 exchangeRate) external onlyOwner tokenIsApproved(tokenToBeReceived) {
+        _exchangeRates[tokenToBeReceived] = exchangeRate;
+        _changeIsAllowed[tokenToBeReceived] = true;
     }
     
     /// @notice Returns the quantity of ETH available for change against Token
     function getAvailableQuantityOfETH() external view returns(uint256) {
         return address(this).balance;
+    }
+
+    /// @notice Returns the latest exchange rate associated to the token to be received
+    /// @return Whether the exchange is authorized and the latest exchange rate
+    function getExchangeRate(address tokenToBeReceived) external view tokenIsApproved(token) returns(bool, uint64) {
+        return (_changeIsAllowed[token], _exchangeRates[token]);
+    }
+
+    /// @notice Returns the available quantity of a token to be exchanged against our Token
+    function getAvailableQuantityOfToken(address tokenToBeReceived) external view returns(uint256) {
+        (bool success , bytes memory res) tokenToBeReceived.call(abi.encodeWithSelector(IERC20.balanceOf.selector, address(this)));
+
+        require(success, "Comm error");
+        return abi.decode(res, (uint256));
+    }
+
+    /// @notice Adds a token which can be traded against our Token
+    function addApprovedToken(address token) external onlyOwner {
+        if (_tokenIsApproved[token]) return;
+        _tokenIsApproved[token] = true;
+        _changeIsAllowed[token] = false;
+        ApprovedTokens.push(token);
     }
 
     /// @notice Enables a user to deposit ETH and receive Tokens in exchange
@@ -131,7 +177,31 @@ contract Token is ERC20, ITradable {
         AllocatedAmount = SafeMath.SafeSub(AllocatedAmount, uint256(amountToken));
         _balances[msg.sender] = SafeMath.SafeSub(_balances[msg.sender], uint256(amountToken));
 
-        emit ChangedBack(block.timestamp, msg.sender, amountETH, amountToken);
+        emit ChangedBack(block.timestamp, msg.sender, amountETH);
+        emit Withdrawn(block.timestamp, msg.sender, amountToken);
+    }
+
+    /// @notice Enables a user to sell back an amount of Tokens against a preferred token
+    /// if there is enough token available, and if the change is authorized
+    /// @param amountToken The amount of tokens to be exchanged
+    /// @param tokenToBeReceived The address of the token to be exchanged for
+    function sellBackAgainst(uint128 amountToken, address tokenToBeReceived) external isAllowedForToken(tokenToBeReceived) {
+        require(_balances[msg.sender] >= amountToken, "Insufficient balance");
+
+        uint256 amountExpectedToken = (uint256(amountToken) * uint256(_precision)) / uint256(_exchangeRates[tokenToBeReceived]);
+        uint256 availableQuantity = this.getAvailableQuantityOfToken(tokenToBeReceived);
+
+        if (amountExpectedToken > availableQuantity) {
+            amountExpectedToken = availableQuantity;
+            amountToken = uint128((amountExpectedToken * uint256(_exchangeRates[tokenToBeReceived])) / uint256(_precision));
+        }
+        
+        IERC20(tokenToBeReceived).transfer(msg.sender, amountExpectedToken);
+        
+        AllocatedAmount = SafeMath.SafeSub(AllocatedAmount, uint256(amountToken));
+        _balances[msg.sender] = SafeMath.SafeSub(_balances[msg.sender], uint256(amountToken));
+
+        emit ChangedBackFor(block.timestamp, msg.sender, tokenToBeReceived, amountExpectedToken);
         emit Withdrawn(block.timestamp, msg.sender, amountToken);
     }
 
