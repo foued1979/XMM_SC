@@ -1,19 +1,20 @@
 // SPDX-License-Identifier: MIT
 pragma solidity >= 0.8.0;
 
-import "./interfaces/ierc20.sol";
-import "./interfaces/ixmmpool.sol";
-import "./libraries/math.sol";
-import "./libraries/safemath.sol";
-import "./libraries/utils.sol";
-import "./structures/fixing.sol";
-import "./structures/position.sol";
-import "./enums.sol";
+import "../interfaces/ierc20.sol";
+import "../interfaces/ixmmpool.sol";
+import "../libraries/math.sol";
+import "../libraries/safemath.sol";
+import "../libraries/utils.sol";
+import "../structures/fixing.sol";
+import "../structures/position.sol";
+import "../enums.sol";
 
-contract XMMPool is IXMMPool {
+abstract contract XMMPool is IXMMPool {
     /**********
      * Events *
      **********/
+     event OwnerChanged(uint indexed timestamp, address prevOwner, address newOwner);
      event Deposit(address indexed from, uint indexed timestamp, Position position);
      event PositionReduced(address indexed from, uint indexed timestamp, uint128 amount);
 
@@ -50,6 +51,8 @@ contract XMMPool is IXMMPool {
     int64 private _expiryYearFraction;
     int64 private _acrualYF;
 
+    uint[] private _missedFixingsIndices;
+
     // The positions by depositors
     mapping(address => Position[]) internal _positions;
 
@@ -59,9 +62,6 @@ contract XMMPool is IXMMPool {
 
     /// @notice The Term of the XMM
     Terms public Term;
-
-    /// @notice The token which managed by the XMM
-    address public Token;
 
     /// @notice The minimum deposit size
     uint128 public MinDeposit;
@@ -84,9 +84,8 @@ contract XMMPool is IXMMPool {
     /*************
      * Functions *
      *************/
-    constructor(address token, uint8 decimals, Terms term, uint64 minDeposit) {
-        Owner = msg.sender;
-        Token = token;
+    constructor(address owner, uint8 decimals, Terms term, uint64 minDeposit) {
+        Owner = owner;
         _decimals = decimals;
         Term = term;
         MinDeposit = (uint128(minDeposit) * uint128(10 ** decimals)) / uint128(2 ** 32);
@@ -110,81 +109,42 @@ contract XMMPool is IXMMPool {
     }
 
     /// @notice Gets the fixings
-    function getFixings() external view returns(Fixing[] memory) {
-        if (msg.sender == Owner) {
-            return Fixings;
-        }
+    function getFixings() external view onlyOwner returns(Fixing[] memory) {
+        return Fixings;
+    }
 
-        Fixing[50] memory res;
-        var lastFixingIndex = Fixings.length - 1;
-        uint startIndex = lastFixingIndex - 49;
-        for (uint i = startIndex; i <= lastFixingIndex; i++) res[i - startIndex] = Fixings[i];
+    /// @notice Gets the fixings `from` index `to` index
+    function getFixingsFromTo(uint from, uint to) external view onlyOwner returns(Fixing[] memory) {
+        if (to + 1 > Fixings.length) to = Fixings.length - 1;
 
+        Fixing[] memory res = new Fixing[](to - from + 1);
+        for (uint i = from; i <= to; i++) res[i - from] = Fixings[i];
         return res;
     }
 
-    /// @notice Changes the ownership of the contract
-    function changeOwnership(address newOwner) external {
-        if (msg.sender == Owner) Owner = newOwner;
+    /// @notice Returns the indices of the missed fixings, if ever.
+    ///         If there is no missed fixings, the array is empty
+    function getMissedFixings() external view returns(uint[] memory) {
+        return _missedFixingsIndices;
     }
 
-    /// @notice Executes a deposit to the XMM from msg.sender
-    /// @param longShort 0 if long 1 if short
-    /// @param amount The amount to be deposited
-    function deposit(LongShort longShort, uint128 amount) external isActive hasMinDeposit(amount) {
-        (bool success, bytes memory res) = Token.call(abi.encodeWithSelector(IERC20.balanceOf.selector, msg.sender));
-        require(success, "Call err");
-
-        uint256 balance = abi.decode(res, (uint256));
-        require(balance >= amount, "Insufficient balance");
-
-        (success, res) = Token.call(abi.encodeWithSelector(IERC20.allowance.selector, msg.sender, address(this)));
-
-        if (success) {
-            uint256 allowance = abi.decode(res, (uint256));
-
-            require(allowance >= amount, "Insufficient allowance");
-
-            (success, res) = Token.call(abi.encodeWithSelector(IERC20.transferFrom.selector, msg.sender, address(this), uint256(amount)));
-
-            if (success && abi.decode(res, (bool))) {
-                uint lastFixingIndex = Fixings.length;
-                uint32 positionIndex = uint32(_positions[msg.sender].length);
-                uint timestamp = Fixings[lastFixingIndex].timestamp;
-
-                // If position is opened after mid update interval, the next fixing is used
-                if (block.timestamp > timestamp + _midFixingInterval) {
-                    timestamp += _fixingUpdateInterval;
-                    lastFixingIndex++;
-                }
-
-                Position memory position = Position(positionIndex, longShort, lastFixingIndex, timestamp, timestamp + _expiryInterval, amount);
-                _positions[msg.sender].push(position);
-                
-                if (longShort == LongShort.Long) {
-                    TotalLongPositions = SafeMath.SafeAdd128(TotalLongPositions, amount);
-                } else {
-                    TotalShortPositions = SafeMath.SafeAdd128(TotalShortPositions, amount);
-                }
-
-                getRatios();
-
-                emit Deposit(msg.sender, block.timestamp, position);
-            }
-        }
+    /// @notice Changes the ownership of the contract
+    function changeOwnership(address newOwner) external onlyOwner {
+        Owner = newOwner;
+        emit OwnerChanged(block.timestamp, msg.sender, newOwner);
     }
 
     /// @notice Closes all the positions held by a user.
     function closeAllPositions() external {
         if (_positions[msg.sender].length > 0) {
-            for (uint32 i = 0; i < _positions[msg.sender].length; i++) this.closePosition(i);
+            for (uint32 i = 0; i < _positions[msg.sender].length; i++) closePosition(i);
         }
     }
 
     /// @notice Closes a position
-    function closePosition(uint32 positionIndex) external {
+    function closePosition(uint32 positionIndex) public {
         if (_positions[msg.sender].length > positionIndex) {
-            this.reducePosition(positionIndex, _positions[msg.sender][positionIndex].amount);
+            reducePosition(positionIndex, _positions[msg.sender][positionIndex].amount);
         }
     }
 
@@ -192,33 +152,7 @@ contract XMMPool is IXMMPool {
     /// @param positionIndex The index of the position
     /// @param amount The reduction amount. If amount is bigger than position amount, the position is closed.
     // A position that is closed leads to re-organization of existing positions.
-    function reducePosition(uint32 positionIndex, uint128 amount) external {
-        if (_positions[msg.sender].length > positionIndex) {
-            Position storage position = _positions[msg.sender][positionIndex];
-            if (position.startDate > block.timestamp) Penalty
-            else if (block.timestamp < position.expiry) Another Penalty
-
-            (LongShort ls, uint32 index, uint128 finalAmount, bool toDelete) = Utils.reducePosition(position, amount);
-
-            int64 proRata = Utils.getProRata(Utils.getTimeStamp(block.timestamp, StartDate, _fixingUpdateInterval), position, _expiryInterval);
-            int64 rate = getRate(ls, proRata, position.index0);
-
-            if (ls == LongShort.Long) {
-                TotalLongPositions = SafeMath.SafeSub128(TotalLongPositions, finalAmount);
-            } else {
-                TotalShortPositions = SafeMath.SafeSub128(TotalShortPositions, finalAmount);
-            }
-
-            getRatios();
-
-            if (toDelete) Utils.removePositionFromArray(index, _positions[msg.sender]);
-
-            finalAmount = uint128(int128(((int256(int128(finalAmount)) << 32) * rate) >> 32));
-            (bool success, ) = Token.call(abi.encodeWithSelector(IERC20.transfer.selector, msg.sender, finalAmount));
-
-            if (success) emit PositionReduced(msg.sender, block.timestamp, finalAmount);
-        }
-    }
+    function reducePosition(uint32 positionIndex, uint128 amount) public virtual;
 
     /// @notice Returns the positions held by a user
     function getPositions() external view returns(Position[] memory) {
@@ -237,7 +171,9 @@ contract XMMPool is IXMMPool {
         if (Fixings.length > 0) return;
 
         uint firstTimestamp = Utils.getTimeStamp(block.timestamp, StartDate, Utils.ONE_HOUR_UPDATE_INTERVAL);
-        require(block.timestamp - firstTimestamp > 0 && (block.timestamp - firstTimestamp) < 900, "Not sync");
+        
+        // We can update only from 5 minutes before the first fixing time
+        require(block.timestamp > firstTimestamp || firstTimestamp - block.timestamp <= 300, "Not sync");
         
         Fixing memory fixing = Fixing(firstTimestamp, spot, strike, volatility, optionPremium);
         Fixings.push(fixing);
@@ -249,22 +185,88 @@ contract XMMPool is IXMMPool {
     function setFixing(uint64 spot, uint64 strike, uint64 volatility, int64 optionPremium) external onlyOwner {
         Fixing storage lastFixing = Fixings[Fixings.length - 1];
         uint nextFixingTimestamp = Utils.getTimeStamp(block.timestamp, lastFixing.timestamp, _fixingUpdateInterval);
-
-        // If the update is slightly before the fixing time, we accept it as the next fixing
-        // This functionality is implemented to enable cases where significant number of fixings have to be pushed:
-        // -> in such a case, we may start to compute fixings slightly before exact update interval timestamp
-        if (block.timestamp > nextFixingTimestamp) {
-            require(nextFixingTimestamp + _fixingUpdateInterval - block.timestamp <= 300, "Not sync");
-            nextFixingTimestamp += _fixingUpdateInterval;
-        }
         
-        // Next fixing timestamp must be after the last fixing
-        require (nextFixingTimestamp >= lastFixing.timestamp + _fixingUpdateInterval);
+        if (block.timestamp > nextFixingTimestamp) {
+            if (nextFixingTimestamp == lastFixing.timestamp ) {
+                // If the update is 5 minutes (or less) before the next fixing time, we accept it as the next fixing
+                // This functionality is implemented to enable cases where significant number of fixings have to be pushed:
+                // -> in such a case, we may start to compute fixings slightly before exact update interval timestamp
+                if (nextFixingTimestamp + _fixingUpdateInterval - block.timestamp <= 300) {
+                    nextFixingTimestamp += _fixingUpdateInterval;
+                } else return;
+            }
+            // However, if at least one fixings has been missed (e.g. due to a technical error), we fill in missing fixings
+            // with last know spot value, and we will update the missing fixings later.
+            else if (nextFixingTimestamp > lastFixing.timestamp + 2 * _fixingUpdateInterval - 300) {
+                nextFixingTimestamp = addTemporaryMissingFixings(Fixings.length - 1, lastFixing.spot, lastFixing.timestamp, nextFixingTimestamp);
+            }
+        }
 
         Fixing memory fixing = Fixing(nextFixingTimestamp, spot, strike, volatility, optionPremium);
         executeMarginCalls(lastFixing.spot, lastFixing.timestamp, fixing);
         
         Fixings.push(fixing);
+    }
+
+    /// @notice In case a fixing update has been missed, owner can update the missed past fixings
+    ///         To avoid multiple updates or wrong fixing updates, only the missed fixing index can be updated 1 time
+    function updateMissedFixing(uint missedFixingIndex, uint64 spot, uint64 strike, uint64 volatility, int64 optionPremium) external onlyOwner {
+        for (uint i = 0; i < _missedFixingsIndices.length; i++) {
+            if (_missedFixingsIndices[i] == missedFixingIndex) {
+                Fixing storage prevFixing = Fixings[missedFixingIndex - 1];
+                Fixing storage fixing = Fixings[missedFixingIndex];
+
+                fixing.spot = spot;
+                fixing.strike = strike;
+                fixing.volatility = volatility;
+                fixing.premium = optionPremium;
+
+                // We compute the new interest factor for both long and short side
+                // The updateIndex method also proceeds to margin call
+                (int64 longRateFactor, int64 shortRateFactor) = updateIndex(prevFixing.timestamp, fixing.timestamp, prevFixing.spot, fixing.spot, optionPremium);
+
+                // We update all the indices from missedFixingIndex to the last fixing index
+                // The update factors are longRateFactor for the long side and shortRateFactor for the short side
+                for (uint j = missedFixingIndex; j < Fixings.length; j++)
+                {
+                    _longRateIndex[j] = Math.mult(_longRateIndex[j - 1], longRateFactor);
+                    _shortRateIndex[j] = Math.mult(_shortRateIndex[j - 1], shortRateFactor);
+                }
+
+                _missedFixingsIndices[i] = _missedFixingsIndices[_missedFixingsIndices.length - 1];
+                _missedFixingsIndices.pop();
+                return;
+            }
+        }
+    }
+
+    function addTemporaryMissingFixings(uint lastFixingIndex, uint64 lastSpot, uint lastFixingTimestamp,  uint nextFixingTimestamp) private returns(uint256) {
+        uint numberOfMissedFixings = uint((nextFixingTimestamp - lastFixingTimestamp) / _fixingUpdateInterval) - 1;
+
+        // If update time is less than 5 minutes from next fixing time, we add 1 more missing fixing
+        // Latest premium will be updated for the next fixing 
+        if (nextFixingTimestamp + _fixingUpdateInterval - block.timestamp <= 300) numberOfMissedFixings++;
+
+        for (uint i = 0; i < numberOfMissedFixings; i++) {
+            lastFixingTimestamp += _fixingUpdateInterval;
+
+            Fixing memory fixing = Fixing(lastFixingTimestamp, lastSpot, 0, 0, 0);
+
+            // No margin call will be executed since spot perf is 0
+            int64 longRateFactor = _longRateIndex[_longRateIndex.length - 1];
+            int64 shortRateFactor = _shortRateIndex[_shortRateIndex.length - 1];
+
+            _longRateIndex.push(longRateFactor);
+            _shortRateIndex.push(shortRateFactor);
+
+            Fixings.push(fixing);
+            lastFixingIndex++;
+            _missedFixingsIndices.push(lastFixingIndex);
+        }
+
+        lastFixingTimestamp += _fixingUpdateInterval;
+
+        return lastFixingTimestamp;
     }
 
     function executeMarginCalls(uint64 prevSpot, uint prevFixingTimestamp, Fixing memory lastFixing) private {
@@ -303,6 +305,35 @@ contract XMMPool is IXMMPool {
 
         _longRateIndex.push(longRateFactor);
         _shortRateIndex.push(shortRateFactor);
+    }
+
+    function updateIndex(uint periodStart, uint periodEnd, uint64 spotAtPeriodStart, uint64 spotAtPeriodEnd, int64 premiumAtPeriodEnd) private returns(int64, int64) {
+        int64 d = int64(uint64((periodEnd - periodStart) / _fixingUpdateInterval)) << 32;
+        int64 premiumPerf = Math.mult(premiumAtPeriodEnd, Math.mult(d, _acrualYF));
+
+        int64 longRateFactor = 0;
+        int64 shortRateFactor = 0;
+        int64 adjustedRate = 0;
+
+        int64 spotPerf = Math.subu(spotAtPeriodEnd, spotAtPeriodStart);
+
+        if (spotPerf == 0 || premiumPerf <= 0) return (Math.One_32, Math.One_32);
+
+        // If spot went up, the Short positions pay the Long positions
+        if (spotPerf > 0) {
+            adjustedRate = Math.mult(_longRatio, premiumPerf);
+            longRateFactor = Math.add(Math.One_32, adjustedRate);
+            shortRateFactor = Math.sub(Math.One_32, adjustedRate);
+            transferShortToLong(uint64(adjustedRate));
+        // Else, Long positions pay Short positions
+        } else {
+            adjustedRate = Math.mult(_shortRatio, premiumPerf);
+            longRateFactor = Math.sub(Math.One_32, adjustedRate);
+            shortRateFactor = Math.add(Math.One_32, adjustedRate);
+            transferLongToShort(uint64(adjustedRate));
+        }
+
+        return (longRateFactor, shortRateFactor);
     }
 
     function transferShortToLong(uint64 netPerf) private {

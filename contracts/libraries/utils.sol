@@ -25,6 +25,7 @@ library Utils {
     int64 private constant TWO_MONTHS_YF = 706_022_021; // 60 days
     int64 private constant THREE_MONTHS_YF = 1_059_033_032; // 90 days
 
+    uint private constant FIFTEEN_MINUTES_UPDATE_INTERVAL = 900;
     uint private constant THIRTY_MINUTES_UPDATE_INTERVAL = 1_800;
     uint internal constant ONE_HOUR_UPDATE_INTERVAL = 3_600;
     uint private constant TWO_HOURS_UPDATE_INTERVAL = 7_200;

@@ -111,13 +111,13 @@ contract Token is ERC20, IExchangeable {
 
     /// @notice Returns the latest exchange rate associated to the token to be received
     /// @return Whether the exchange is authorized and the latest exchange rate
-    function getExchangeRate(address tokenToBeReceived) external view tokenIsApproved(token) returns(bool, uint64) {
-        return (_changeIsAllowed[token], _exchangeRates[token]);
+    function getExchangeRate(address tokenToBeReceived) external view tokenIsApproved(tokenToBeReceived) returns(bool, uint64) {
+        return (_changeIsAllowed[tokenToBeReceived], _exchangeRates[tokenToBeReceived]);
     }
 
     /// @notice Returns the available quantity of a token to be exchanged against our Token
     function getAvailableQuantityOfToken(address tokenToBeReceived) external view returns(uint256) {
-        (bool success , bytes memory res) tokenToBeReceived.call(abi.encodeWithSelector(IERC20.balanceOf.selector, address(this)));
+        (bool success , bytes memory res) = tokenToBeReceived.call(abi.encodeWithSelector(IERC20.balanceOf.selector, address(this)));
 
         require(success, "Comm error");
         return abi.decode(res, (uint256));
