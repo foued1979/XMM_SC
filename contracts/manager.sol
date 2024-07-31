@@ -2,6 +2,7 @@
 pragma solidity >= 0.8.0;
 
 import "./interfaces/ixmmpool.sol";
+import "./interfaces/ikyc.sol";
 import "./libraries/utils.sol";
 import "./enums.sol";
 import "./pools/coinpool.sol";
@@ -53,6 +54,21 @@ contract Manager {
 
     function getRegisteredTokens() external view returns(address[] memory) {
         return _registeredTokens;
+    }
+
+    /// @notice Sets the KYC status for a user on all KYC pools
+    function setUserKYCStatus(address user, bool isKYC) external onlyOwner {
+        for (uint i = 0; i < 7; i++) {
+            IKYC(_listOfETHKYCPools[i]).updateKYCUserStatus(user, status);
+        }
+
+        for (uint i = 0; i < _registeredTokensKYC.length; i++) {
+            address[7] storage kycPools = _listOfCoinKYCPools[_registeredTokensKYC[i]];
+
+            for (uint j = 0; j < 7; j++) {
+                IKYC(kycPools[j]).updateKYCUserStatus(user, status);
+            }
+        }
     }
 
     /// @notice Creates a new KYC XMM pool
