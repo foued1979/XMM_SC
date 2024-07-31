@@ -4,7 +4,7 @@ pragma solidity >= 0.8.0;
 import "../base/xmmpool.sol";
 import "../enums.sol";
 
-contract KYCETHPool is XMMPool {
+contract ETHKYCPool is XMMPool {
     modifier isKYCed() {
         require(_isKYCed[msg.sender], "no kyc");
         _;
