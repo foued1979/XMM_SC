@@ -87,7 +87,7 @@ contract Token is ERC20, IExchangeable {
 
     /// @notice Sets the change authorization status for a token
     function setChangeAuthorization(address tokenToBeReceived, bool status) external onlyOwner tokenIsApproved(tokenToBeReceived) {
-        changeIsAllowed[tokenToBeReceived] = status;
+        _changeIsAllowed[tokenToBeReceived] = status;
     }
 
     /// @notice Updates the exchange rate between ETH and the Token
@@ -116,7 +116,7 @@ contract Token is ERC20, IExchangeable {
     }
 
     /// @notice Returns the available quantity of a token to be exchanged against our Token
-    function getAvailableQuantityOfToken(address tokenToBeReceived) external view returns(uint256) {
+    function getAvailableQuantityOfToken(address tokenToBeReceived) external returns(uint256) {
         (bool success , bytes memory res) = tokenToBeReceived.call(abi.encodeWithSelector(IERC20.balanceOf.selector, address(this)));
 
         require(success, "Comm error");
@@ -226,7 +226,7 @@ contract Token is ERC20, IExchangeable {
         AllocatedAmount = SafeMath.SafeSub(AllocatedAmount, uint256(amountToken));
         _balances[from] = SafeMath.SafeSub(_balances[from], uint256(amountToken));
 
-        emit ChangedBack(block.timestamp, from, amountETH, amountToken);
+        emit ChangedBack(block.timestamp, from, amountETH);
         emit Withdrawn(block.timestamp, from, amountToken);
     }
 
