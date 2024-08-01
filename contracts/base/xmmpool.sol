@@ -293,14 +293,14 @@ abstract contract XMMPool is IXMMPool {
         if (spotPerf > 0) {
             adjustedRate = Math.mult(_longRatio, premiumPerf);
             longRateFactor = Math.mult(_longRateIndex[_longRateIndex.length - 1], Math.add(Math.One_32, adjustedRate));
-            shortRateFactor = Math.mult(_shortRateIndex[_shortRateIndex.length - 1], Math.sub(Math.One_32, adjustedRate));
-            transferShortToLong(uint64(adjustedRate));
+            shortRateFactor = Math.mult(_shortRateIndex[_shortRateIndex.length - 1], Math.sub(Math.One_32, premiumPerf));
+            transferShortToLong(uint64(premiumPerf));
         // Else, Long positions pay Short positions
         } else {
             adjustedRate = Math.mult(_shortRatio, premiumPerf);
-            longRateFactor = Math.mult(_longRateIndex[_longRateIndex.length - 1], Math.sub(Math.One_32, adjustedRate));
+            longRateFactor = Math.mult(_longRateIndex[_longRateIndex.length - 1], Math.sub(Math.One_32, premiumPerf));
             shortRateFactor = Math.mult(_shortRateIndex[_shortRateIndex.length - 1], Math.add(Math.One_32, adjustedRate));
-            transferLongToShort(uint64(adjustedRate));
+            transferLongToShort(uint64(premiumPerf));
         }
 
         _longRateIndex.push(longRateFactor);
@@ -323,14 +323,14 @@ abstract contract XMMPool is IXMMPool {
         if (spotPerf > 0) {
             adjustedRate = Math.mult(_longRatio, premiumPerf);
             longRateFactor = Math.add(Math.One_32, adjustedRate);
-            shortRateFactor = Math.sub(Math.One_32, adjustedRate);
-            transferShortToLong(uint64(adjustedRate));
+            shortRateFactor = Math.sub(Math.One_32, premiumPerf);
+            transferShortToLong(uint64(premiumPerf));
         // Else, Long positions pay Short positions
         } else {
             adjustedRate = Math.mult(_shortRatio, premiumPerf);
-            longRateFactor = Math.sub(Math.One_32, adjustedRate);
+            longRateFactor = Math.sub(Math.One_32, premiumPerf);
             shortRateFactor = Math.add(Math.One_32, adjustedRate);
-            transferLongToShort(uint64(adjustedRate));
+            transferLongToShort(uint64(premiumPerf));
         }
 
         return (longRateFactor, shortRateFactor);
