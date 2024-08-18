@@ -11,11 +11,6 @@ abstract contract Bridgeable {
         _;
     }
 
-    modifier sameChain(uint64 chainId) {
-        require(chainId == _chainId);
-        _;
-    }
-
     modifier notSameChain(uint64 chainId) {
         require(chainId != _chainId);
         _;
@@ -45,8 +40,8 @@ abstract contract Bridgeable {
     address[] internal pendingBridgesOut;
     address[] internal pendingBridgesIn;
 
-    constructor(address owner, uint64 chainId) {
-        _owner = owner;
+    constructor(uint64 chainId) {
+        _owner = msg.sender;
         _chainId = chainId;
     }
 

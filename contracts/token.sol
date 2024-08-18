@@ -47,8 +47,8 @@ contract Token is ERC20, Bridgeable, IExchangeable {
     // Private Fields
     uint256 public AllocatedAmount;
 
-    constructor(string memory symbol, string memory name, uint32 initialSupply, uint32 initialOwnerAllocation) 
-        ERC20(symbol, initialSupply, uint8(18)) payable {
+    constructor(string memory symbol, string memory name, uint64 chainId, uint32 initialSupply, uint32 initialOwnerAllocation) 
+        ERC20(symbol, initialSupply, uint8(18)) Bridgeable(chainId) payable {
         Name = name;
         AllocatedAmount = 0;
 
