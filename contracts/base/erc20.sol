@@ -52,8 +52,9 @@ contract ERC20 is IERC20 {
     /// @param amount The amount to be transferred
     // Throws Transfer event
     function transfer(address to, uint256 amount) external returns(bool) {
+        require (to != address(this), "Transfer err");
         if (_balances[msg.sender] < amount) return false;
-
+        
         uint256 newFromBalance = SafeMath.SafeSub(_balances[msg.sender], amount);
         uint256 newToBalance = SafeMath.SafeAdd(_balances[to], amount);
         

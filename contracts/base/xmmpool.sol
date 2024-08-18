@@ -66,6 +66,10 @@ abstract contract XMMPool is IXMMPool {
     /// @notice The minimum deposit size
     uint128 public MinDeposit;
 
+    /// @notice The daily fee charged on the position
+    // The fee is expressed in percent of a basis point
+    uint16 public Fee;
+
     /// @notice The list of fixings
     Fixing[] public Fixings;
 
@@ -84,11 +88,12 @@ abstract contract XMMPool is IXMMPool {
     /*************
      * Functions *
      *************/
-    constructor(address owner, uint8 decimals, Terms term, uint64 minDeposit) {
+    constructor(address owner, uint8 decimals, Terms term, uint16 fee, uint64 minDeposit) {
         Owner = owner;
         _decimals = decimals;
         Term = term;
-        MinDeposit = (uint128(minDeposit) * uint128(10 ** decimals)) / uint128(2 ** 32);
+        MinDeposit = uint128(minDeposit) * uint128(10 ** decimals);
+        Fee = fee;
 
         (_fixingUpdateInterval, _expiryInterval, _expiryYearFraction) = Utils.getTermInformation(term);
         _midFixingInterval = _fixingUpdateInterval / 2;
