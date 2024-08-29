@@ -24,7 +24,7 @@ contract Token is ERC20, Bridgeable, IExchangeable {
     }
 
     modifier isAllowedForToken(address token) {
-        require(_tokenIsApproved[token] && _changeIsAllowed[token], "Not allozed");
+        require(_tokenIsApproved[token] && _exchangeIsAllowed[token], "Not allowed");
         _;
     }
 
@@ -40,11 +40,10 @@ contract Token is ERC20, Bridgeable, IExchangeable {
     string public Name;
 
     // Public properties linked to IExchangeable
-    bool public ETHExchangeIsAllowed;
-
     // The exchange rate represents a real number with 4 digits precision
-    uint64 private _ethExchangeRate;
-    uint8 private _precision = 14;
+    bool public ETHExchangeIsAllowed;
+    uint64 public EthExchangeRate;
+    uint16 private _precision = 10_000;
 
     // Other public Properties
     address[] public ApprovedTokens;
@@ -53,15 +52,13 @@ contract Token is ERC20, Bridgeable, IExchangeable {
     // Parameters to manage other token exchanges
     mapping(address => bool) private _tokenIsApproved;
     mapping(address => uint64) private _exchangeRates;
-    mapping(address => bool) private _changeIsAllowed;
+    mapping(address => bool) private _exchangeIsAllowed;
 
     constructor(string memory symbol, string memory name, uint64 chainId, uint32 initialSupply, uint32 initialOwnerAllocation) 
         ERC20(symbol, initialSupply, uint8(18)) Bridgeable(chainId) payable {
+        require(initialSupply >= initialOwnerAllocation);
+
         Name = name;
-
-        AllocatedAmount = 0;
-        _ethExchangeRate = 0;
-
         allocateToOwner(uint256(initialOwnerAllocation) * uint256(10 ** 18));
     }
 
@@ -90,28 +87,28 @@ contract Token is ERC20, Bridgeable, IExchangeable {
         emit Burnt(block.timestamp, amount);
     }
 
-    /// @notice Sets the change authorization status for ETH
-    function setETHExchangeAuthorization(bool status) external onlyOwner {
-        ETHExchangeIsAllowed = status;
+    /// @notice Sets the change authorization status for ETH to false
+    function removeETHExchangeAuthorization() external onlyOwner {
+        ETHExchangeIsAllowed = false;
     }
 
-    /// @notice Sets the change authorization status for a token
-    function setChangeAuthorization(address tokenToBeReceived, bool status) external onlyOwner tokenIsApproved(tokenToBeReceived) {
-        _changeIsAllowed[tokenToBeReceived] = status;
+    /// @notice Sets the change authorization status for a token to false
+    function removeExchangeAuthorization(address tokenToBeReceived) external onlyOwner tokenIsApproved(tokenToBeReceived) {
+        _exchangeIsAllowed[tokenToBeReceived] = false;
     }
 
     /// @notice Updates the exchange rate between ETH and the Token
     function updateETHExchangeRate(uint64 exchangeRate) external onlyOwner {
-        _ethExchangeRate = exchangeRate;
+        EthExchangeRate = exchangeRate;
         ETHExchangeIsAllowed = true;
     }
 
     /// @notice Updates the exchange rate between a token and our Token
     /// @param  tokenToBeReceived The token to be received in exchange of our Token
-    /// @param  exchangeRate The exchange rate
+    /// @param  exchangeRate The exchange rate, with 4 digits precision
     function updateExchangeRate(address tokenToBeReceived, uint64 exchangeRate) external onlyOwner tokenIsApproved(tokenToBeReceived) {
         _exchangeRates[tokenToBeReceived] = exchangeRate;
-        _changeIsAllowed[tokenToBeReceived] = true;
+        _exchangeIsAllowed[tokenToBeReceived] = true;
     }
     
     /// @notice Returns the quantity of ETH available for change against Token
@@ -122,7 +119,7 @@ contract Token is ERC20, Bridgeable, IExchangeable {
     /// @notice Returns the latest exchange rate associated to the token to be received
     /// @return Whether the exchange is authorized and the latest exchange rate
     function getExchangeRate(address tokenToBeReceived) external view tokenIsApproved(tokenToBeReceived) returns(bool, uint64) {
-        return (_changeIsAllowed[tokenToBeReceived], _exchangeRates[tokenToBeReceived]);
+        return (_exchangeIsAllowed[tokenToBeReceived], _exchangeRates[tokenToBeReceived]);
     }
 
     /// @notice Returns the available quantity of a token to be exchanged against our Token
@@ -309,8 +306,6 @@ contract Token is ERC20, Bridgeable, IExchangeable {
     /// @param amount The amount
     function allocateToOwner(uint256 amount) private {
         uint256 newAllocation = SafeMath.SafeAdd(AllocatedAmount, amount);
-        require(newAllocation < TotalSupply, "Insufficient supply");
-
         _balances[Owner] = SafeMath.SafeAdd(_balances[Owner], amount);
         AllocatedAmount = newAllocation;
         emit Allocated(block.timestamp, Owner, amount);

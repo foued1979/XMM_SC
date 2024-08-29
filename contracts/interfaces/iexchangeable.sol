@@ -7,11 +7,11 @@ interface IExchangeable {
     event ChangedBackFor(uint indexed timestamp, address indexed beneficiary, address tokenReceived, uint256 amount);
     event Withdrawn(uint indexed timestamp, address indexed from, uint256 amount);    
 
-    /// @notice Sets the change authorization status
-    function setETHExchangeAuthorization(bool status) external;
+    /// @notice Sets the change authorization status to false
+    function removeETHExchangeAuthorization() external;
 
-    /// @notice Sets the change authorization status for a token
-    function setChangeAuthorization(address tokenToBeReceived, bool status) external;
+    /// @notice Sets the change authorization status for a token to false
+    function removeExchangeAuthorization(address tokenToBeReceived) external;
 
     /// @notice Updates the exchange rate between ETH and the Token
     function updateETHExchangeRate(uint64 exchangeRate) external;
