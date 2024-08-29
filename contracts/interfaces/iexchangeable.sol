@@ -3,15 +3,12 @@ pragma solidity >= 0.8.0;
 
 interface IExchangeable {
     event Deposited(uint indexed timestamp, address indexed from, uint256 amountETH, uint256 amountToken);
-    /// @notice The Allocated event is triggered when Owner allocates some token to
-    /// a beneficiary
-    event Allocated(uint indexed timestamp, address indexed beneficiary, uint256 amount);
     event ChangedBack(uint indexed timestamp, address indexed beneficiary, uint256 amountTokens);
     event ChangedBackFor(uint indexed timestamp, address indexed beneficiary, address tokenReceived, uint256 amount);
     event Withdrawn(uint indexed timestamp, address indexed from, uint256 amount);    
 
     /// @notice Sets the change authorization status
-    function setETHChangeAuthorization(bool status) external;
+    function setETHExchangeAuthorization(bool status) external;
 
     /// @notice Sets the change authorization status for a token
     function setChangeAuthorization(address tokenToBeReceived, bool status) external;

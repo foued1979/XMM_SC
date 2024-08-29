@@ -34,11 +34,11 @@ library Utils {
 
     /// @notice Computes option expiry as a year fraction
     function getTermInformation(Terms term) internal pure returns(uint updateInterval, uint expiryInterval, int64 expiryYF) {
-        if (term == Terms.OneDay) return (THIRTY_MINUTES_UPDATE_INTERVAL, ONE_DAY_TIMESTAMP_INTERVAL, ONE_DAY_YF);
-        if (term == Terms.OneWeek) return (ONE_HOUR_UPDATE_INTERVAL, ONE_WEEK_TIMESTAMP_INTERVAL, ONE_WEEK_YF);
-        if (term == Terms.TwoWeeks) return (TWO_HOURS_UPDATE_INTERVAL, TWO_WEEKS_TIMESTAMP_INTERVAL, TWO_WEEKS_YF);
-        if (term == Terms.ThreeWeeks) return (TWO_HOURS_UPDATE_INTERVAL, THREE_WEEKS_TIMESTAMP_INTERVAL, THREE_WEEKS_YF);
-        if (term == Terms.OneMonth) return (FOUR_HOURS_UPDATE_INTERVAL, ONE_MONTH_TIMESTAMP_INTERVAL, ONE_MONTH_YF);
+        if (term == Terms.OneDay) return (TEN_MINUTES_UPDATE_INTERVAL, ONE_DAY_TIMESTAMP_INTERVAL, ONE_DAY_YF);
+        if (term == Terms.OneWeek) return (FIFTEEN_MINUTES_UPDATE_INTERVAL, ONE_WEEK_TIMESTAMP_INTERVAL, ONE_WEEK_YF);
+        if (term == Terms.TwoWeeks) return (THIRTY_MINUTES_UPDATE_INTERVAL, TWO_WEEKS_TIMESTAMP_INTERVAL, TWO_WEEKS_YF);
+        if (term == Terms.ThreeWeeks) return (ONE_HOUR_UPDATE_INTERVAL, THREE_WEEKS_TIMESTAMP_INTERVAL, THREE_WEEKS_YF);
+        if (term == Terms.OneMonth) return (TWO_HOURS_UPDATE_INTERVAL, ONE_MONTH_TIMESTAMP_INTERVAL, ONE_MONTH_YF);
         if (term == Terms.TwoMonths) return (FOUR_HOURS_UPDATE_INTERVAL, TWO_MONTHS_TIMESTAMP_INTERVAL, TWO_MONTHS_YF);
 
         return (FOUR_HOURS_UPDATE_INTERVAL, THREE_MONTHS_TIMESTAMP_INTERVAL, THREE_MONTHS_YF);

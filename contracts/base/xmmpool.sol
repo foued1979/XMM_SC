@@ -108,6 +108,10 @@ abstract contract XMMPool is IXMMPool {
         getRatios();
     }
 
+    Review the index computation:
+    Must use additions instead of products
+    Must change the calculations to simply use 2**32
+
     /// @notice Gets the term of the XMM
     function getTerm() external view returns(Terms) {
         return Term;

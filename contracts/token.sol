@@ -7,11 +7,19 @@ import "./interfaces/iexchangeable.sol";
 import "./libraries/safemath.sol";
 
 contract Token is ERC20, Bridgeable, IExchangeable {
+    /**********
+     * Events *
+     **********/
+    event Burnt(uint indexed timstamp, uint256 amount);
+    /// @notice The Allocated event is triggered when Owner allocates some token to
+    /// a beneficiary
+    event Allocated(uint indexed timestamp, address indexed beneficiary, uint256 amount);
+
     /*************
      * Modifiers *
      *************/
     modifier isAllowed {
-        require(ChangeIsAllowed, "Not allowed");
+        require(ETHExchangeIsAllowed, "Not allowed");
         _;
     }
 
@@ -32,37 +40,29 @@ contract Token is ERC20, Bridgeable, IExchangeable {
     string public Name;
 
     // Public properties linked to IExchangeable
-    bool public ChangeIsAllowed;
+    bool public ETHExchangeIsAllowed;
 
     // The exchange rate represents a real number with 4 digits precision
-    uint64 public ETHExchangeRate;
-    uint16 private _precision = 10_000;
+    uint64 private _ethExchangeRate;
+    uint8 private _precision = 14;
+
+    // Other public Properties
+    address[] public ApprovedTokens;
+    uint256 public AllocatedAmount;
 
     // Parameters to manage other token exchanges
-    mapping(address => bool) _tokenIsApproved;
-    mapping(address => uint64) _exchangeRates;
-    mapping(address => bool) _changeIsAllowed;
-    address[] ApprovedTokens;
-
-    // Private Fields
-    uint256 public AllocatedAmount;
+    mapping(address => bool) private _tokenIsApproved;
+    mapping(address => uint64) private _exchangeRates;
+    mapping(address => bool) private _changeIsAllowed;
 
     constructor(string memory symbol, string memory name, uint64 chainId, uint32 initialSupply, uint32 initialOwnerAllocation) 
         ERC20(symbol, initialSupply, uint8(18)) Bridgeable(chainId) payable {
         Name = name;
+
         AllocatedAmount = 0;
+        _ethExchangeRate = 0;
 
-        ETHExchangeRate = 30_000_000;
-        require(initialOwnerAllocation < (initialSupply / 5), "Not fair");
         allocateToOwner(uint256(initialOwnerAllocation) * uint256(10 ** 18));
-    }
-
-    /// @notice Burns a number of token
-    /// @param amount The amount to be allocated
-    function burn(uint256 amount) external onlyOwner {
-        require(amount <= SafeMath.SafeSub(TotalSupply, AllocatedAmount), "Burn failed");
-
-        TotalSupply = SafeMath.SafeSub(TotalSupply, amount);
     }
 
     /// @notice Allocates a number of token to a beneficiary
@@ -72,17 +72,27 @@ contract Token is ERC20, Bridgeable, IExchangeable {
         require(to != Owner, "No no");
         require(amount <= SafeMath.SafeSub(TotalSupply, AllocatedAmount), "Insufficient supply");
 
+        // We don't compute the new allocation directly
+        // We make sure that the new balance is computed properly
         uint256 newAllocation = SafeMath.SafeAdd(AllocatedAmount, amount);
-
         _balances[to] = SafeMath.SafeAdd(_balances[to], amount);
         AllocatedAmount = newAllocation;
 
         emit Allocated(block.timestamp, to, amount);
     }
 
+    /// @notice Burns a number of token
+    /// @param amount The amount to be allocated
+    function burn(uint256 amount) external onlyOwner {
+        require(amount <= SafeMath.SafeSub(TotalSupply, AllocatedAmount), "Burn failed");
+
+        TotalSupply = SafeMath.SafeSub(TotalSupply, amount);
+        emit Burnt(block.timestamp, amount);
+    }
+
     /// @notice Sets the change authorization status for ETH
-    function setETHChangeAuthorization(bool status) external onlyOwner {
-        ChangeIsAllowed = status;
+    function setETHExchangeAuthorization(bool status) external onlyOwner {
+        ETHExchangeIsAllowed = status;
     }
 
     /// @notice Sets the change authorization status for a token
@@ -92,8 +102,8 @@ contract Token is ERC20, Bridgeable, IExchangeable {
 
     /// @notice Updates the exchange rate between ETH and the Token
     function updateETHExchangeRate(uint64 exchangeRate) external onlyOwner {
-        ETHExchangeRate = exchangeRate;
-        ChangeIsAllowed = true;
+        _ethExchangeRate = exchangeRate;
+        ETHExchangeIsAllowed = true;
     }
 
     /// @notice Updates the exchange rate between a token and our Token
@@ -301,8 +311,7 @@ contract Token is ERC20, Bridgeable, IExchangeable {
         uint256 newAllocation = SafeMath.SafeAdd(AllocatedAmount, amount);
         require(newAllocation < TotalSupply, "Insufficient supply");
 
-        uint256 prevBalance = _balances[Owner];
-        _balances[Owner] = SafeMath.SafeAdd(prevBalance, amount);
+        _balances[Owner] = SafeMath.SafeAdd(_balances[Owner], amount);
         AllocatedAmount = newAllocation;
         emit Allocated(block.timestamp, Owner, amount);
     }
