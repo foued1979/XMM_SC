@@ -13,13 +13,16 @@ interface IExchangeable {
     /// @notice Sets the change authorization status for a token to false
     function removeExchangeAuthorization(address tokenToBeReceived) external;
 
+    /// @notice Sets whether the deposit of ETH against token is allowed or not
+    function setAuthorizationForETHDeposit(bool status) external;
+
     /// @notice Updates the exchange rate between ETH and the Token
     function updateETHExchangeRate(uint64 exchangeRate) external;
 
     /// @notice Updates the exchange rate between a token and our Token
     /// @param  tokenToBeReceived The token to be received in exchange of our Token
     /// @param  exchangeRate The exchange rate
-    function updateExchangeRate(address tokenToBeReceived, uint64 exchangeRate) external;
+    function updateTokenExchangeRate(address tokenToBeReceived, uint64 exchangeRate) external;
 
     /// @notice Returns the quantity of ETH available for change against Token
     function getAvailableQuantityOfETH() external view returns(uint256);
@@ -30,6 +33,9 @@ interface IExchangeable {
     /// @notice Enables a user to deposit ETH and receive Tokens in exchange
     /// The conversion rate applies at a fixed rate, updated by Owner
     function depositEther() external payable returns(uint256);
+
+    /// @notice Deposits ETH for future token exchange
+    function depositEtherForExchange() external payable;
 
     /// @notice Enables a user to sell back an amount of Tokens against ETH
     /// if there is enough ETH available, and if the change is authorized

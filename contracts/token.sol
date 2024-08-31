@@ -121,7 +121,7 @@ contract Token is ERC20, Bridgeable, IExchangeable {
     /// @notice Updates the exchange rate between a token and our Token
     /// @param  tokenToBeReceived The token to be received in exchange of our Token
     /// @param  exchangeRate The exchange rate, with 4 digits precision
-    function updateExchangeRate(address tokenToBeReceived, uint64 exchangeRate) external onlyOwner tokenIsApproved(tokenToBeReceived) {
+    function updateTokenExchangeRate(address tokenToBeReceived, uint64 exchangeRate) external onlyOwner tokenIsApproved(tokenToBeReceived) {
         _exchangeRates[tokenToBeReceived] = exchangeRate;
         _exchangeIsAllowed[tokenToBeReceived] = true;
     }
@@ -309,7 +309,7 @@ contract Token is ERC20, Bridgeable, IExchangeable {
         pendingBridgeOutAmountByChain[msg.sender][toChainId] = SafeMath.SafeAdd128(pendingBridgeOutAmountByChain[msg.sender][toChainId], amount);
         _balances[msg.sender] = SafeMath.SafeSub(_balances[msg.sender], uint256(amount));
 
-        emit BridgeRequested(block.timestamp, msg.sender, toChainId, amount);
+        emit BridgeOutRequested(block.timestamp, msg.sender, toChainId, amount);
     }
 
     /// @notice Cancels a bridging request for a user and for a chainId
@@ -319,6 +319,8 @@ contract Token is ERC20, Bridgeable, IExchangeable {
         _balances[msg.sender] = SafeMath.SafeAdd(_balances[msg.sender], uint256(pendingBridgeOutAmountByChain[forUser][forChainId]));
         pendingBridgeOutAmountByChain[forUser][forChainId] = 0;
         removePendingBridgingOutForUser(forUser, forChainId);
+
+        emit BridgeOutCancelled(block.timestamp, forUser, forChainId);
     }
 
     /// @notice Validates a bridge in for a user and for a chain Id

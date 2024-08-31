@@ -5,7 +5,8 @@ import "../libraries/safemath.sol";
 import "../structures/bridge.sol";
 
 abstract contract Bridgeable {
-    event BridgeRequested(uint indexed timestamp, address indexed from, uint64 toChainId, uint128 amount);
+    event BridgeOutRequested(uint indexed timestamp, address indexed from, uint64 toChainId, uint128 amount);
+    event BridgeOutCancelled(uint indexed timestamp, address indexed from, uint64 toChainId);
 
     // Modifiers
     modifier _onlyOwner {
