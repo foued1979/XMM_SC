@@ -6,6 +6,7 @@ import "../structures/bridge.sol";
 
 abstract contract Bridgeable {
     event BridgeOutRequested(uint indexed timestamp, address indexed from, uint64 toChainId, uint128 amount);
+    event BridgeOutValidated(uint indexed timestamp, address indexed forUser, uint64 toChainId, uint128 amount);
     event BridgeOutCancelled(uint indexed timestamp, address indexed from, uint64 toChainId);
 
     // Modifiers
@@ -34,11 +35,11 @@ abstract contract Bridgeable {
     uint64 internal _chainId;
     uint64[] private _validChainIds;
 
-    mapping(address => uint128) internal pendingBridgingAmountsIn;
-    uint256 internal pendingAmountToBeTransferredIn;
+    mapping(address => mapping(uint64 => uint128)) internal pendingBridgeInAmountByChain;
+    mapping(address => uint64[]) internal pendingChainIdBridgesInForUser;
 
     mapping(address => mapping(uint64 => uint128)) internal pendingBridgeOutAmountByChain;
-    mapping(address => uint64[]) internal pendingChainIdBridgesForUser;
+    mapping(address => uint64[]) internal pendingChainIdBridgesOutForUser;
 
     address[] internal pendingBridgesOut;
     address[] internal pendingBridgesIn;
@@ -61,7 +62,7 @@ abstract contract Bridgeable {
     /// @notice Cancels a bridging request for msg.sender and for a chainId
     /// @param forChainId The target chain Id to cancel
     function cancelBridgeOut(uint64 forChainId) external onlyIfHavePendingRequest(forChainId) {
-        this.revertBridgeRequestForUser(msg.sender, forChainId);
+        this.revertBridgeOutRequestForUser(msg.sender, forChainId);
     }
 
     /// @notice Returns the array of addresses awaiting for bridging in
@@ -74,19 +75,54 @@ abstract contract Bridgeable {
         return pendingBridgesOut;
     }
 
-    /// @notice Gets the pending bridges out for a user
+    /// @notice Gets the pending bridges-in for a user
+    function getPendingBridgesInForUser(address forUser) external view _onlyOwner returns(Bridge[] memory) {
+        uint64[] storage pendingChainIdBridges = pendingChainIdBridgesInForUser[forUser];
+
+        if (pendingChainIdBridges.length > 0) {
+            Bridge[] memory result = new Bridge[](pendingChainIdBridges.length);
+
+            for (uint i = 0; i < pendingChainIdBridges.length; i++) {
+                uint64 chainId = pendingChainIdBridges[i];
+                uint128 amt = pendingBridgeInAmountByChain[forUser][chainId];
+                
+                result[i] = Bridge(chainId, amt);
+            }
+
+            return result;
+        }
+
+        return new Bridge[](0);
+    }
+
+    /// @notice Gets the pending bridges-out for a user
     function getPendingBridgesOutForUser(address forUser) external view _onlyOwner returns(Bridge[] memory) {
-        return getPendingBridges(forUser);
+        uint64[] storage pendingChainIdBridges = pendingChainIdBridgesOutForUser[forUser];
+
+        if (pendingChainIdBridges.length > 0) {
+            Bridge[] memory result = new Bridge[](pendingChainIdBridges.length);
+
+            for (uint i = 0; i < pendingChainIdBridges.length; i++) {
+                uint64 chainId = pendingChainIdBridges[i];
+                uint128 amt = pendingBridgeOutAmountByChain[forUser][chainId];
+                
+                result[i] = Bridge(chainId, amt);
+            }
+
+            return result;
+        }
+
+        return new Bridge[](0);
     }
 
     /// @notice Checks if msg.sender has a pending bridge to another chain
-    function hasPendingBridgeIn() external view returns(uint128) {
-        return pendingBridgingAmountsIn[msg.sender];
+    function hasPendingBridgeIn() external view returns(Bridge[] memory) {
+        return this.getPendingBridgesInForUser(msg.sender);
     }
 
     /// @notice Checks if msg.sender has a pending bridge to another chain
     function hasPendingBridgeOut() external view returns(Bridge[] memory) {
-        return getPendingBridges(msg.sender);
+        return this.getPendingBridgesOutForUser(msg.sender);
     }
 
     /*******************
@@ -94,12 +130,14 @@ abstract contract Bridgeable {
      *******************/
     /// @notice Adds a pending bridge in
     /// @param forUser The address of the beneficiary
+    /// @param fromChainId The chainId where the bridge is coming from
     /// @param amount The amount
-    function addPendingBridgeIn(address forUser, uint128 amount) external virtual;
+    function addPendingBridgeIn(address forUser, uint64 fromChainId, uint128 amount) external virtual;
 
     /// @notice Cancels a bridge in for a user
     /// @param forUser The address of the user to remove
-    function cancelBridgeIn(address forUser) external virtual;
+    /// @param fromChainId The chainId where the bridge is coming from
+    function cancelBridgeIn(address forUser, uint64 fromChainId) external virtual;
 
     /// @notice Adds a pending bridge out to a specific chain Id
     /// @param toChainId The destination Chain id
@@ -109,30 +147,30 @@ abstract contract Bridgeable {
     /// @notice Cancels a bridging request for a user and for a chainId
     /// @param forUser The user address to cancel
     /// @param forChainId The target chain Id to cancel
-    function revertBridgeRequestForUser(address forUser, uint64 forChainId) external virtual;
+    function revertBridgeOutRequestForUser(address forUser, uint64 forChainId) external virtual;
 
     /// @notice Validates a bridge in for a user and for a chain Id
     function validateBridgeOut(address forUser, uint64 forChainId) external virtual;
 
     /// @notice Validates a bridge in for a user
-    function validateBridgeIn(address forUser) external virtual;
+    /// @param forUser The user to validate
+    /// @param forChainId The chain id where the bridge is coming from
+    function validateBridgeIn(address forUser, uint64 forChainId) external virtual;
 
 
     /********************
      * Internal methods *
      ********************/
     // Adds a pending chain id for a user
-    function addPendingChainIdToUser(address forUser, uint64 chainId) internal {
-        uint64[] storage pendingBridges = pendingChainIdBridgesForUser[forUser];
-
-        for (uint i = 0; i < pendingBridges.length; i++) {
-            if (pendingBridges[i] == chainId) return;
+    function addPendingChainIdBridgeToUser(uint64[] storage pendingChainIdBridgesForUser, uint64 chainId) internal {
+        for (uint i = 0; i < pendingChainIdBridgesForUser.length; i++) {
+            if (pendingChainIdBridgesForUser[i] == chainId) return;
         }
 
-        pendingBridges.push(chainId);
+        pendingChainIdBridgesForUser.push(chainId);
     }
 
-    // Adds a user to the bridges in
+    // Adds a user to the bridges-in
     function addUserForBridingIn(address user) internal {
         for (uint i = 0; i < pendingBridgesIn.length; i++) {
             if (pendingBridgesIn[i] == user) return;
@@ -141,25 +179,22 @@ abstract contract Bridgeable {
         pendingBridgesIn.push(user);
     }
 
-    function removePendingBridgingOutForUser(address user, uint64 chainId) internal {
-        uint64[] storage pendingBridges = pendingChainIdBridgesForUser[user];
-
-        for (uint i = 0; i < pendingBridges.length; i++) {
-            if (pendingBridges[i] == chainId) {
-                pendingBridges[i] = pendingBridges[pendingBridges.length - 1];
-                pendingBridges.pop();
-
-                if (pendingBridges.length == 0) removeUserFromPendingBridgesOut(user);
-                return;
-            }
+    // Adds a user to the bridges-out
+    function addUserForBridingOut(address user) internal {
+        for (uint i = 0; i < pendingBridgesOut.length; i++) {
+            if (pendingBridgesOut[i] == user) return;
         }
+
+        pendingBridgesOut.push(user);
     }
 
-    function removePendingBridgeIn(address user) internal {
-        for (uint i = 0; i < pendingBridgesIn.length; i++) {
-            if (pendingBridgesIn[i] == user) {
-                pendingBridgesIn[i] = pendingBridgesIn[pendingBridgesIn.length - 1];
-                pendingBridgesIn.pop();
+    function removePendingChainIdBridgeForUser(address forUser, address[] storage pendingUsers, uint64[] storage pendingChainIdBridgesForUser, uint64 chainId) internal {
+        for (uint i = 0; i < pendingChainIdBridgesForUser.length; i++) {
+            if (pendingChainIdBridgesForUser[i] == chainId) {
+                pendingChainIdBridgesForUser[i] = pendingChainIdBridgesForUser[pendingChainIdBridgesForUser.length - 1];
+                pendingChainIdBridgesForUser.pop();
+
+                if (pendingChainIdBridgesForUser.length == 0) removeUserFromPendingBridges(forUser, pendingUsers);
                 return;
             }
         }
@@ -168,11 +203,11 @@ abstract contract Bridgeable {
     /*******************
      * Private methods *
      *******************/
-    function removeUserFromPendingBridgesOut(address user) private {
-        for (uint i = 0; i < pendingBridgesOut.length; i++) {
-            if (pendingBridgesOut[i] == user) {
-                pendingBridgesOut[i] = pendingBridgesOut[pendingBridgesOut.length - 1];
-                pendingBridgesOut.pop();
+    function removeUserFromPendingBridges(address user, address[] storage pendingUsers) private {
+        for (uint i = 0; i < pendingUsers.length; i++) {
+            if (pendingUsers[i] == user) {
+                pendingUsers[i] = pendingUsers[pendingUsers.length - 1];
+                pendingUsers.pop();
                 return;
             }
         }
@@ -184,22 +219,5 @@ abstract contract Bridgeable {
         }
 
         return false;
-    }
-
-    function getPendingBridges(address user) view private returns(Bridge[] memory) {
-        uint64[] storage pendingBridges = pendingChainIdBridgesForUser[user];
-
-        if (pendingBridges.length > 0) {
-            Bridge[] memory result = new Bridge[](pendingBridges.length);
-
-            for (uint i = 0; i < pendingBridges.length; i++) {
-                uint64 chainId = pendingBridges[i];
-                result[i] = Bridge(chainId, pendingBridgeOutAmountByChain[user][chainId]);
-            }
-
-            return result;
-        }
-
-        return new Bridge[](0);
     }
 }

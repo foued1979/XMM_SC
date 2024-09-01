@@ -75,13 +75,11 @@ contract Token is ERC20, Bridgeable, IExchangeable {
     /// @param amount The amount
     function allocate(address to, uint256 amount) external onlyOwner {
         require(to != Owner, "No no");
-        require(amount <= SafeMath.SafeSub(TotalSupply, AllocatedAmount), "Insufficient supply");
+        require(amount <= AvailableTokens, "Insufficient supply");
 
-        // We don't compute the new allocation directly
-        // We make sure that the new balance is computed properly
-        uint256 newAllocation = SafeMath.SafeAdd(AllocatedAmount, amount);
         _balances[to] = SafeMath.SafeAdd(_balances[to], amount);
-        AllocatedAmount = newAllocation;
+        AllocatedAmount = SafeMath.SafeAdd(AllocatedAmount, amount);
+        AvailableTokens = SafeMath.SafeSub(AvailableTokens, amount);
 
         emit Allocated(block.timestamp, to, amount);
     }
@@ -92,7 +90,7 @@ contract Token is ERC20, Bridgeable, IExchangeable {
         require(amount <= AvailableTokens, "Burn failed");
 
         TotalSupply = SafeMath.SafeSub(TotalSupply, amount);
-        AvailableTokens = AvailableTokens - amount;
+        AvailableTokens = SafeMath.SafeSub(AvailableTokens, amount);
         
         emit Burnt(block.timestamp, amount);
     }
@@ -277,25 +275,27 @@ contract Token is ERC20, Bridgeable, IExchangeable {
 
     /// @notice Adds a pending bridge in
     /// @param forUser The address of the beneficiary
+    /// @param fromChainId The chainId where the bridge is coming from
     /// @param amount The amount
-    function addPendingBridgeIn(address forUser, uint128 amount) external override onlyOwner {
-        require(AvailableTokens - pendingAmountToBeTransferredIn >= uint256(amount), "Insufficient balance");
+    function addPendingBridgeIn(address forUser, uint64 fromChainId, uint128 amount) external override onlyOwner {
+        require(AvailableTokens >= uint256(amount), "Insufficient balance");
         
-        pendingBridgingAmountsIn[forUser] = SafeMath.SafeAdd128(pendingBridgingAmountsIn[forUser], amount);
-        pendingAmountToBeTransferredIn = SafeMath.SafeAdd(pendingAmountToBeTransferredIn, uint256(amount));
+        pendingBridgeInAmountByChain[forUser][fromChainId] = SafeMath.SafeAdd128(pendingBridgeInAmountByChain[forUser][fromChainId], amount);
+        addUserForBridingIn(forUser);
+
         AvailableTokens = SafeMath.SafeSub(AvailableTokens, amount);
     }
 
     /// @notice Cancels a bridge in for a user
     /// @param forUser The address of the user to remove
-    function cancelBridgeIn(address forUser) external override onlyOwner {
-        uint256 pendingAmt = uint256(pendingBridgingAmountsIn[forUser]);
+    /// @param fromChainId The chainId where the bridge is coming from
+    function cancelBridgeIn(address forUser, uint64 fromChainId) external override onlyOwner {
+        uint256 pendingAmt = uint256(pendingBridgeInAmountByChain[forUser][fromChainId]);
 
         AvailableTokens = SafeMath.SafeAdd(AvailableTokens, pendingAmt);
-        pendingAmountToBeTransferredIn = SafeMath.SafeSub(pendingAmountToBeTransferredIn, pendingAmt);
-        pendingBridgingAmountsIn[forUser] = 0;
-
-        removePendingBridgeIn(forUser);
+        pendingBridgeInAmountByChain[forUser][fromChainId] = 0;
+        
+        removePendingChainIdBridgeForUser(forUser, pendingBridgesIn, pendingChainIdBridgesInForUser[forUser], fromChainId);
     }
 
     /// @notice Adds a pending bridge out to a specific chain Id
@@ -304,10 +304,11 @@ contract Token is ERC20, Bridgeable, IExchangeable {
     function requestBridgeOut(uint64 toChainId, uint128 amount) external override isValidChain(toChainId) {
         require(_balances[msg.sender] >= amount, "Insufficient balance");
 
-        addPendingChainIdToUser(msg.sender, toChainId);
-
         pendingBridgeOutAmountByChain[msg.sender][toChainId] = SafeMath.SafeAdd128(pendingBridgeOutAmountByChain[msg.sender][toChainId], amount);
         _balances[msg.sender] = SafeMath.SafeSub(_balances[msg.sender], uint256(amount));
+
+        addUserForBridingOut(msg.sender);
+        addPendingChainIdBridgeToUser(pendingChainIdBridgesOutForUser[msg.sender], toChainId);
 
         emit BridgeOutRequested(block.timestamp, msg.sender, toChainId, amount);
     }
@@ -315,28 +316,38 @@ contract Token is ERC20, Bridgeable, IExchangeable {
     /// @notice Cancels a bridging request for a user and for a chainId
     /// @param forUser The user address to cancel
     /// @param forChainId The target chain Id to cancel
-    function revertBridgeRequestForUser(address forUser, uint64 forChainId) external override onlyOwner {
+    function revertBridgeOutRequestForUser(address forUser, uint64 forChainId) external override onlyOwner {
+        // We credit back the tokens to the user
         _balances[msg.sender] = SafeMath.SafeAdd(_balances[msg.sender], uint256(pendingBridgeOutAmountByChain[forUser][forChainId]));
         pendingBridgeOutAmountByChain[forUser][forChainId] = 0;
-        removePendingBridgingOutForUser(forUser, forChainId);
+
+        removePendingChainIdBridgeForUser(forUser, pendingBridgesOut, pendingChainIdBridgesOutForUser[forUser], forChainId);
 
         emit BridgeOutCancelled(block.timestamp, forUser, forChainId);
     }
 
     /// @notice Validates a bridge in for a user and for a chain Id
     function validateBridgeOut(address forUser, uint64 forChainId) external override onlyOwner {
+        // We add the bridge quantity back to the available tokens
+        uint128 amt = pendingBridgeOutAmountByChain[forUser][forChainId];
+        AvailableTokens = SafeMath.SafeAdd(AvailableTokens, uint256(amt));
+
         pendingBridgeOutAmountByChain[forUser][forChainId] = 0;
-        removePendingBridgingOutForUser(forUser, forChainId);
+        removePendingChainIdBridgeForUser(forUser, pendingBridgesOut, pendingChainIdBridgesOutForUser[forUser], forChainId);
+
+        emit BridgeOutValidated(block.timestamp, forUser, forChainId, amt);
     }
 
     /// @notice Validates a bridge in for a user
-    function validateBridgeIn(address forUser) external override onlyOwner {
-        uint256 amtToCredit = uint256(pendingBridgingAmountsIn[forUser]);
-
-        pendingAmountToBeTransferredIn = SafeMath.SafeSub(pendingAmountToBeTransferredIn, amtToCredit);
+    /// @param forUser The user to validate
+    /// @param forChainId The chain id where the bridge is coming from
+    function validateBridgeIn(address forUser, uint64 forChainId) external override onlyOwner {
+        uint256 amtToCredit = uint256(pendingBridgeInAmountByChain[forUser][forChainId]);
+        
         _balances[forUser] = SafeMath.SafeAdd(_balances[forUser], amtToCredit);
-
         AllocatedAmount = SafeMath.SafeAdd(AllocatedAmount, amtToCredit);
+
+        removePendingChainIdBridgeForUser(forUser, pendingBridgesIn, pendingChainIdBridgesInForUser[forUser], forChainId);
     }
 
     /*******************
