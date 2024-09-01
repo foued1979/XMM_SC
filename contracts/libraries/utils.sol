@@ -6,8 +6,6 @@ import "../structures/position.sol";
 import "../enums.sol";
 
 library Utils {
-    uint internal constant MAX_NUMBER_FIXINGS = 4_380;
-
     uint internal constant ONE_DAY_TIMESTAMP_INTERVAL = 86_400;
     uint internal constant ONE_WEEK_TIMESTAMP_INTERVAL = 604_800;
     uint internal constant TWO_WEEKS_TIMESTAMP_INTERVAL = 1_209_600;
@@ -25,6 +23,7 @@ library Utils {
     int64 private constant TWO_MONTHS_YF = 706_022_021; // 60 days
     int64 private constant THREE_MONTHS_YF = 1_059_033_032; // 90 days
 
+    uint private constant FIVE_MINUTES_UPDATE_INTERVAL = 300;
     uint private constant TEN_MINUTES_UPDATE_INTERVAL = 600;
     uint private constant FIFTEEN_MINUTES_UPDATE_INTERVAL = 900;
     uint private constant THIRTY_MINUTES_UPDATE_INTERVAL = 1_800;
@@ -63,12 +62,6 @@ library Utils {
     /// @notice Gets the start date of an XMM
     function getTimeStamp(uint blockTimestamp, uint startDate, uint updateInterval) internal pure returns(uint) {
         return startDate + uint((blockTimestamp - startDate) / updateInterval) * updateInterval;
-    }
-
-    /// @notice Gets the fixing index corresponding to the block timestamp
-    function getFixingIndex(uint blockTimestamp, uint startDate, uint updateInterval) internal pure returns(uint) {
-        uint offset = uint((blockTimestamp - startDate) / updateInterval);
-        return offset - uint(offset / MAX_NUMBER_FIXINGS) * MAX_NUMBER_FIXINGS;
     }
 
     /// @notice Reduces the amount of a position

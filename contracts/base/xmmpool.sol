@@ -42,7 +42,9 @@ abstract contract XMMPool is IXMMPool {
     /***********************
      * Contract Properties *
      ***********************/
-    // Private properties
+    // ----------------------
+    // - Private properties -
+    // ----------------------
     uint8 private _decimals;
 
     uint private _fixingUpdateInterval;
@@ -56,7 +58,22 @@ abstract contract XMMPool is IXMMPool {
     // The positions by depositors
     mapping(address => Position[]) internal _positions;
 
-    // Public properties
+    // The list of fixings
+    Fixing[] internal _fixings;
+
+    // Private fields to manage long positions
+    uint128 private _marginCallLong;
+    int64 private _longRatio;
+    int64[] private _longRateIndex;
+
+    // Private fields to manage short positions
+    uint128 private _marginCallShort;
+    int64 private _shortRatio;
+    int64[] private _shortRateIndex;
+
+    // ---------------------
+    // - Public properties -
+    // ---------------------
     /// @notice The start date of the XMM
     uint public StartDate;
 
@@ -70,37 +87,28 @@ abstract contract XMMPool is IXMMPool {
     // The fee is expressed in percent of a basis point
     uint16 public Fee;
 
-    /// @notice The list of fixings
-    Fixing[] public Fixings;
-
     /// @notice The total amount of long positions
     uint128 public TotalLongPositions;
-    uint128 private _marginCallLong;
-    int64 private _longRatio;
-    int64[] private _longRateIndex;
 
     /// @notice The total amount of short positions
     uint128 public TotalShortPositions;
-    uint128 private _marginCallShort;
-    int64 private _shortRatio;
-    int64[] private _shortRateIndex;
+    
 
     /*************
      * Functions *
      *************/
     constructor(address owner, uint8 decimals, Terms term, uint16 fee, uint64 minDeposit) {
         Owner = owner;
-        _decimals = decimals;
+        IsActivated = false;
         Term = term;
         MinDeposit = uint128(minDeposit) * uint128(10 ** decimals);
         Fee = fee;
 
+        _decimals = decimals;
         (_fixingUpdateInterval, _expiryInterval, _expiryYearFraction) = Utils.getTermInformation(term);
         _midFixingInterval = _fixingUpdateInterval / 2;
 
-        StartDate = Utils.getTimeStamp(block.timestamp, 0, _fixingUpdateInterval);
-
-        _acrualYF = Math.div(int64(uint64(_fixingUpdateInterval) << 32), int64(uint64(_expiryInterval) << 32));
+        _acrualYF = Math.div(uint64(_fixingUpdateInterval) << 32, uint64(_expiryInterval) << 32);
 
         _longRateIndex.push(Math.One_32);
         _shortRateIndex.push(Math.One_32);
@@ -108,26 +116,17 @@ abstract contract XMMPool is IXMMPool {
         getRatios();
     }
 
-    Review the index computation:
-    Must use additions instead of products
-    Must change the calculations to simply use 2**32
-
-    /// @notice Gets the term of the XMM
-    function getTerm() external view returns(Terms) {
-        return Term;
-    }
-
     /// @notice Gets the fixings
     function getFixings() external view onlyOwner returns(Fixing[] memory) {
-        return Fixings;
+        return _fixings;
     }
 
     /// @notice Gets the fixings `from` index `to` index
     function getFixingsFromTo(uint from, uint to) external view onlyOwner returns(Fixing[] memory) {
-        if (to + 1 > Fixings.length) to = Fixings.length - 1;
+        if (to + 1 > _fixings.length) to = _fixings.length - 1;
 
         Fixing[] memory res = new Fixing[](to - from + 1);
-        for (uint i = from; i <= to; i++) res[i - from] = Fixings[i];
+        for (uint i = from; i <= to; i++) res[i - from] = _fixings[i];
         return res;
     }
 
@@ -157,17 +156,6 @@ abstract contract XMMPool is IXMMPool {
         }
     }
 
-    /// @notice Reduces a position
-    /// @param positionIndex The index of the position
-    /// @param amount The reduction amount. If amount is bigger than position amount, the position is closed.
-    // A position that is closed leads to re-organization of existing positions.
-    function reducePosition(uint32 positionIndex, uint128 amount) public virtual;
-
-    /// @notice Returns the positions held by a user
-    function getPositions() external view returns(Position[] memory) {
-        return _positions[msg.sender];
-    }
-
     /// @notice Returns user's position at given index
     /// @param positionIndex The index of the position
     function getPosition(uint32 positionIndex) external view returns(Position memory) {
@@ -175,15 +163,27 @@ abstract contract XMMPool is IXMMPool {
         return _positions[msg.sender][positionIndex];
     }
 
-    /// @notice Sets the first fixing and activates the pool
-    function setFirstFixing(uint64 spot, uint64 strike, uint64 volatility, int64 optionPremium) external onlyOwner {
-        if (Fixings.length > 0) return;
+    /// @notice Returns the positions held by a user
+    function getPositions() external view returns(Position[] memory) {
+        return _positions[msg.sender];
+    }
 
+    /// @notice Reduces a position
+    /// @param positionIndex The index of the position
+    /// @param amount The reduction amount. If amount is bigger than position amount, the position is closed.
+    // A position that is closed leads to re-organization of existing positions.
+    function reducePosition(uint32 positionIndex, uint128 amount) public virtual;
+
+    /// @notice Sets the first fixing and activates the pool
+    function setFirstFixing(uint64 spot, uint64 strike, uint64 volatility, uint64 optionPremium) external onlyOwner {
+        if (Fixings.length > 0) return;
+kkkk
         uint firstTimestamp = Utils.getTimeStamp(block.timestamp, StartDate, Utils.ONE_HOUR_UPDATE_INTERVAL);
         
         // We can update only from 5 minutes before the first fixing time
         require(block.timestamp > firstTimestamp || firstTimestamp - block.timestamp <= 300, "Not sync");
         
+        StartDate = Utils.getTimeStamp(block.timestamp, 0, _fixingUpdateInterval);
         Fixing memory fixing = Fixing(firstTimestamp, spot, strike, volatility, optionPremium);
         Fixings.push(fixing);
 
@@ -277,6 +277,12 @@ abstract contract XMMPool is IXMMPool {
 
         return lastFixingTimestamp;
     }
+
+
+
+    Review the index computation:
+    Must use additions instead of products
+    Must change the calculations to simply use 2**32
 
     function executeMarginCalls(uint64 prevSpot, uint prevFixingTimestamp, Fixing memory lastFixing) private {
         int64 d = int64(uint64((lastFixing.timestamp - prevFixingTimestamp) / _fixingUpdateInterval)) << 32;

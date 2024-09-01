@@ -32,6 +32,7 @@ contract CoinPool is XMMPool {
             (success, res) = Token.call(abi.encodeWithSelector(IERC20.transferFrom.selector, msg.sender, address(this), uint256(amount)));
 
             if (success && abi.decode(res, (bool))) {
+                check if a position with same fixing has been opened
                 uint lastFixingIndex = Fixings.length;
                 uint32 positionIndex = uint32(_positions[msg.sender].length);
                 uint timestamp = Fixings[lastFixingIndex].timestamp;
