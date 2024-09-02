@@ -15,13 +15,13 @@ library Utils {
     uint internal constant THREE_MONTHS_TIMESTAMP_INTERVAL = 7_776_000;
     uint internal constant ONE_YEAR_TIMESTAMP_INTERVAL = 31_536_000;
 
-    int64 internal constant ONE_DAY_YF = 11_767_034;
-    int64 private constant ONE_WEEK_YF = 82_369_236;
-    int64 private constant TWO_WEEKS_YF = 164_738_472;
-    int64 private constant THREE_WEEKS_YF = 247_107_707;
-    int64 private constant ONE_MONTH_YF = 353_011_011; // 30 days
-    int64 private constant TWO_MONTHS_YF = 706_022_021; // 60 days
-    int64 private constant THREE_MONTHS_YF = 1_059_033_032; // 90 days
+    uint64 internal constant ONE_DAY_YF = 11_767_034;
+    uint64 private constant ONE_WEEK_YF = 82_369_236;
+    uint64 private constant TWO_WEEKS_YF = 164_738_472;
+    uint64 private constant THREE_WEEKS_YF = 247_107_707;
+    uint64 private constant ONE_MONTH_YF = 353_011_011; // 30 days
+    uint64 private constant TWO_MONTHS_YF = 706_022_021; // 60 days
+    uint64 private constant THREE_MONTHS_YF = 1_059_033_032; // 90 days
 
     uint private constant FIVE_MINUTES_UPDATE_INTERVAL = 300;
     uint private constant TEN_MINUTES_UPDATE_INTERVAL = 600;
@@ -32,7 +32,7 @@ library Utils {
     uint private constant FOUR_HOURS_UPDATE_INTERVAL = 14_400;
 
     /// @notice Computes option expiry as a year fraction
-    function getTermInformation(Terms term) internal pure returns(uint updateInterval, uint expiryInterval, int64 expiryYF) {
+    function getTermInformation(Terms term) internal pure returns(uint updateInterval, uint expiryInterval, uint64 expiryYF) {
         if (term == Terms.OneDay) return (TEN_MINUTES_UPDATE_INTERVAL, ONE_DAY_TIMESTAMP_INTERVAL, ONE_DAY_YF);
         if (term == Terms.OneWeek) return (FIFTEEN_MINUTES_UPDATE_INTERVAL, ONE_WEEK_TIMESTAMP_INTERVAL, ONE_WEEK_YF);
         if (term == Terms.TwoWeeks) return (THIRTY_MINUTES_UPDATE_INTERVAL, TWO_WEEKS_TIMESTAMP_INTERVAL, TWO_WEEKS_YF);
@@ -52,11 +52,14 @@ library Utils {
         return false;
     }
 
-    function getProRata(uint tradeTimestamp, Position storage position, uint positionTerm) internal view returns(int64) {
-        int64 holdingPeriod = int64(uint64(tradeTimestamp - position.startDate)) << 32;
-        if (holdingPeriod > Math.One_32) return Math.One_32;
+    // Function name has been changed to make sure that positionTerm is properly defined when function is called
+    // positionTerm corresponds to the timestamp of the position end date.
+    function getProRataM(uint tradeTimestamp, Position storage position, uint positionTerm) internal view returns(uint64) {
+        uint128 holdingPeriod = uint128(tradeTimestamp - position.startDate);
+        uint128 totalPeriodLength = uint128(positionTerm - position.startDate);
 
-        return Math.div(holdingPeriod, int64(uint64(positionTerm)));
+        if (holdingPeriod > totalPeriodLength) return Math.One_32;
+        return Math.div(holdingPeriod, totalPeriodLength);
     }
 
     /// @notice Gets the start date of an XMM

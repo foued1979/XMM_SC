@@ -6,5 +6,5 @@ struct Fixing {
     uint64 spot;
     uint64 strike;
     uint64 volatility;
-    int64 premium;
+    uint64 premium;
 }

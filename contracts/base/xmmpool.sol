@@ -17,6 +17,8 @@ abstract contract XMMPool is IXMMPool {
      event OwnerChanged(uint indexed timestamp, address prevOwner, address newOwner);
      event Deposit(address indexed from, uint indexed timestamp, Position position);
      event PositionReduced(address indexed from, uint indexed timestamp, uint128 amount);
+     event FixingMissed(uint indexed fixingTimestamp, uint fixingIndex);
+     event MissedFixingUpdated(uint indexed timestamp, uint fixingIndex);
 
     /*****************
      * The modifiers *
@@ -50,8 +52,8 @@ abstract contract XMMPool is IXMMPool {
     uint private _fixingUpdateInterval;
     uint private _midFixingInterval;
     uint private _expiryInterval;
-    int64 private _expiryYearFraction;
-    int64 private _acrualYF;
+    uint64 private _expiryYearFraction;
+    uint64 private _acrualYF;
 
     uint[] private _missedFixingsIndices;
 
@@ -63,13 +65,13 @@ abstract contract XMMPool is IXMMPool {
 
     // Private fields to manage long positions
     uint128 private _marginCallLong;
-    int64 private _longRatio;
+    uint64 private _longRatio;
     int64[] private _longRateIndex;
 
     // Private fields to manage short positions
     uint128 private _marginCallShort;
     int64 private _shortRatio;
-    int64[] private _shortRateIndex;
+    uint64[] private _shortRateIndex;
 
     // ---------------------
     // - Public properties -
@@ -176,55 +178,73 @@ abstract contract XMMPool is IXMMPool {
 
     /// @notice Sets the first fixing and activates the pool
     function setFirstFixing(uint64 spot, uint64 strike, uint64 volatility, uint64 optionPremium) external onlyOwner {
-        if (Fixings.length > 0) return;
-kkkk
-        uint firstTimestamp = Utils.getTimeStamp(block.timestamp, StartDate, Utils.ONE_HOUR_UPDATE_INTERVAL);
+        if (_fixings.length > 0) return;
+
+        // The start date is the 1st timestamp
+        StartDate = Utils.getTimeStamp(block.timestamp, 0, Utils._fixingUpdateInterval);
         
         // We can update only from 5 minutes before the first fixing time
-        require(block.timestamp > firstTimestamp || firstTimestamp - block.timestamp <= 300, "Not sync");
+        require(block.timestamp - StartDate <= 300, "Not sync");
         
-        StartDate = Utils.getTimeStamp(block.timestamp, 0, _fixingUpdateInterval);
-        Fixing memory fixing = Fixing(firstTimestamp, spot, strike, volatility, optionPremium);
-        Fixings.push(fixing);
+        Fixing memory fixing = Fixing(StartDate, spot, strike, volatility, optionPremium);
+        _fixings.push(fixing);
 
         IsActivated = true;
     }
 
     /// @notice Sets the latest fixing for the XMM
-    function setFixing(uint64 spot, uint64 strike, uint64 volatility, int64 optionPremium) external onlyOwner {
-        Fixing storage lastFixing = Fixings[Fixings.length - 1];
+    function setFixing(uint64 spot, uint64 strike, uint64 volatility, uint64 optionPremium) external onlyOwner returns(bool) {
+        Fixing storage lastFixing = _fixings[_fixings.length - 1];
         uint nextFixingTimestamp = Utils.getTimeStamp(block.timestamp, lastFixing.timestamp, _fixingUpdateInterval);
+
+        uint threshold = 0;
+            // If the update interval is less than or equal to 5 min, the threshold is 1 min
+            if (_fixingUpdateInterval <= Utils.FIVE_MINUTES_UPDATE_INTERVAL) threshold = 60;
+            // Else if update interval is less than or equal to 15 min, the threshold is 2 min
+            else if (_fixingUpdateInterval <= Utils.FIFTEEN_MINUTES_UPDATE_INTERVAL) threshold = 120;
+            // Otherwise the threshold is 3 min
+            else threshold = 180;
         
-        if (block.timestamp > nextFixingTimestamp) {
-            if (nextFixingTimestamp == lastFixing.timestamp ) {
-                // If the update is 5 minutes (or less) before the next fixing time, we accept it as the next fixing
-                // This functionality is implemented to enable cases where significant number of fixings have to be pushed:
-                // -> in such a case, we may start to compute fixings slightly before exact update interval timestamp
-                if (nextFixingTimestamp + _fixingUpdateInterval - block.timestamp <= 300) {
-                    nextFixingTimestamp += _fixingUpdateInterval;
-                } else return;
-            }
-            // However, if at least one fixings has been missed (e.g. due to a technical error), we fill in missing fixings
-            // with last know spot value, and we will update the missing fixings later.
-            else if (nextFixingTimestamp > lastFixing.timestamp + 2 * _fixingUpdateInterval - 300) {
-                nextFixingTimestamp = addTemporaryMissingFixings(Fixings.length - 1, lastFixing.spot, lastFixing.timestamp, nextFixingTimestamp);
-            }
+        if (nextFixingTimestamp == lastFixing.timestamp) {
+            // If the update is done within the threshold, we update the fixing
+            if (Math.sub(nextFixingTimestamp + _fixingUpdateInterval, block.timestamp) <= threshold) {
+                nextFixingTimestamp += _fixingUpdateInterval;
+            // Otherwise, we are too early to update the fixing
+            } else return false;
+        }
+        else if (nextFixingTimestamp == lastFixing.timestamp + _fixingUpdateInterval) {
+            // If the update is done after the threshold, the fixing is missed
+            if (Math.sub(block.timestamp, nextFixingTimestamp) > threshold) return false;
+        }
+        // However, if at least one fixings has been missed (e.g. due to a technical error), we fill in missing fixings
+        // with last know spot value, and we will update the missing fixings later.
+        else {
+            // If we are threshold minutes before the next update, we adjust the next fixing timestamp
+            if (Math.absSub(nextFixingTimestamp + _fixingUpdateInterval, block.timestamp) <= threshold) nextFixingTimestamp += _fixingUpdateInterval;
+            // However if we are outside the threshold, above or below the next fixing timestamp, then the fixing is missed
+            else if (Math.absSub(block.timestamp, nextFixingTimestamp) > threshold) return false;
+
+            // We add temporary fixings for the missed fixings
+            // The missed fixings can be manually updated later
+            addTemporaryMissingFixings(lastFixing.spot, lastFixing.timestamp, nextFixingTimestamp);
         }
 
         Fixing memory fixing = Fixing(nextFixingTimestamp, spot, strike, volatility, optionPremium);
         executeMarginCalls(lastFixing.spot, lastFixing.timestamp, fixing);
         
-        Fixings.push(fixing);
+        _fixings.push(fixing);
+        return true;
     }
 
     /// @notice In case a fixing update has been missed, owner can update the missed past fixings
     ///         To avoid multiple updates or wrong fixing updates, only the missed fixing index can be updated 1 time
-    function updateMissedFixing(uint missedFixingIndex, uint64 spot, uint64 strike, uint64 volatility, int64 optionPremium) external onlyOwner {
+    function updateMissedFixing(uint missedFixingIndex, uint64 spot, uint64 strike, uint64 volatility, uint64 optionPremium) external onlyOwner {
         for (uint i = 0; i < _missedFixingsIndices.length; i++) {
             if (_missedFixingsIndices[i] == missedFixingIndex) {
-                Fixing storage prevFixing = Fixings[missedFixingIndex - 1];
-                Fixing storage fixing = Fixings[missedFixingIndex];
+                Fixing storage prevFixing = _fixings[missedFixingIndex - 1];
+                Fixing storage fixing = _fixings[missedFixingIndex];
 
+                // We update the fixing ith the proper market data
                 fixing.spot = spot;
                 fixing.strike = strike;
                 fixing.volatility = volatility;
@@ -232,69 +252,63 @@ kkkk
 
                 // We compute the new interest factor for both long and short side
                 // The updateIndex method also proceeds to margin call
-                (int64 longRateFactor, int64 shortRateFactor) = updateIndex(prevFixing.timestamp, fixing.timestamp, prevFixing.spot, fixing.spot, optionPremium);
+                (int64 longRateFactor, int64 shortRateFactor) = computeMissedFactors(prevFixing.timestamp, fixing.timestamp, prevFixing.spot, fixing.spot, optionPremium);
 
                 // We update all the indices from missedFixingIndex to the last fixing index
                 // The update factors are longRateFactor for the long side and shortRateFactor for the short side
-                for (uint j = missedFixingIndex; j < Fixings.length; j++)
+                for (uint j = missedFixingIndex; j < _fixings.length; j++)
                 {
-                    _longRateIndex[j] = Math.mult(_longRateIndex[j - 1], longRateFactor);
-                    _shortRateIndex[j] = Math.mult(_shortRateIndex[j - 1], shortRateFactor);
+                    _longRateIndex[j] = Math.addSigned(_longRateIndex[j - 1], longRateFactor);
+                    _shortRateIndex[j] = Math.addSigned(_shortRateIndex[j - 1], shortRateFactor);
                 }
 
                 _missedFixingsIndices[i] = _missedFixingsIndices[_missedFixingsIndices.length - 1];
                 _missedFixingsIndices.pop();
+
+                emit MissedFixingUpdated(block.timestamp, missedFixingIndex);
                 return;
             }
         }
     }
 
-    function addTemporaryMissingFixings(uint lastFixingIndex, uint64 lastSpot, uint lastFixingTimestamp,  uint nextFixingTimestamp) private returns(uint256) {
+    function addTemporaryMissingFixings(int64 lastSpot, uint lastFixingTimestamp,  uint nextFixingTimestamp) private {
+        uint lastFixingIndex = _fixings.length - 1;
         uint numberOfMissedFixings = uint((nextFixingTimestamp - lastFixingTimestamp) / _fixingUpdateInterval) - 1;
 
-        // If update time is less than 5 minutes from next fixing time, we add 1 more missing fixing
-        // Latest premium will be updated for the next fixing 
-        if (nextFixingTimestamp + _fixingUpdateInterval - block.timestamp <= 300) numberOfMissedFixings++;
+        // No margin call will be executed since spot perf is 0
+            int64 longRateFactor = _longRateIndex[_longRateIndex.length - 1];
+            int64 shortRateFactor = _shortRateIndex[_shortRateIndex.length - 1];
 
         for (uint i = 0; i < numberOfMissedFixings; i++) {
             lastFixingTimestamp += _fixingUpdateInterval;
 
             Fixing memory fixing = Fixing(lastFixingTimestamp, lastSpot, 0, 0, 0);
 
-            // No margin call will be executed since spot perf is 0
-            int64 longRateFactor = _longRateIndex[_longRateIndex.length - 1];
-            int64 shortRateFactor = _shortRateIndex[_shortRateIndex.length - 1];
-
             _longRateIndex.push(longRateFactor);
             _shortRateIndex.push(shortRateFactor);
 
-            Fixings.push(fixing);
+            _fixings.push(fixing);
+
             lastFixingIndex++;
             _missedFixingsIndices.push(lastFixingIndex);
+
+            emit FixingMissed(lastFixingTimestamp, lastFixingIndex);
         }
-
-        lastFixingTimestamp += _fixingUpdateInterval;
-
-        return lastFixingTimestamp;
     }
 
-
-
-    Review the index computation:
-    Must use additions instead of products
-    Must change the calculations to simply use 2**32
-
     function executeMarginCalls(uint64 prevSpot, uint prevFixingTimestamp, Fixing memory lastFixing) private {
-        int64 d = int64(uint64((lastFixing.timestamp - prevFixingTimestamp) / _fixingUpdateInterval)) << 32;
-        int64 premiumPerf = Math.mult(lastFixing.premium, Math.mult(d, _acrualYF));
+        uint64 d = uint64((lastFixing.timestamp - prevFixingTimestamp) / _fixingUpdateInterval) << 32;
+        uint64 premiumPerf = Math.mult(lastFixing.premium, Math.mult(d, _acrualYF));
 
         int64 longRateFactor = 0;
         int64 shortRateFactor = 0;
         int64 adjustedRate = 0;
 
-        int64 spotPerf = Math.subu(lastFixing.spot, prevSpot);
+        int64 spotPerf = Math.subSigned(lastFixing.spot, prevSpot);
 
-        if (spotPerf == 0 || premiumPerf <= 0) {
+        // If the spot has not moved, there is no margin call
+        // Index is constant for the period
+        if (spotPerf == 0) {
             longRateFactor = _longRateIndex[_longRateIndex.length - 1];
             shortRateFactor = _shortRateIndex[_shortRateIndex.length - 1];
 
@@ -306,46 +320,39 @@ kkkk
 
         // If spot went up, the Short positions pay the Long positions
         if (spotPerf > 0) {
-            adjustedRate = Math.mult(_longRatio, premiumPerf);
-            longRateFactor = Math.mult(_longRateIndex[_longRateIndex.length - 1], Math.add(Math.One_32, adjustedRate));
-            shortRateFactor = Math.mult(_shortRateIndex[_shortRateIndex.length - 1], Math.sub(Math.One_32, premiumPerf));
-            transferShortToLong(uint64(premiumPerf));
+            longRateFactor = Math.addSigned(_longRateIndex[_longRateIndex.length - 1], Math.mult(_longRatio, premiumPerf));
+            shortRateFactor = Math.addSigned(_shortRateIndex[_shortRateIndex.length - 1], -premiumPerf);
+            transferShortToLong(premiumPerf);
         // Else, Long positions pay Short positions
         } else {
-            adjustedRate = Math.mult(_shortRatio, premiumPerf);
-            longRateFactor = Math.mult(_longRateIndex[_longRateIndex.length - 1], Math.sub(Math.One_32, premiumPerf));
-            shortRateFactor = Math.mult(_shortRateIndex[_shortRateIndex.length - 1], Math.add(Math.One_32, adjustedRate));
-            transferLongToShort(uint64(premiumPerf));
+            longRateFactor = Math.addSigned(_longRateIndex[_longRateIndex.length - 1], -premiumPerf);
+            shortRateFactor = Math.addSigned(_shortRateIndex[_shortRateIndex.length - 1], Math.mult(_shortRatio, premiumPerf));
+            transferLongToShort(premiumPerf);
         }
 
         _longRateIndex.push(longRateFactor);
         _shortRateIndex.push(shortRateFactor);
     }
 
-    function updateIndex(uint periodStart, uint periodEnd, uint64 spotAtPeriodStart, uint64 spotAtPeriodEnd, int64 premiumAtPeriodEnd) private returns(int64, int64) {
-        int64 d = int64(uint64((periodEnd - periodStart) / _fixingUpdateInterval)) << 32;
-        int64 premiumPerf = Math.mult(premiumAtPeriodEnd, Math.mult(d, _acrualYF));
+    function computeMissedFactors(uint periodStart, uint periodEnd, uint64 spotAtPeriodStart, uint64 spotAtPeriodEnd, uint64 premiumAtPeriodEnd) private 
+    returns(int64 longRateFactor, int64 shortRateFactor) {
+        uint64 d = uint64((periodEnd - periodStart) / _fixingUpdateInterval) << 32;
+        uint64 premiumPerf = Math.mult(premiumAtPeriodEnd, Math.mult(d, _acrualYF));
 
-        int64 longRateFactor = 0;
-        int64 shortRateFactor = 0;
-        int64 adjustedRate = 0;
+        int64 spotPerf = Math.subSigned(spotAtPeriodEnd, spotAtPeriodStart);
 
-        int64 spotPerf = Math.subu(spotAtPeriodEnd, spotAtPeriodStart);
-
-        if (spotPerf == 0 || premiumPerf <= 0) return (Math.One_32, Math.One_32);
+        if (spotPerf == 0) return (Math.One_32, Math.One_32);
 
         // If spot went up, the Short positions pay the Long positions
         if (spotPerf > 0) {
-            adjustedRate = Math.mult(_longRatio, premiumPerf);
-            longRateFactor = Math.add(Math.One_32, adjustedRate);
-            shortRateFactor = Math.sub(Math.One_32, premiumPerf);
-            transferShortToLong(uint64(premiumPerf));
+            longRateFactor = Math.mult(_longRatio, premiumPerf);
+            shortRateFactor = -premiumPerf;
+            transferShortToLong(premiumPerf);
         // Else, Long positions pay Short positions
         } else {
-            adjustedRate = Math.mult(_shortRatio, premiumPerf);
-            longRateFactor = Math.sub(Math.One_32, premiumPerf);
-            shortRateFactor = Math.add(Math.One_32, adjustedRate);
-            transferLongToShort(uint64(premiumPerf));
+            longRateFactor = -premiumPerf;
+            shortRateFactor = Math.mult(_shortRatio, premiumPerf);
+            transferLongToShort(premiumPerf);
         }
 
         return (longRateFactor, shortRateFactor);
@@ -380,7 +387,8 @@ kkkk
     }
 
     function getRate(LongShort longShort, int64 proRata, int64 index0) private view returns(int64) {
-        int64 currentIndex = longShort == LongShort.Long ? _longRateIndex[Fixings.length - 1] : _shortRateIndex[Fixings.length - 1];
+        must be reviewed since index is a sum
+        int64 currentIndex = longShort == LongShort.Long ? _longRateIndex[_fixings.length - 1] : _shortRateIndex[_fixings.length - 1];
         return Math.mult(proRata, Math.div(currentIndex, index0));
     }
 

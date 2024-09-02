@@ -15,10 +15,6 @@ library Math {
   */
   uint64 internal constant MAX_U32x32 = 0xFFFFFFFFFFFFFFFF;
   /*
-  * Maximum value signed 32.32-bit fixed point number may have. 
-  */
-  int128 internal constant MAX_64x64 = 0x7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF;
-  /*
   * Maximum value unsigned 128-bit fixed point number may have. 
   */
   uint128 internal constant MAX_128 = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF;
@@ -29,8 +25,8 @@ library Math {
   /*
   * One
   */
-  int64 internal constant One_32 = 0x100000000;
-  int128 internal constant One_64 = 0x10000000000000000;
+  uint64 internal constant One_32 = 0x100000000;
+  uint128 internal constant One_64 = 0x10000000000000000;
 
   function max(int8 x, int8 l) internal pure returns(uint8) {
     return x > l ? uint8(x) : uint8(l);
@@ -39,24 +35,19 @@ library Math {
   /**
   * @notice Calculates x + y for unsigned integer
   */
-  function addu(uint64 x, uint64 y) internal pure returns(uint64)
+  function add(uint64 x, uint64 y) internal pure returns(uint64)
   {
     unchecked {
-      uint72 res = uint72(x) + y;
-
-      require (res >= 0 && res <= MAX_U32x32);
-      return uint64(res);
+      uint64 res = x + y;
+      require (res >= x && res >= y);
+      return res;
     }
   }
 
-  /**
-  * @notice Calculates x + y for signed integer
-  */
-  function add(int64 x, int64 y) internal pure returns(int64)
+  function addSigned(int64 x, int64 y) internal pure returns(int64)
   {
     unchecked {
-      int72 res = int72(x) + y;
-
+      int96 res = int96(x) + y;
       require (res >= MIN_32x32 && res <= MAX_32x32);
       return int64(res);
     }
@@ -65,80 +56,80 @@ library Math {
   /**
   * @notice Calculates x - y.
   */
-  function subu(uint64 x, uint64 y) internal pure returns (int64) {
+  function sub(uint64 x, uint64 y) internal pure returns (uint64) {
     unchecked {
-      int72 res = int72(int64(x)) - int64(y);
-      
+      require (x > y);
+      return x - y;
+    }
+  }
+
+  /**
+  * @notice Calculates x - y.
+  */
+  function subSigned(uint64 x, uint64 y) internal pure returns (int64) {
+    unchecked {
+      int128 res = int128(uint128(x)) - int128(uint128(y));
       require (res >= MIN_32x32 && res <= MAX_32x32);
       return int64(res);
     }
   }
 
-  function sub(int64 x, int64 y) internal pure returns (int64) {
+  function absSub(uint64 x, uint64 y) internal pure returns (uint64) {
     unchecked {
-      int72 res = int72(x) - y;
-      
-      require (res >= MIN_32x32 && res <= MAX_32x32);
-      return int64(res);
+      if (x > y) {
+        return x - y;
+      } else {
+        return y - x;
+      }
     }
   }
 
   /**
   * @notice Calculates x * y rounding down.
   */
-  function mult(int64 x, int64 y) internal pure returns (int64) {
+  function mult(uint64 x, uint64 y) internal pure returns (uint64) {
     unchecked {
-      int128 res = (int128(x) * y) >> 32;
+      uint128 res = (uint128(x) * y) >> 32;
 
-      require (res >= MIN_32x32 && res <= MAX_32x32);
-      return int64(res);
+      require (res >= 0 && res <= MAX_U32x32, "Overflow");
+      return uint64(res);
     }
   }
 
   /**
   * @notice Calculates x / y rounding towards zero.
   */
-  function div(int64 x, int64 y) internal pure returns (int64) {
+  function div(uint64 x, uint64 y) internal pure returns (uint64) {
     unchecked {
       require (y != 0);
 
-      int96 res = (int96(x) << 32) / y;
+      uint96 res = (uint96(x) << 32) / y;
 
-      require (res >= MIN_32x32 && res <= MAX_32x32);
-      return int64(res);
-    }
-  }
-
-  /**
-  * @notice Returns  -x.
-  */
-  function neg(int64 x) internal pure returns (int64) {
-    unchecked {
-      require (x != MIN_32x32);
-      return -x;
+      require (res <= MAX_U32x32);
+      return uint64(res);
     }
   }
 
   /**
   * @notice Calculates 1 / x rounding towards zero.
   */
-  function inverse(int64 x) internal pure returns (int64) {
+  function inverse(uint64 x) internal pure returns (uint64) {
     unchecked {
       require (x != 0);
 
-      int128 res = One_64 / x;
+      uint128 res = One_64 / x;
 
-      require (res >= MIN_32x32 && res <= MAX_32x32);
-      return int64(res);
+      require (res <= MAX_U32x32);
+      return uint64(res);
     }
   }
 
   /**
   * @notice Calculates the arithmetic average of x and y.
   */
-  function avg (int64 x, int64 y) internal pure returns (int64) {
+  function avg (uint64 x, uint64 y) internal pure returns (uint64) {
     unchecked {
-      return int64(add(x, y) >> 1);
+      return add(x, y) >> 1;
     }
   }
 }
