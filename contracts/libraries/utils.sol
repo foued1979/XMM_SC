@@ -31,6 +31,13 @@ library Utils {
     uint private constant TWO_HOURS_UPDATE_INTERVAL = 7_200;
     uint private constant FOUR_HOURS_UPDATE_INTERVAL = 14_400;
 
+    int64 private constant ONE_TIME_LEV = 0x100000000;
+    int64 private constant TWO_TIME_LEV = 0x200000000;
+    int64 private constant THREE_TIME_LEV = 0x300000000;
+    int64 private constant FIVE_TIME_LEV = 0x500000000;
+    int64 private constant SEVEN_TIME_LEV = 0x700000000;
+    int64 private constant TEN_TIME_LEV = 0xA00000000;
+
     /// @notice Computes option expiry as a year fraction
     function getTermInformation(Terms term) internal pure returns(uint updateInterval, uint expiryInterval, uint64 expiryYF) {
         if (term == Terms.OneDay) return (TEN_MINUTES_UPDATE_INTERVAL, ONE_DAY_TIMESTAMP_INTERVAL, ONE_DAY_YF);
@@ -50,6 +57,16 @@ library Utils {
         }
 
         return false;
+    }
+
+    /// @notice Returns the leverage factor as int64
+    function getLeverageFactor(uint8 lev) internal pure returns(int64) {
+        if (lev == 0) return ONE_TIME_LEV;
+        if (lev == 1) return TWO_TIME_LEV;
+        if (lev == 2) return THREE_TIME_LEV;
+        if (lev == 3) return FIVE_TIME_LEV;
+        if (lev == 4) return SEVEN_TIME_LEV;
+        if (lev == 5) return TEN_TIME_LEV;
     }
 
     // Function name has been changed to make sure that positionTerm is properly defined when function is called

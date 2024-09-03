@@ -64,14 +64,12 @@ abstract contract XMMPool is IXMMPool {
     Fixing[] internal _fixings;
 
     // Private fields to manage long positions
-    uint128 private _marginCallLong;
-    uint64 private _longRatio;
-    int64[] private _longRateIndex;
+    mapping(Leverage => uint64) private _longRatios;
+    mapping(Leverage => int64[]) private _longRateIndices;
 
     // Private fields to manage short positions
-    uint128 private _marginCallShort;
-    int64 private _shortRatio;
-    uint64[] private _shortRateIndex;
+    mapping(Leverage => uint64) private _shortRatios;
+    mapping(Leverage => int64[]) private _shortRateIndices;
 
     // ---------------------
     // - Public properties -
@@ -89,11 +87,11 @@ abstract contract XMMPool is IXMMPool {
     // The fee is expressed in percent of a basis point
     uint16 public Fee;
 
-    /// @notice The total amount of long positions
-    uint128 public TotalLongPositions;
+    /// @notice The total amount of long positions, by leverage index
+    mapping(Leverage => uint128) internal TotalLongPositions;
 
-    /// @notice The total amount of short positions
-    uint128 public TotalShortPositions;
+    /// @notice The total amount of short positions, by leverage index
+    mapping(Leverage => uint128) internal  TotalShortPositions;
     
 
     /*************
@@ -112,8 +110,8 @@ abstract contract XMMPool is IXMMPool {
 
         _acrualYF = Math.div(uint64(_fixingUpdateInterval) << 32, uint64(_expiryInterval) << 32);
 
-        _longRateIndex.push(Math.One_32);
-        _shortRateIndex.push(Math.One_32);
+        _longRateIndex.push(0);
+        _shortRateIndex.push(0);
 
         getRatios();
     }
@@ -130,6 +128,16 @@ abstract contract XMMPool is IXMMPool {
         Fixing[] memory res = new Fixing[](to - from + 1);
         for (uint i = from; i <= to; i++) res[i - from] = _fixings[i];
         return res;
+    }
+
+    /// @notice Gets the total long and short positions for a given leverage factor
+    function getPoolPositions(Leverage leverage) external view returns(uint128 long, uint128 short) {
+        return (TotalLongPositions[leverage], TotalShortPositions[leverage]);
+    }
+
+    /// @notice Gets the total long and short positions for a given leverage factor
+    function getLastIndices(Leverage leverage) external view returns(int64 long, int64 short) {
+        return (_longRateIndices[leverage][_fixings.length - 1], _shortRateIndices[leverage][_fixings.length - 1]);
     }
 
     /// @notice Returns the indices of the missed fixings, if ever.
@@ -224,9 +232,9 @@ abstract contract XMMPool is IXMMPool {
             // However if we are outside the threshold, above or below the next fixing timestamp, then the fixing is missed
             else if (Math.absSub(block.timestamp, nextFixingTimestamp) > threshold) return false;
 
-            // We add temporary fixings for the missed fixings
+            // We add temporary fixings for the missed fixings, excluding the last fixing
             // The missed fixings can be manually updated later
-            addTemporaryMissingFixings(lastFixing.spot, lastFixing.timestamp, nextFixingTimestamp);
+            addTemporaryMissingFixings(lastFixing.spot, lastFixing.premium, lastFixing.timestamp, nextFixingTimestamp);
         }
 
         Fixing memory fixing = Fixing(nextFixingTimestamp, spot, strike, volatility, optionPremium);
@@ -235,43 +243,8 @@ abstract contract XMMPool is IXMMPool {
         _fixings.push(fixing);
         return true;
     }
-
-    /// @notice In case a fixing update has been missed, owner can update the missed past fixings
-    ///         To avoid multiple updates or wrong fixing updates, only the missed fixing index can be updated 1 time
-    function updateMissedFixing(uint missedFixingIndex, uint64 spot, uint64 strike, uint64 volatility, uint64 optionPremium) external onlyOwner {
-        for (uint i = 0; i < _missedFixingsIndices.length; i++) {
-            if (_missedFixingsIndices[i] == missedFixingIndex) {
-                Fixing storage prevFixing = _fixings[missedFixingIndex - 1];
-                Fixing storage fixing = _fixings[missedFixingIndex];
-
-                // We update the fixing ith the proper market data
-                fixing.spot = spot;
-                fixing.strike = strike;
-                fixing.volatility = volatility;
-                fixing.premium = optionPremium;
-
-                // We compute the new interest factor for both long and short side
-                // The updateIndex method also proceeds to margin call
-                (int64 longRateFactor, int64 shortRateFactor) = computeMissedFactors(prevFixing.timestamp, fixing.timestamp, prevFixing.spot, fixing.spot, optionPremium);
-
-                // We update all the indices from missedFixingIndex to the last fixing index
-                // The update factors are longRateFactor for the long side and shortRateFactor for the short side
-                for (uint j = missedFixingIndex; j < _fixings.length; j++)
-                {
-                    _longRateIndex[j] = Math.addSigned(_longRateIndex[j - 1], longRateFactor);
-                    _shortRateIndex[j] = Math.addSigned(_shortRateIndex[j - 1], shortRateFactor);
-                }
-
-                _missedFixingsIndices[i] = _missedFixingsIndices[_missedFixingsIndices.length - 1];
-                _missedFixingsIndices.pop();
-
-                emit MissedFixingUpdated(block.timestamp, missedFixingIndex);
-                return;
-            }
-        }
-    }
-
-    function addTemporaryMissingFixings(int64 lastSpot, uint lastFixingTimestamp,  uint nextFixingTimestamp) private {
+    
+    function addTemporaryMissingFixings(uint64 lastSpot, uint lastFixingTimestamp, uint nextFixingTimestamp) private {
         uint lastFixingIndex = _fixings.length - 1;
         uint numberOfMissedFixings = uint((nextFixingTimestamp - lastFixingTimestamp) / _fixingUpdateInterval) - 1;
 
@@ -296,66 +269,77 @@ abstract contract XMMPool is IXMMPool {
         }
     }
 
-    function executeMarginCalls(uint64 prevSpot, uint prevFixingTimestamp, Fixing memory lastFixing) private {
-        uint64 d = uint64((lastFixing.timestamp - prevFixingTimestamp) / _fixingUpdateInterval) << 32;
-        uint64 premiumPerf = Math.mult(lastFixing.premium, Math.mult(d, _acrualYF));
+    /// @notice In case a fixing update has been missed, owner can update the missed past fixings
+    ///         To avoid multiple updates or wrong fixing updates, only the missed fixing index can be updated 1 time
+    function updateMissedFixing(uint missedFixingIndex, uint64 spot, uint64 strike, uint64 volatility, uint64 optionPremium) external onlyOwner {
+        for (uint i = 0; i < _missedFixingsIndices.length; i++) {
+            if (_missedFixingsIndices[i] == missedFixingIndex) {
+                Fixing storage prevFixing = _fixings[missedFixingIndex - 1];
+                Fixing storage fixing = _fixings[missedFixingIndex];
 
-        int64 longRateFactor = 0;
-        int64 shortRateFactor = 0;
-        int64 adjustedRate = 0;
+                // We update the fixing ith the proper market data
+                fixing.spot = spot;
+                fixing.strike = strike;
+                fixing.volatility = volatility;
+                fixing.premium = optionPremium;
 
-        int64 spotPerf = Math.subSigned(lastFixing.spot, prevSpot);
+                // We compute the new interest factor for both long and short side
+                // The updateIndex method also proceeds to margin call
+                (int64 longRateFactor, int64 shortRateFactor) = computeFactors(prevFixing.spot, fixing.spot, optionPremium);
 
-        // If the spot has not moved, there is no margin call
-        // Index is constant for the period
-        if (spotPerf == 0) {
-            longRateFactor = _longRateIndex[_longRateIndex.length - 1];
-            shortRateFactor = _shortRateIndex[_shortRateIndex.length - 1];
+                // We update all the indices from missedFixingIndex to the last fixing index
+                // The update factors are longRateFactor for the long side and shortRateFactor for the short side
+                for (uint j = missedFixingIndex; j < _fixings.length; j++)
+                {
+                    _longRateIndex[j] = Math.addSigned(_longRateIndex[j - 1], longRateFactor);
+                    _shortRateIndex[j] = Math.addSigned(_shortRateIndex[j - 1], shortRateFactor);
+                }
 
-            _longRateIndex.push(longRateFactor);
-            _shortRateIndex.push(shortRateFactor);
+                _missedFixingsIndices[i] = _missedFixingsIndices[_missedFixingsIndices.length - 1];
+                _missedFixingsIndices.pop();
 
-            return;
+                emit MissedFixingUpdated(block.timestamp, missedFixingIndex);
+                return;
+            }
         }
+    }
+
+    function computeFactors(uint64 spotAtPeriodStart, uint64 spotAtPeriodEnd, uint64 premiumAtPeriodEnd) private 
+    returns(int64[] memory longRateFactors, int64[] memory shortRateFactors) {
+        uint64 premiumPerf = Math.mult(premiumAtPeriodEnd, _acrualYF);
+        int64 spotPerf = Math.subSigned(spotAtPeriodEnd, spotAtPeriodStart);
+
+        longRateFactors = new int64[](6);
+        shortRateFactors = new int64[](6);
+
+        if (spotPerf == 0) return (0, 0);
 
         // If spot went up, the Short positions pay the Long positions
         if (spotPerf > 0) {
-            longRateFactor = Math.addSigned(_longRateIndex[_longRateIndex.length - 1], Math.mult(_longRatio, premiumPerf));
-            shortRateFactor = Math.addSigned(_shortRateIndex[_shortRateIndex.length - 1], -premiumPerf);
-            transferShortToLong(premiumPerf);
+            for (uint8 i = 0; i < 6; i++) {
+                longRateFactors[i] = Math.multSigned(Utils.getLeverageFactor(i), Math.mult(_longRatios[i], premiumPerf));
+                shortRateFactors[i] = Math.multSigned(Utils.getLeverageFactor(i), -premiumPerf);
+            }
+            
         // Else, Long positions pay Short positions
         } else {
-            longRateFactor = Math.addSigned(_longRateIndex[_longRateIndex.length - 1], -premiumPerf);
-            shortRateFactor = Math.addSigned(_shortRateIndex[_shortRateIndex.length - 1], Math.mult(_shortRatio, premiumPerf));
-            transferLongToShort(premiumPerf);
+            for (uint8 i = 0; i < 6; i++) {
+                longRateFactors[i] = Math.multSigned(Utils.getLeverageFactor(i), -premiumPerf);
+                shortRateFactors[i] = Math.multSigned(Utils.getLeverageFactor(i), Math.mult(_shortRatios[i], premiumPerf));
+            }
         }
+
+        return (longRateFactors, shortRateFactors);
+    }
+
+    function executeMarginCall(uint64 prevSpot, uint prevFixingTimestamp, Fixing memory lastFixing) private {
+        (int64 longRateFactor, int64 shortRateFactor) = computeFactors(prevFixingTimestamp, lastFixing.timestamp, prevSpot, lastFixing.spot, lastFixing.premium);
+
+        longRateFactor = Math.addSigned(_longRateIndex[_longRateIndex.length - 1], longRateFactor);
+        shortRateFactor = Math.addSigned(_shortRateIndex[_shortRateIndex.length - 1], shortRateFactor);
 
         _longRateIndex.push(longRateFactor);
         _shortRateIndex.push(shortRateFactor);
-    }
-
-    function computeMissedFactors(uint periodStart, uint periodEnd, uint64 spotAtPeriodStart, uint64 spotAtPeriodEnd, uint64 premiumAtPeriodEnd) private 
-    returns(int64 longRateFactor, int64 shortRateFactor) {
-        uint64 d = uint64((periodEnd - periodStart) / _fixingUpdateInterval) << 32;
-        uint64 premiumPerf = Math.mult(premiumAtPeriodEnd, Math.mult(d, _acrualYF));
-
-        int64 spotPerf = Math.subSigned(spotAtPeriodEnd, spotAtPeriodStart);
-
-        if (spotPerf == 0) return (Math.One_32, Math.One_32);
-
-        // If spot went up, the Short positions pay the Long positions
-        if (spotPerf > 0) {
-            longRateFactor = Math.mult(_longRatio, premiumPerf);
-            shortRateFactor = -premiumPerf;
-            transferShortToLong(premiumPerf);
-        // Else, Long positions pay Short positions
-        } else {
-            longRateFactor = -premiumPerf;
-            shortRateFactor = Math.mult(_shortRatio, premiumPerf);
-            transferLongToShort(premiumPerf);
-        }
-
-        return (longRateFactor, shortRateFactor);
     }
 
     function transferShortToLong(uint64 netPerf) private {

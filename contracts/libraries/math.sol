@@ -48,7 +48,7 @@ library Math {
   {
     unchecked {
       int96 res = int96(x) + y;
-      require (res >= MIN_32x32 && res <= MAX_32x32);
+      require (res >= MIN_32x32 && res <= MAX_32x32, "Overflow");
       return int64(res);
     }
   }
@@ -69,7 +69,7 @@ library Math {
   function subSigned(uint64 x, uint64 y) internal pure returns (int64) {
     unchecked {
       int128 res = int128(uint128(x)) - int128(uint128(y));
-      require (res >= MIN_32x32 && res <= MAX_32x32);
+      require (res >= MIN_32x32 && res <= MAX_32x32, "Overflow");
       return int64(res);
     }
   }
@@ -96,6 +96,15 @@ library Math {
     }
   }
 
+  function multSigned(int64 x, int64 y) internal pure returns (int64) {
+    unchecked {
+      int128 res = (int128(x) * y) >> 32;
+
+      require (res >= MIN_32x32 && res <= MAX_32x32, "Overflow");
+      return int64(res);
+    }
+  }
+
   /**
   * @notice Calculates x / y rounding towards zero.
   */
@@ -107,6 +116,17 @@ library Math {
 
       require (res <= MAX_U32x32);
       return uint64(res);
+    }
+  }
+
+  function divSigned(int64 x, int64 y) internal pure returns (int64) {
+    unchecked {
+      require (y != 0);
+
+      int96 res = (int96(x) << 32) / y;
+
+      require (res >= MIN_32x32 && res <= MAX_32x32, "Overflow");
+      return int64(res);
     }
   }
 
