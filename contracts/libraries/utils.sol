@@ -59,6 +59,15 @@ library Utils {
         return false;
     }
 
+    /// @notice Checks if an address is in an array of addresses
+    function itemExistsInArray(uint item, uint[] storage intoArray) internal pure returns(bool) {
+        for (uint i = 0; i < intoArray.length; i++) {
+            if (item == intoArray[i]) return true;
+        }
+
+        return false;
+    }
+
     /// @notice Returns the leverage factor as int64
     function getLeverageFactor(uint8 lev) internal pure returns(int64) {
         if (lev == 0) return ONE_TIME_LEV;

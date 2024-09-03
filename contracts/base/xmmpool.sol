@@ -110,10 +110,13 @@ abstract contract XMMPool is IXMMPool {
 
         _acrualYF = Math.div(uint64(_fixingUpdateInterval) << 32, uint64(_expiryInterval) << 32);
 
-        _longRateIndex.push(0);
-        _shortRateIndex.push(0);
+        for (uint8 i = 0; i < 6; i++) {
+            _longRateIndices[i].push(0);
+            _shortRateIndices[i].push(0);
 
-        getRatios();
+            _longRatios[i] = 0;
+            _shortRatios[i] = 0;
+        }
     }
 
     /// @notice Gets the fixings
@@ -238,7 +241,7 @@ abstract contract XMMPool is IXMMPool {
         }
 
         Fixing memory fixing = Fixing(nextFixingTimestamp, spot, strike, volatility, optionPremium);
-        executeMarginCalls(lastFixing.spot, lastFixing.timestamp, fixing);
+        executeMarginCall(lastFixing.spot, fixing);
         
         _fixings.push(fixing);
         return true;
@@ -272,36 +275,37 @@ abstract contract XMMPool is IXMMPool {
     /// @notice In case a fixing update has been missed, owner can update the missed past fixings
     ///         To avoid multiple updates or wrong fixing updates, only the missed fixing index can be updated 1 time
     function updateMissedFixing(uint missedFixingIndex, uint64 spot, uint64 strike, uint64 volatility, uint64 optionPremium) external onlyOwner {
-        for (uint i = 0; i < _missedFixingsIndices.length; i++) {
-            if (_missedFixingsIndices[i] == missedFixingIndex) {
-                Fixing storage prevFixing = _fixings[missedFixingIndex - 1];
-                Fixing storage fixing = _fixings[missedFixingIndex];
+        require(Utils.itemExistsInArray(missedFixingIndex, _missedFixingsIndices), "Bad index");
 
-                // We update the fixing ith the proper market data
-                fixing.spot = spot;
-                fixing.strike = strike;
-                fixing.volatility = volatility;
-                fixing.premium = optionPremium;
+        Fixing storage prevFixing = _fixings[missedFixingIndex - 1];
+        Fixing storage fixing = _fixings[missedFixingIndex];
 
-                // We compute the new interest factor for both long and short side
-                // The updateIndex method also proceeds to margin call
-                (int64 longRateFactor, int64 shortRateFactor) = computeFactors(prevFixing.spot, fixing.spot, optionPremium);
+        // We update the fixing ith the proper market data
+        fixing.spot = spot;
+        fixing.strike = strike;
+        fixing.volatility = volatility;
+        fixing.premium = optionPremium;
 
-                // We update all the indices from missedFixingIndex to the last fixing index
-                // The update factors are longRateFactor for the long side and shortRateFactor for the short side
-                for (uint j = missedFixingIndex; j < _fixings.length; j++)
-                {
-                    _longRateIndex[j] = Math.addSigned(_longRateIndex[j - 1], longRateFactor);
-                    _shortRateIndex[j] = Math.addSigned(_shortRateIndex[j - 1], shortRateFactor);
-                }
+        // We compute the new interest factor for both long and short side
+        // The updateIndex method also proceeds to margin call
+        (int64[] memory longRateFactors, int64[] memory shortRateFactors) = computeFactors(prevFixing.spot, fixing.spot, optionPremium);
 
-                _missedFixingsIndices[i] = _missedFixingsIndices[_missedFixingsIndices.length - 1];
-                _missedFixingsIndices.pop();
+        transfer(longRateFactors, shortRateFactors);
 
-                emit MissedFixingUpdated(block.timestamp, missedFixingIndex);
-                return;
+        // We update all the indices from missedFixingIndex to the last fixing index
+        // The update factors are longRateFactor for the long side and shortRateFactor for the short side
+        for (uint j = missedFixingIndex; j < _fixings.length; j++)
+        {
+            for (uint8 k = 0; k < 6; k++) {
+                _longRateIndices[k][j] = Math.addSigned(_longRateIndices[k][j - 1], longRateFactors[k]);
+                _shortRateIndices[k][j] = Math.addSigned(_shortRateIndices[k][j - 1], shortRateFactors[k]);
             }
         }
+
+        _missedFixingsIndices[missedFixingIndex] = _missedFixingsIndices[_missedFixingsIndices.length - 1];
+        _missedFixingsIndices.pop();
+
+        emit MissedFixingUpdated(block.timestamp, missedFixingIndex);
     }
 
     function computeFactors(uint64 spotAtPeriodStart, uint64 spotAtPeriodEnd, uint64 premiumAtPeriodEnd) private 
@@ -332,64 +336,91 @@ abstract contract XMMPool is IXMMPool {
         return (longRateFactors, shortRateFactors);
     }
 
-    function executeMarginCall(uint64 prevSpot, uint prevFixingTimestamp, Fixing memory lastFixing) private {
-        (int64 longRateFactor, int64 shortRateFactor) = computeFactors(prevFixingTimestamp, lastFixing.timestamp, prevSpot, lastFixing.spot, lastFixing.premium);
+    function executeMarginCall(uint64 prevSpot, Fixing memory lastFixing) private {
+        (int64[] memory longRateFactors, int64[] memory shortRateFactors) = computeFactors(prevSpot, lastFixing.spot, lastFixing.premium);
 
-        longRateFactor = Math.addSigned(_longRateIndex[_longRateIndex.length - 1], longRateFactor);
-        shortRateFactor = Math.addSigned(_shortRateIndex[_shortRateIndex.length - 1], shortRateFactor);
+        transfer(longRateFactors, shortRateFactors);
 
-        _longRateIndex.push(longRateFactor);
-        _shortRateIndex.push(shortRateFactor);
+        for (uint8 k = 0; k < 6; k++) {
+            _longRateIndices[k].push(Math.addSigned(_longRateIndices[k][_longRateIndices[k].length - 1], longRateFactors[k]));
+            _shortRateIndices[k].push(Math.addSigned(_shortRateIndices[k][_shortRateIndices[k].length - 1], shortRateFactors[k]));
+        }
+    }
+
+    function transfer(int64[] memory longRateFactors, int64[] memory shortRateFactors) private {
+        for (uint8 i = 0; i < 6; i++) {
+            // If longRateFactor is negative, long pays short
+            // longRateFactor is equal to the premium accrual
+            if (longRateFactors[i] < 0)  { transferLongToShort(uint64(-longRateFactors[i])); }
+            // else, shortRateFactor is negative and equal to the accrued premium
+            else { transferShortToLong(uint64(-shortRateFactors[i])); }
+        }
     }
 
     function transferShortToLong(uint64 netPerf) private {
-        if (netPerf == 0 || TotalShortPositions == 0) return;
+        if (netPerf == 0) return;
 
-        uint128 transfer = uint128(TotalShortPositions >> Math.max(int8(_decimals - 2), 0));
-        transfer = uint128((uint256(transfer) * netPerf) >> 32);
+        for (uint8 i = 0; i < 6; i++) {
+            uint256 totalShort = uint256(TotalShortPositions[i]);
+            if (totalShort == 0 || TotalLongPositions[i] == 0) continue;
 
-        if (_marginCallLong >= transfer) {
-            _marginCallLong = SafeMath.SafeSub128(_marginCallLong, transfer);
-        } else {
-            transfer = SafeMath.SafeSub128(transfer, _marginCallLong);
-            _marginCallShort = SafeMath.SafeAdd128(_marginCallShort, transfer);
+            uint128 transferAmt = uint128((totalShort * netPerf) >> 32);
+            TotalShortPositions[i] = SafeMath.SafeSub128(TotalShortPositions[i], transferAmt);
+            TotalLongPositions[i] = SafeMath.SafeAdd128(TotalLongPositions[i], transferAmt);
         }
+
+        setRatios();
     }
 
     function transferLongToShort(uint64 netPerf) private {
-        if (netPerf == 0 || TotalLongPositions == 0) return;
+        if (netPerf == 0) return;
 
-        uint128 transfer = uint128(TotalLongPositions >> Math.max(int8(_decimals - 2), 0));
-        transfer = uint128((transfer * netPerf) >> 32);
+        for (uint8 i = 0; i < 6; i++) {
+            uint256 totalLong = uint256(TotalLongPositions[i]);
+            if (totalLong == 0 || TotalShortPositions[i] == 0) continue;
 
-        if (_marginCallShort >= transfer) {
-            _marginCallShort = SafeMath.SafeSub128(_marginCallShort, transfer);
-        } else {
-            transfer = SafeMath.SafeSub128(transfer, _marginCallShort);
-            _marginCallLong = SafeMath.SafeAdd128(_marginCallLong, transfer);
+            uint128 transferAmt = uint128((totalLong * netPerf) >> 32);
+            TotalLongPositions[i] = SafeMath.SafeSub128(TotalLongPositions[i], transferAmt);
+            TotalShortPositions[i] = SafeMath.SafeAdd128(TotalShortPositions[i], transferAmt);
+        }
+
+        setRatios();
+    }
+
+    function getRate(LongShort longShort, Leverage leverage, uint64 proRata, uint fixingIndex0) private view returns(int64) {
+        int64 currentIndexValue = longShort == LongShort.Long ? _longRateIndices[leverage][_fixings.length - 1] : _shortRateIndices[leverage][_fixings.length - 1];
+        int64 initialIndexValue = longShort == LongShort.Long ? _longRateIndices[leverage][fixingIndex0] : _shortRateIndices[leverage][fixingIndex0];
+        return Math.multSigned(int64(proRata), Math.subSigned(currentIndexValue, initialIndexValue));
+    }
+
+    function setRatios() private {
+        setLongRatios();
+        setShortRatios();
+    }
+
+    function setLongRatios() private {
+        for (uint8 i = 0; i < 6; i++) {
+            uint128 totalLong = TotalLongPositions[i];
+
+            if (totalLong == 0) {
+                _longRatios[i] = 0;
+            } else {
+                uint160 short = uint160(TotalShortPositions[i]) << 32;
+                _longRatios[i] = uint64(short / totalLong);
+            }
         }
     }
 
-    function getRate(LongShort longShort, int64 proRata, int64 index0) private view returns(int64) {
-        must be reviewed since index is a sum
-        int64 currentIndex = longShort == LongShort.Long ? _longRateIndex[_fixings.length - 1] : _shortRateIndex[_fixings.length - 1];
-        return Math.mult(proRata, Math.div(currentIndex, index0));
-    }
+    function setShortRatios() private {
+        for (uint8 i = 0; i < 6; i++) {
+            uint128 totalShort = TotalShortPositions[i];
 
-    function getRatios() private {
-        _longRatio = getLongRatio();
-        _shortRatio = getShortRatio();
-    }
-
-    function getLongRatio() private view returns(int64) {
-        if (TotalLongPositions == 0) return 0;
-        uint256 short = uint256(TotalShortPositions) << 32;
-        return int64(uint64(short / TotalLongPositions));
-    }
-
-    function getShortRatio() private view returns(int64) {
-        if (TotalShortPositions == 0) return 0;
-        uint256 long = uint256(TotalLongPositions) << 32;
-        return int64(uint64(long / TotalShortPositions));
+            if (totalShort == 0) {
+                _shortRatios[i] = 0;
+            } else {
+                uint160 long = uint160(TotalLongPositions[i]) << 32;
+                _shortRatios[i] = uint64(long / totalShort);
+            }
+        }
     }
 }
