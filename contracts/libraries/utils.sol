@@ -2,18 +2,19 @@
 pragma solidity >= 0.8.0;
 
 import "./math.sol";
+import "./safemath.sol";
 import "../structures/position.sol";
 import "../enums.sol";
 
 library Utils {
-    uint internal constant ONE_DAY_TIMESTAMP_INTERVAL = 86_400;
-    uint internal constant ONE_WEEK_TIMESTAMP_INTERVAL = 604_800;
-    uint internal constant TWO_WEEKS_TIMESTAMP_INTERVAL = 1_209_600;
-    uint internal constant THREE_WEEKS_TIMESTAMP_INTERVAL = 1_814_400;
-    uint internal constant ONE_MONTH_TIMESTAMP_INTERVAL = 2_592_000;
-    uint internal constant TWO_MONTHS_TIMESTAMP_INTERVAL = 5_184_000;
-    uint internal constant THREE_MONTHS_TIMESTAMP_INTERVAL = 7_776_000;
-    uint internal constant ONE_YEAR_TIMESTAMP_INTERVAL = 31_536_000;
+    uint internal constant ONE_DAY_TIMESPAN_INTERVAL = 86_400;
+    uint internal constant ONE_WEEK_TIMESPAN_INTERVAL = 604_800;
+    uint internal constant TWO_WEEKS_TIMESPAN_INTERVAL = 1_209_600;
+    uint internal constant THREE_WEEKS_TIMESPAN_INTERVAL = 1_814_400;
+    uint internal constant ONE_MONTH_TIMESPAN_INTERVAL = 2_592_000;
+    uint internal constant TWO_MONTHS_TIMESPAN_INTERVAL = 5_184_000;
+    uint internal constant THREE_MONTHS_TIMESPAN_INTERVAL = 7_776_000;
+    uint internal constant ONE_YEAR_TIMESPAN_INTERVAL = 31_536_000;
 
     uint64 internal constant ONE_DAY_YF = 11_767_034;
     uint64 private constant ONE_WEEK_YF = 82_369_236;
@@ -40,14 +41,14 @@ library Utils {
 
     /// @notice Computes option expiry as a year fraction
     function getTermInformation(Terms term) internal pure returns(uint updateInterval, uint expiryInterval, uint64 expiryYF) {
-        if (term == Terms.OneDay) return (TEN_MINUTES_UPDATE_INTERVAL, ONE_DAY_TIMESTAMP_INTERVAL, ONE_DAY_YF);
-        if (term == Terms.OneWeek) return (FIFTEEN_MINUTES_UPDATE_INTERVAL, ONE_WEEK_TIMESTAMP_INTERVAL, ONE_WEEK_YF);
-        if (term == Terms.TwoWeeks) return (THIRTY_MINUTES_UPDATE_INTERVAL, TWO_WEEKS_TIMESTAMP_INTERVAL, TWO_WEEKS_YF);
-        if (term == Terms.ThreeWeeks) return (ONE_HOUR_UPDATE_INTERVAL, THREE_WEEKS_TIMESTAMP_INTERVAL, THREE_WEEKS_YF);
-        if (term == Terms.OneMonth) return (TWO_HOURS_UPDATE_INTERVAL, ONE_MONTH_TIMESTAMP_INTERVAL, ONE_MONTH_YF);
-        if (term == Terms.TwoMonths) return (FOUR_HOURS_UPDATE_INTERVAL, TWO_MONTHS_TIMESTAMP_INTERVAL, TWO_MONTHS_YF);
+        if (term == Terms.OneDay) return (TEN_MINUTES_UPDATE_INTERVAL, ONE_DAY_TIMESPAN_INTERVAL, ONE_DAY_YF);
+        if (term == Terms.OneWeek) return (FIFTEEN_MINUTES_UPDATE_INTERVAL, ONE_WEEK_TIMESPAN_INTERVAL, ONE_WEEK_YF);
+        if (term == Terms.TwoWeeks) return (THIRTY_MINUTES_UPDATE_INTERVAL, TWO_WEEKS_TIMESPAN_INTERVAL, TWO_WEEKS_YF);
+        if (term == Terms.ThreeWeeks) return (ONE_HOUR_UPDATE_INTERVAL, THREE_WEEKS_TIMESPAN_INTERVAL, THREE_WEEKS_YF);
+        if (term == Terms.OneMonth) return (TWO_HOURS_UPDATE_INTERVAL, ONE_MONTH_TIMESPAN_INTERVAL, ONE_MONTH_YF);
+        if (term == Terms.TwoMonths) return (FOUR_HOURS_UPDATE_INTERVAL, TWO_MONTHS_TIMESPAN_INTERVAL, TWO_MONTHS_YF);
 
-        return (FOUR_HOURS_UPDATE_INTERVAL, THREE_MONTHS_TIMESTAMP_INTERVAL, THREE_MONTHS_YF);
+        return (FOUR_HOURS_UPDATE_INTERVAL, THREE_MONTHS_TIMESPAN_INTERVAL, THREE_MONTHS_YF);
     }
 
     /// @notice Checks if an address is in an array of addresses
@@ -60,7 +61,7 @@ library Utils {
     }
 
     /// @notice Checks if an address is in an array of addresses
-    function itemExistsInArray(uint item, uint[] storage intoArray) internal pure returns(bool) {
+    function itemExistsInArray(uint item, uint[] storage intoArray) internal view returns(bool) {
         for (uint i = 0; i < intoArray.length; i++) {
             if (item == intoArray[i]) return true;
         }
@@ -80,12 +81,11 @@ library Utils {
 
     // Function name has been changed to make sure that positionTerm is properly defined when function is called
     // positionTerm corresponds to the timestamp of the position end date.
-    function getProRataM(uint tradeTimestamp, Position storage position, uint positionTerm) internal view returns(uint64) {
-        uint128 holdingPeriod = uint128(tradeTimestamp - position.startDate);
-        uint128 totalPeriodLength = uint128(positionTerm - position.startDate);
+    function getProRata(uint tradeTimestamp, Position storage position, uint positionTimeSpanInterval) internal view returns(uint64) {
+        uint holdingPeriod = SafeMath.sub(tradeTimestamp, position.startDate);
 
-        if (holdingPeriod > totalPeriodLength) return Math.One_32;
-        return Math.div(holdingPeriod, totalPeriodLength);
+        if (holdingPeriod > positionTimeSpanInterval) return Math.One_32;
+        return uint64((holdingPeriod << 32) / positionTimeSpanInterval);
     }
 
     /// @notice Gets the start date of an XMM
@@ -93,24 +93,10 @@ library Utils {
         return startDate + uint((blockTimestamp - startDate) / updateInterval) * updateInterval;
     }
 
-    /// @notice Reduces the amount of a position
-    function reducePosition(Position storage position, uint128 amount) internal returns(LongShort, uint32, uint128, bool) {
-        if (amount > position.amount) {
-            position.amount = 0;
-            return (position.position, position.positionIndex, position.amount, true);
-        } else {
-            position.amount -= amount;
-            return (position.position, position.positionIndex, amount, false);
-        }
-    }
-
     function removePositionFromArray(uint32 indexOfItemToRemove, Position[] storage positions) internal {
-        if (indexOfItemToRemove == positions.length) {
-            positions.pop();
-        } else {
-            Position storage lastPosition = positions[positions.length - 1];
+        require(indexOfItemToRemove < positions.length, "Bad Index");
+        Position storage lastPosition = positions[positions.length - 1];
             lastPosition.positionIndex = indexOfItemToRemove;
             positions[uint(indexOfItemToRemove)] = lastPosition;
-        }
     }
 }

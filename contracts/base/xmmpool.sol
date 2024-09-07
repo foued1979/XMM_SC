@@ -62,9 +62,9 @@ abstract contract XMMPool is IXMMPool {
     // ----------------------
     uint8 private _decimals;
 
-    uint private _fixingUpdateInterval;
-    uint private _midFixingInterval;
-    uint private _expiryInterval;
+    uint internal _fixingUpdateInterval;
+    uint internal _midFixingInterval;
+    uint internal _expiryInterval;
     uint64 private _expiryYearFraction;
     uint64 private _acrualYF;
 
@@ -379,12 +379,12 @@ abstract contract XMMPool is IXMMPool {
         emit Deposit(msg.sender, block.timestamp, position);
     }
 
-    function applyPenalty(uint128 amount) internal returns(uint128) {
-        uint128 penalty = uint128((uint136(amount) * Penalty) / 1_000_000);
-        return SafeMath.subOr0_128(amount, penalty);
+    /// @notice Returns the penalty amount
+    function applyPenalty(uint128 amount) internal view returns(uint128) {
+        return uint128((uint136(amount) * Penalty) / 1_000_000);
     }
 
-    function computeFactors(uint64 spotAtPeriodStart, uint64 spotAtPeriodEnd, uint64 premiumAtPeriodEnd) private 
+    function computeFactors(uint64 spotAtPeriodStart, uint64 spotAtPeriodEnd, uint64 premiumAtPeriodEnd) private view
     returns(int64[] memory longRateFactors, int64[] memory shortRateFactors) {
         uint64 premiumPerf = Math.mult(premiumAtPeriodEnd, _acrualYF);
         int64 spotPerf = Math.subToSigned(spotAtPeriodEnd, spotAtPeriodStart);
@@ -459,14 +459,14 @@ abstract contract XMMPool is IXMMPool {
         setRatios();
     }
 
-    function getRate(LongShort longShort, Leverage leverage, uint64 proRata, uint fixingIndex0) private view returns(int64) {
+    function getRate(LongShort longShort, Leverage leverage, uint fixingIndex0) internal view returns(int64) {
         uint8 index = uint8(leverage);
         int64 currentIndexValue = longShort == LongShort.Long ? _longRateIndices[index][_fixings.length - 1] : _shortRateIndices[index][_fixings.length - 1];
         int64 initialIndexValue = longShort == LongShort.Long ? _longRateIndices[index][fixingIndex0] : _shortRateIndices[index][fixingIndex0];
-        return Math.multSigned(int64(proRata), Math.subSigned(currentIndexValue, initialIndexValue));
+        return Math.subSigned(currentIndexValue, initialIndexValue);
     }
 
-    function setRatios() private {
+    function setRatios() internal {
         setLongRatios();
         setShortRatios();
     }

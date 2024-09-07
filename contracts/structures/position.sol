@@ -5,7 +5,7 @@ import "../enums.sol";
 
 struct Position {
     uint32 positionIndex;
-    LongShort position;
+    LongShort longShort;
     Leverage leverage;
     uint fixingIndex0;
     uint startDate;
