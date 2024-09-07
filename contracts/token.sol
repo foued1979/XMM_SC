@@ -77,9 +77,9 @@ contract Token is ERC20, Bridgeable, IExchangeable {
         require(to != Owner, "No no");
         require(amount <= AvailableTokens, "Insufficient supply");
 
-        _balances[to] = SafeMath.SafeAdd(_balances[to], amount);
-        AllocatedAmount = SafeMath.SafeAdd(AllocatedAmount, amount);
-        AvailableTokens = SafeMath.SafeSub(AvailableTokens, amount);
+        _balances[to] = SafeMath.add(_balances[to], amount);
+        AllocatedAmount = SafeMath.add(AllocatedAmount, amount);
+        AvailableTokens = SafeMath.sub(AvailableTokens, amount);
 
         emit Allocated(block.timestamp, to, amount);
     }
@@ -89,8 +89,8 @@ contract Token is ERC20, Bridgeable, IExchangeable {
     function burn(uint256 amount) external onlyOwner {
         require(amount <= AvailableTokens, "Burn failed");
 
-        TotalSupply = SafeMath.SafeSub(TotalSupply, amount);
-        AvailableTokens = SafeMath.SafeSub(AvailableTokens, amount);
+        TotalSupply = SafeMath.sub(TotalSupply, amount);
+        AvailableTokens = SafeMath.sub(AvailableTokens, amount);
         
         emit Burnt(block.timestamp, amount);
     }
@@ -169,8 +169,8 @@ contract Token is ERC20, Bridgeable, IExchangeable {
             receiver.transfer(msg.value - amountETH);
         }
         
-        AllocatedAmount = SafeMath.SafeAdd(AllocatedAmount, amountToken);
-        AvailableTokens = SafeMath.SafeAdd(AvailableTokens, amountToken);
+        AllocatedAmount = SafeMath.add(AllocatedAmount, amountToken);
+        AvailableTokens = SafeMath.add(AvailableTokens, amountToken);
 
         emit Deposited(block.timestamp, msg.sender, amountETH, amountToken);
         emit Allocated(block.timestamp, msg.sender, amountToken);
@@ -202,11 +202,11 @@ contract Token is ERC20, Bridgeable, IExchangeable {
             amountToken = uint128((amountETH * uint256(EthExchangeRate)) / uint256(_precision));
         }
         
-        _balances[msg.sender] = SafeMath.SafeSub(_balances[msg.sender], uint256(amountToken));
+        _balances[msg.sender] = SafeMath.sub(_balances[msg.sender], uint256(amountToken));
         payable(msg.sender).transfer(amountETH);
         
-        AllocatedAmount = SafeMath.SafeSub(AllocatedAmount, uint256(amountToken));
-        AvailableTokens = SafeMath.SafeAdd(AvailableTokens, uint256(amountToken));
+        AllocatedAmount = SafeMath.sub(AllocatedAmount, uint256(amountToken));
+        AvailableTokens = SafeMath.add(AvailableTokens, uint256(amountToken));
 
         emit ChangedBack(block.timestamp, msg.sender, amountETH);
         emit Withdrawn(block.timestamp, msg.sender, amountToken);
@@ -232,10 +232,10 @@ contract Token is ERC20, Bridgeable, IExchangeable {
         // We transfer the expected to token to msg.sender
         // Then, we adjust msg.sender's balance
         IERC20(tokenToBeReceived).transfer(msg.sender, amountExpectedToken);
-        _balances[msg.sender] = SafeMath.SafeSub(_balances[msg.sender], uint256(amountToken));
+        _balances[msg.sender] = SafeMath.sub(_balances[msg.sender], uint256(amountToken));
         
-        AllocatedAmount = SafeMath.SafeSub(AllocatedAmount, uint256(amountToken));
-        AvailableTokens = SafeMath.SafeAdd(AvailableTokens, uint256(amountToken));
+        AllocatedAmount = SafeMath.sub(AllocatedAmount, uint256(amountToken));
+        AvailableTokens = SafeMath.add(AvailableTokens, uint256(amountToken));
 
         emit ChangedBackFor(block.timestamp, msg.sender, tokenToBeReceived, amountExpectedToken);
         emit Withdrawn(block.timestamp, msg.sender, amountToken);
@@ -260,10 +260,10 @@ contract Token is ERC20, Bridgeable, IExchangeable {
         }
 
         from.transfer(amountETH);
-        _balances[from] = SafeMath.SafeSub(_balances[from], uint256(amountToken));
+        _balances[from] = SafeMath.sub(_balances[from], uint256(amountToken));
 
-        AllocatedAmount = SafeMath.SafeSub(AllocatedAmount, uint256(amountToken));
-        AvailableTokens = SafeMath.SafeAdd(AvailableTokens, uint256(amountToken));
+        AllocatedAmount = SafeMath.sub(AllocatedAmount, uint256(amountToken));
+        AvailableTokens = SafeMath.add(AvailableTokens, uint256(amountToken));
 
         emit ChangedBack(block.timestamp, from, amountETH);
         emit Withdrawn(block.timestamp, from, amountToken);
@@ -280,10 +280,10 @@ contract Token is ERC20, Bridgeable, IExchangeable {
     function addPendingBridgeIn(address forUser, uint64 fromChainId, uint128 amount) external override onlyOwner {
         require(AvailableTokens >= uint256(amount), "Insufficient balance");
         
-        pendingBridgeInAmountByChain[forUser][fromChainId] = SafeMath.SafeAdd128(pendingBridgeInAmountByChain[forUser][fromChainId], amount);
+        pendingBridgeInAmountByChain[forUser][fromChainId] = SafeMath.add(pendingBridgeInAmountByChain[forUser][fromChainId], amount);
         addUserForBridingIn(forUser);
 
-        AvailableTokens = SafeMath.SafeSub(AvailableTokens, amount);
+        AvailableTokens = SafeMath.sub(AvailableTokens, amount);
     }
 
     /// @notice Cancels a bridge in for a user
@@ -292,7 +292,7 @@ contract Token is ERC20, Bridgeable, IExchangeable {
     function cancelBridgeIn(address forUser, uint64 fromChainId) external override onlyOwner {
         uint256 pendingAmt = uint256(pendingBridgeInAmountByChain[forUser][fromChainId]);
 
-        AvailableTokens = SafeMath.SafeAdd(AvailableTokens, pendingAmt);
+        AvailableTokens = SafeMath.add(AvailableTokens, pendingAmt);
         pendingBridgeInAmountByChain[forUser][fromChainId] = 0;
         
         removePendingChainIdBridgeForUser(forUser, pendingBridgesIn, pendingChainIdBridgesInForUser[forUser], fromChainId);
@@ -304,8 +304,8 @@ contract Token is ERC20, Bridgeable, IExchangeable {
     function requestBridgeOut(uint64 toChainId, uint128 amount) external override isValidChain(toChainId) {
         require(_balances[msg.sender] >= amount, "Insufficient balance");
 
-        pendingBridgeOutAmountByChain[msg.sender][toChainId] = SafeMath.SafeAdd128(pendingBridgeOutAmountByChain[msg.sender][toChainId], amount);
-        _balances[msg.sender] = SafeMath.SafeSub(_balances[msg.sender], uint256(amount));
+        pendingBridgeOutAmountByChain[msg.sender][toChainId] = SafeMath.add128(pendingBridgeOutAmountByChain[msg.sender][toChainId], amount);
+        _balances[msg.sender] = SafeMath.sub(_balances[msg.sender], uint256(amount));
 
         addUserForBridingOut(msg.sender);
         addPendingChainIdBridgeToUser(pendingChainIdBridgesOutForUser[msg.sender], toChainId);
@@ -318,7 +318,7 @@ contract Token is ERC20, Bridgeable, IExchangeable {
     /// @param forChainId The target chain Id to cancel
     function revertBridgeOutRequestForUser(address forUser, uint64 forChainId) external override onlyOwner {
         // We credit back the tokens to the user
-        _balances[msg.sender] = SafeMath.SafeAdd(_balances[msg.sender], uint256(pendingBridgeOutAmountByChain[forUser][forChainId]));
+        _balances[msg.sender] = SafeMath.add(_balances[msg.sender], uint256(pendingBridgeOutAmountByChain[forUser][forChainId]));
         pendingBridgeOutAmountByChain[forUser][forChainId] = 0;
 
         removePendingChainIdBridgeForUser(forUser, pendingBridgesOut, pendingChainIdBridgesOutForUser[forUser], forChainId);
@@ -330,7 +330,7 @@ contract Token is ERC20, Bridgeable, IExchangeable {
     function validateBridgeOut(address forUser, uint64 forChainId) external override onlyOwner {
         // We add the bridge quantity back to the available tokens
         uint128 amt = pendingBridgeOutAmountByChain[forUser][forChainId];
-        AvailableTokens = SafeMath.SafeAdd(AvailableTokens, uint256(amt));
+        AvailableTokens = SafeMath.add(AvailableTokens, uint256(amt));
 
         pendingBridgeOutAmountByChain[forUser][forChainId] = 0;
         removePendingChainIdBridgeForUser(forUser, pendingBridgesOut, pendingChainIdBridgesOutForUser[forUser], forChainId);
@@ -344,8 +344,8 @@ contract Token is ERC20, Bridgeable, IExchangeable {
     function validateBridgeIn(address forUser, uint64 forChainId) external override onlyOwner {
         uint256 amtToCredit = uint256(pendingBridgeInAmountByChain[forUser][forChainId]);
         
-        _balances[forUser] = SafeMath.SafeAdd(_balances[forUser], amtToCredit);
-        AllocatedAmount = SafeMath.SafeAdd(AllocatedAmount, amtToCredit);
+        _balances[forUser] = SafeMath.add(_balances[forUser], amtToCredit);
+        AllocatedAmount = SafeMath.add(AllocatedAmount, amtToCredit);
 
         removePendingChainIdBridgeForUser(forUser, pendingBridgesIn, pendingChainIdBridgesInForUser[forUser], forChainId);
     }
@@ -359,9 +359,9 @@ contract Token is ERC20, Bridgeable, IExchangeable {
     function allocateToOwner(uint256 amount) private {
         require(amount < TotalSupply);
         
-        AllocatedAmount = SafeMath.SafeAdd(AllocatedAmount, amount);
-        _balances[Owner] = SafeMath.SafeAdd(_balances[Owner], amount);
-        AvailableTokens = SafeMath.SafeSub(TotalSupply, amount);
+        AllocatedAmount = SafeMath.add(AllocatedAmount, amount);
+        _balances[Owner] = SafeMath.add(_balances[Owner], amount);
+        AvailableTokens = SafeMath.sub(TotalSupply, amount);
 
         emit Allocated(block.timestamp, Owner, amount);
     }

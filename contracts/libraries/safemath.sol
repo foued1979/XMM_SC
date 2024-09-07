@@ -2,7 +2,11 @@
 pragma solidity >= 0.8.0;
 
 library SafeMath {
-    function SafeAdd128(uint128 a, uint128 b) internal pure returns(uint128 c) {
+    function add(uint a, uint b) internal pure returns(uint c) {
+        require((c = a + b) >= a && c >= b, "Overflow");
+    }
+
+    function add128(uint128 a, uint128 b) internal pure returns(uint128 c) {
         unchecked {
             c = a + b;
             require(c >= a && c >= b, "Overflow");
@@ -10,25 +14,26 @@ library SafeMath {
         }
     }
 
-    function SafeSub128(uint128 a, uint128 b) internal pure returns(uint128 c) {
+    function sub(uint a, uint b) internal pure returns(uint) {
         unchecked {
             require(a >= b, "Overflow");
             return a - b;
         }
     }
 
-    function SafeAdd(uint256 a, uint256 b) internal pure returns(uint256 c) {
-        require((c = a + b) >= a && c >= b, "Overflow");
-    }
-
-    function SafeSub(uint256 a, uint256 b) internal pure returns(uint256 c) {
+    function sub128(uint128 a, uint128 b) internal pure returns(uint128 c) {
         unchecked {
-            require(a >= b, "Overflow");
-            return a - b;
+            require((c = a - b) <= a, "Overflow");
         }
     }
 
-    function SubOr0(uint256 a, uint256 b) internal pure returns(uint256 c) {
+    function subOr0(uint a, uint b) internal pure returns(uint) {
+        unchecked {
+            return a > b ? 0 : a - b;
+        }
+    }
+
+    function subOr0_128(uint128 a, uint128 b) internal pure returns(uint128) {
         unchecked {
             return a > b ? 0 : a - b;
         }

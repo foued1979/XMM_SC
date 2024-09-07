@@ -20,6 +20,9 @@ abstract contract XMMPool is IXMMPool {
      event FixingMissed(uint indexed fixingTimestamp, uint fixingIndex);
      event MissedFixingUpdated(uint indexed timestamp, uint fixingIndex);
 
+     event FeeChanged(uint indexed timestamp, uint8 oldFee, uint8 newFee);
+     event PenaltyChanged(uint indexed timestamp, uint8 oldPenalty, uint8 newPenalty);
+
     /*****************
      * The modifiers *
      *****************/
@@ -33,8 +36,18 @@ abstract contract XMMPool is IXMMPool {
         _;
     }
 
+    modifier hasMinWithdrawal(uint128 amount) {
+        require(amount >= MinWithdrawal, "Min amt");
+        _;
+    }
+
     modifier isActive {
         require(IsActivated, "Not activated");
+        _;
+    }
+
+    modifier isLeveragePossible(Leverage leverage) {
+        require(leverage == Leverage.One || LeverageIsActive, "No Leverage");
         _;
     }
 
@@ -64,12 +77,12 @@ abstract contract XMMPool is IXMMPool {
     Fixing[] internal _fixings;
 
     // Private fields to manage long positions
-    mapping(Leverage => uint64) private _longRatios;
-    mapping(Leverage => int64[]) private _longRateIndices;
+    mapping(uint8 => uint64) private _longRatios;
+    mapping(uint8 => int64[]) private _longRateIndices;
 
     // Private fields to manage short positions
-    mapping(Leverage => uint64) private _shortRatios;
-    mapping(Leverage => int64[]) private _shortRateIndices;
+    mapping(uint8 => uint64) private _shortRatios;
+    mapping(uint8 => int64[]) private _shortRateIndices;
 
     // ---------------------
     // - Public properties -
@@ -80,43 +93,48 @@ abstract contract XMMPool is IXMMPool {
     /// @notice The Term of the XMM
     Terms public Term;
 
+    /// @notice The penalty if position is not held for min accrual period
+    uint8 public Penalty;
+
     /// @notice The minimum deposit size
     uint128 public MinDeposit;
 
+    /// @notice The minimum withdrawal size
+    uint128 public MinWithdrawal;
+
+    /// @notice Gets the leverage status
+    bool public LeverageIsActive;
+
     /// @notice The daily fee charged on the position
     // The fee is expressed in percent of a basis point
-    uint16 public Fee;
+    uint8 public Fee;
 
     /// @notice The total amount of long positions, by leverage index
-    mapping(Leverage => uint128) internal TotalLongPositions;
+    mapping(uint8 => uint128) internal TotalLongPositions;
 
     /// @notice The total amount of short positions, by leverage index
-    mapping(Leverage => uint128) internal  TotalShortPositions;
+    mapping(uint8 => uint128) internal  TotalShortPositions;
     
 
     /*************
      * Functions *
      *************/
-    constructor(address owner, uint8 decimals, Terms term, uint16 fee, uint64 minDeposit) {
+    constructor(address owner, uint8 decimals, Terms term, uint8 fee, uint8 penalty, uint64 minDeposit, uint8 minWithdrawalRatio) {
         Owner = owner;
         IsActivated = false;
         Term = term;
         MinDeposit = uint128(minDeposit) * uint128(10 ** decimals);
+        MinWithdrawal = (MinDeposit * minWithdrawalRatio) / 100;
+        Penalty = penalty;
         Fee = fee;
 
         _decimals = decimals;
-        (_fixingUpdateInterval, _expiryInterval, _expiryYearFraction) = Utils.getTermInformation(term);
-        _midFixingInterval = _fixingUpdateInterval / 2;
+        init(term);
+    }
 
-        _acrualYF = Math.div(uint64(_fixingUpdateInterval) << 32, uint64(_expiryInterval) << 32);
-
-        for (uint8 i = 0; i < 6; i++) {
-            _longRateIndices[i].push(0);
-            _shortRateIndices[i].push(0);
-
-            _longRatios[i] = 0;
-            _shortRatios[i] = 0;
-        }
+    /// @notice Changes the leverage status
+    function changeLeverageStatus(bool status) external onlyOwner {
+        LeverageIsActive = status;
     }
 
     /// @notice Gets the fixings
@@ -135,12 +153,12 @@ abstract contract XMMPool is IXMMPool {
 
     /// @notice Gets the total long and short positions for a given leverage factor
     function getPoolPositions(Leverage leverage) external view returns(uint128 long, uint128 short) {
-        return (TotalLongPositions[leverage], TotalShortPositions[leverage]);
+        return (TotalLongPositions[uint8(leverage)], TotalShortPositions[uint8(leverage)]);
     }
 
     /// @notice Gets the total long and short positions for a given leverage factor
     function getLastIndices(Leverage leverage) external view returns(int64 long, int64 short) {
-        return (_longRateIndices[leverage][_fixings.length - 1], _shortRateIndices[leverage][_fixings.length - 1]);
+        return (_longRateIndices[uint8(leverage)][_fixings.length - 1], _shortRateIndices[uint8(leverage)][_fixings.length - 1]);
     }
 
     /// @notice Returns the indices of the missed fixings, if ever.
@@ -192,7 +210,7 @@ abstract contract XMMPool is IXMMPool {
         if (_fixings.length > 0) return;
 
         // The start date is the 1st timestamp
-        StartDate = Utils.getTimeStamp(block.timestamp, 0, Utils._fixingUpdateInterval);
+        StartDate = Utils.getTimeStamp(block.timestamp, 0, _fixingUpdateInterval);
         
         // We can update only from 5 minutes before the first fixing time
         require(block.timestamp - StartDate <= 300, "Not sync");
@@ -237,7 +255,7 @@ abstract contract XMMPool is IXMMPool {
 
             // We add temporary fixings for the missed fixings, excluding the last fixing
             // The missed fixings can be manually updated later
-            addTemporaryMissingFixings(lastFixing.spot, lastFixing.premium, lastFixing.timestamp, nextFixingTimestamp);
+            addTemporaryMissingFixings(lastFixing.spot, lastFixing.timestamp, nextFixingTimestamp);
         }
 
         Fixing memory fixing = Fixing(nextFixingTimestamp, spot, strike, volatility, optionPremium);
@@ -246,22 +264,33 @@ abstract contract XMMPool is IXMMPool {
         _fixings.push(fixing);
         return true;
     }
+
+    /// @notice Sets the new Fee for the pool
+    function setNewFee(uint8 newFee) external onlyOwner {
+        emit FeeChanged(block.timestamp, Fee, newFee);
+        Fee = newFee;
+    }
+
+    /// @notice Sets the new Penalty for the pool
+    function setNewPenalty(uint8 newPenalty) external onlyOwner {
+        emit PenaltyChanged(block.timestamp, Penalty, newPenalty);
+        Penalty = newPenalty;
+    }
     
     function addTemporaryMissingFixings(uint64 lastSpot, uint lastFixingTimestamp, uint nextFixingTimestamp) private {
         uint lastFixingIndex = _fixings.length - 1;
         uint numberOfMissedFixings = uint((nextFixingTimestamp - lastFixingTimestamp) / _fixingUpdateInterval) - 1;
 
         // No margin call will be executed since spot perf is 0
-            int64 longRateFactor = _longRateIndex[_longRateIndex.length - 1];
-            int64 shortRateFactor = _shortRateIndex[_shortRateIndex.length - 1];
-
         for (uint i = 0; i < numberOfMissedFixings; i++) {
             lastFixingTimestamp += _fixingUpdateInterval;
 
             Fixing memory fixing = Fixing(lastFixingTimestamp, lastSpot, 0, 0, 0);
 
-            _longRateIndex.push(longRateFactor);
-            _shortRateIndex.push(shortRateFactor);
+            for (uint8 l = 0; l < 6; ++l) {
+                _longRateIndices[l].push(_longRateIndices[l][_longRateIndices[l].length - 1]);
+                _shortRateIndices[l].push(_shortRateIndices[l][_shortRateIndices[l].length - 1]);
+            }
 
             _fixings.push(fixing);
 
@@ -308,28 +337,75 @@ abstract contract XMMPool is IXMMPool {
         emit MissedFixingUpdated(block.timestamp, missedFixingIndex);
     }
 
+    function getExistingPosition(address user, uint fixingIndex, Leverage leverage) internal view returns(bool, uint32) {
+        Position[] storage positions = _positions[user];
+
+        for (uint32 i = 0; i < positions.length; i++) {
+            Position storage position = positions[i];
+            if (position.leverage == leverage && position.fixingIndex0 == fixingIndex) return (true, i);
+        }
+
+        return (false, uint32(positions.length));
+    }
+
+    function writeDeposit(address user, uint lastFixingIndex, LongShort longShort, uint128 amount, Leverage leverage) internal {
+        uint timestamp = Utils.getTimeStamp(block.timestamp, _fixings[lastFixingIndex].timestamp, _fixingUpdateInterval);
+
+        // If position is opened after mid update interval, the next fixing is used
+        if (block.timestamp > timestamp + _midFixingInterval) {
+            timestamp += _fixingUpdateInterval;
+            lastFixingIndex++;
+        }
+
+        (bool hasPosition, uint32 positionIndex) = getExistingPosition(user, lastFixingIndex, leverage);
+        Position memory position;
+
+        if (hasPosition) {
+            position = _positions[user][positionIndex];
+        } else {
+            position = Position(positionIndex, longShort, leverage, lastFixingIndex, timestamp, timestamp + _expiryInterval, amount);
+        }
+
+        _positions[user].push(position);
+                
+        if (longShort == LongShort.Long) {
+            TotalLongPositions[uint8(leverage)] = SafeMath.add128(TotalLongPositions[uint8(leverage)], amount);
+        } else {
+            TotalShortPositions[uint8(leverage)] = SafeMath.add128(TotalShortPositions[uint8(leverage)], amount);
+        }
+
+        setRatios();
+
+        emit Deposit(msg.sender, block.timestamp, position);
+    }
+
+    function applyPenalty(uint128 amount) internal returns(uint128) {
+        uint128 penalty = uint128((uint136(amount) * Penalty) / 1_000_000);
+        return SafeMath.subOr0_128(amount, penalty);
+    }
+
     function computeFactors(uint64 spotAtPeriodStart, uint64 spotAtPeriodEnd, uint64 premiumAtPeriodEnd) private 
     returns(int64[] memory longRateFactors, int64[] memory shortRateFactors) {
         uint64 premiumPerf = Math.mult(premiumAtPeriodEnd, _acrualYF);
-        int64 spotPerf = Math.subSigned(spotAtPeriodEnd, spotAtPeriodStart);
+        int64 spotPerf = Math.subToSigned(spotAtPeriodEnd, spotAtPeriodStart);
 
         longRateFactors = new int64[](6);
         shortRateFactors = new int64[](6);
 
-        if (spotPerf == 0) return (0, 0);
+        if (spotPerf == 0) return (longRateFactors, shortRateFactors);
 
         // If spot went up, the Short positions pay the Long positions
         if (spotPerf > 0) {
             for (uint8 i = 0; i < 6; i++) {
-                longRateFactors[i] = Math.multSigned(Utils.getLeverageFactor(i), Math.mult(_longRatios[i], premiumPerf));
-                shortRateFactors[i] = Math.multSigned(Utils.getLeverageFactor(i), -premiumPerf);
+                longRateFactors[i] = Math.multSigned(Utils.getLeverageFactor(i), int64(Math.mult(_longRatios[i], premiumPerf)));
+                shortRateFactors[i] = Math.multSigned(Utils.getLeverageFactor(i), -int64(premiumPerf));
             }
             
         // Else, Long positions pay Short positions
         } else {
             for (uint8 i = 0; i < 6; i++) {
-                longRateFactors[i] = Math.multSigned(Utils.getLeverageFactor(i), -premiumPerf);
-                shortRateFactors[i] = Math.multSigned(Utils.getLeverageFactor(i), Math.mult(_shortRatios[i], premiumPerf));
+                longRateFactors[i] = Math.multSigned(Utils.getLeverageFactor(i), -int64(premiumPerf));
+                shortRateFactors[i] = Math.multSigned(Utils.getLeverageFactor(i), int64(Math.mult(_shortRatios[i], premiumPerf)));
             }
         }
 
@@ -351,45 +427,42 @@ abstract contract XMMPool is IXMMPool {
         for (uint8 i = 0; i < 6; i++) {
             // If longRateFactor is negative, long pays short
             // longRateFactor is equal to the premium accrual
-            if (longRateFactors[i] < 0)  { transferLongToShort(uint64(-longRateFactors[i])); }
+            if (longRateFactors[i] < 0)  { transferLongToShort(i, uint64(-longRateFactors[i])); }
             // else, shortRateFactor is negative and equal to the accrued premium
-            else { transferShortToLong(uint64(-shortRateFactors[i])); }
+            else { transferShortToLong(i, uint64(-shortRateFactors[i])); }
         }
     }
 
-    function transferShortToLong(uint64 netPerf) private {
+    function transferShortToLong(uint8 index, uint64 netPerf) private {
         if (netPerf == 0) return;
 
-        for (uint8 i = 0; i < 6; i++) {
-            uint256 totalShort = uint256(TotalShortPositions[i]);
-            if (totalShort == 0 || TotalLongPositions[i] == 0) continue;
+        uint256 totalShort = uint256(TotalShortPositions[index]);
+        if (totalShort == 0 || TotalLongPositions[index] == 0) return;
 
-            uint128 transferAmt = uint128((totalShort * netPerf) >> 32);
-            TotalShortPositions[i] = SafeMath.SafeSub128(TotalShortPositions[i], transferAmt);
-            TotalLongPositions[i] = SafeMath.SafeAdd128(TotalLongPositions[i], transferAmt);
-        }
+        uint128 transferAmt = uint128((totalShort * netPerf) >> 32);
+        TotalShortPositions[index] = SafeMath.sub128(TotalShortPositions[index], transferAmt);
+        TotalLongPositions[index] = SafeMath.add128(TotalLongPositions[index], transferAmt);
 
         setRatios();
     }
 
-    function transferLongToShort(uint64 netPerf) private {
+    function transferLongToShort(uint8 index, uint64 netPerf) private {
         if (netPerf == 0) return;
 
-        for (uint8 i = 0; i < 6; i++) {
-            uint256 totalLong = uint256(TotalLongPositions[i]);
-            if (totalLong == 0 || TotalShortPositions[i] == 0) continue;
+        uint256 totalLong = uint256(TotalLongPositions[index]);
+        if (totalLong == 0 || TotalShortPositions[index] == 0) return;
 
-            uint128 transferAmt = uint128((totalLong * netPerf) >> 32);
-            TotalLongPositions[i] = SafeMath.SafeSub128(TotalLongPositions[i], transferAmt);
-            TotalShortPositions[i] = SafeMath.SafeAdd128(TotalShortPositions[i], transferAmt);
-        }
+        uint128 transferAmt = uint128((totalLong * netPerf) >> 32);
+        TotalLongPositions[index] = SafeMath.sub128(TotalLongPositions[index], transferAmt);
+        TotalShortPositions[index] = SafeMath.add128(TotalShortPositions[index], transferAmt);
 
         setRatios();
     }
 
     function getRate(LongShort longShort, Leverage leverage, uint64 proRata, uint fixingIndex0) private view returns(int64) {
-        int64 currentIndexValue = longShort == LongShort.Long ? _longRateIndices[leverage][_fixings.length - 1] : _shortRateIndices[leverage][_fixings.length - 1];
-        int64 initialIndexValue = longShort == LongShort.Long ? _longRateIndices[leverage][fixingIndex0] : _shortRateIndices[leverage][fixingIndex0];
+        uint8 index = uint8(leverage);
+        int64 currentIndexValue = longShort == LongShort.Long ? _longRateIndices[index][_fixings.length - 1] : _shortRateIndices[index][_fixings.length - 1];
+        int64 initialIndexValue = longShort == LongShort.Long ? _longRateIndices[index][fixingIndex0] : _shortRateIndices[index][fixingIndex0];
         return Math.multSigned(int64(proRata), Math.subSigned(currentIndexValue, initialIndexValue));
     }
 
@@ -421,6 +494,21 @@ abstract contract XMMPool is IXMMPool {
                 uint160 long = uint160(TotalLongPositions[i]) << 32;
                 _shortRatios[i] = uint64(long / totalShort);
             }
+        }
+    }
+
+    function init(Terms term) private {
+        (_fixingUpdateInterval, _expiryInterval, _expiryYearFraction) = Utils.getTermInformation(term);
+        _midFixingInterval = _fixingUpdateInterval >> 1;
+
+        _acrualYF = Math.div(uint64(_fixingUpdateInterval) << 32, uint64(_expiryInterval) << 32);
+
+        for (uint8 i = 0; i < 6; i++) {
+            _longRateIndices[i].push(0);
+            _shortRateIndices[i].push(0);
+
+            _longRatios[i] = 0;
+            _shortRatios[i] = 0;
         }
     }
 }

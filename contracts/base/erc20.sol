@@ -55,8 +55,8 @@ contract ERC20 is IERC20 {
         require (to != address(this), "Transfer err");
         if (_balances[msg.sender] < amount) return false;
         
-        _balances[msg.sender] = SafeMath.SafeSub(_balances[msg.sender], amount);
-        _balances[to] = SafeMath.SafeAdd(_balances[to], amount);
+        _balances[msg.sender] = SafeMath.sub(_balances[msg.sender], amount);
+        _balances[to] = SafeMath.add(_balances[to], amount);
         
         emit Transfer(msg.sender, to, amount);
         return true;
@@ -87,11 +87,11 @@ contract ERC20 is IERC20 {
         require(_allowances[from][msg.sender] >= amount, "Insufficient allowance");
         require(_balances[from] >= amount, "Insufficient funds");
         
-        _balances[from] = SafeMath.SafeSub(_balances[from], amount);
-        _balances[to] = SafeMath.SafeAdd(_balances[to], amount);
+        _balances[from] = SafeMath.sub(_balances[from], amount);
+        _balances[to] = SafeMath.add(_balances[to], amount);
 
         emit Transfer(from, to, amount);
-        _allowances[from][msg.sender] = SafeMath.SubOr0(_allowances[from][msg.sender], amount);
+        _allowances[from][msg.sender] = SafeMath.subOr0(_allowances[from][msg.sender], amount);
 
         return true;
     }

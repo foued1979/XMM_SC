@@ -63,10 +63,17 @@ library Math {
     }
   }
 
+  function sub(uint x, uint y) internal pure returns (uint) {
+    unchecked {
+      require (x > y);
+      return x - y;
+    }
+  }
+
   /**
   * @notice Calculates x - y.
   */
-  function subSigned(uint64 x, uint64 y) internal pure returns (int64) {
+  function subToSigned(uint64 x, uint64 y) internal pure returns (int64) {
     unchecked {
       int128 res = int128(uint128(x)) - int128(uint128(y));
       require (res >= MIN_32x32 && res <= MAX_32x32, "Overflow");
@@ -74,7 +81,26 @@ library Math {
     }
   }
 
+  function subSigned(int64 x, int64 y) internal pure returns (int64) {
+    unchecked {
+      int128 res = int128(x) - int128(y);
+      require (res >= MIN_32x32 && res <= MAX_32x32, "Overflow");
+      return int64(res);
+    }
+  }
+
+  /// @notice Returns the absolute value of the difference
   function absSub(uint64 x, uint64 y) internal pure returns (uint64) {
+    unchecked {
+      if (x > y) {
+        return x - y;
+      } else {
+        return y - x;
+      }
+    }
+  }
+
+  function absSub(uint x, uint y) internal pure returns (uint) {
     unchecked {
       if (x > y) {
         return x - y;
