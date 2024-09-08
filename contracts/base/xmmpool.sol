@@ -206,6 +206,7 @@ abstract contract XMMPool is IXMMPool {
     function reducePosition(uint32 positionIndex, uint128 amount) public virtual;
 
     /// @notice Sets the first fixing and activates the pool
+    // From IXMMPool
     function setFirstFixing(uint64 spot, uint64 strike, uint64 volatility, uint64 optionPremium) external onlyOwner {
         if (_fixings.length > 0) return;
 
@@ -222,6 +223,7 @@ abstract contract XMMPool is IXMMPool {
     }
 
     /// @notice Sets the latest fixing for the XMM
+    // From IXMMPool
     function setFixing(uint64 spot, uint64 strike, uint64 volatility, uint64 optionPremium) external onlyOwner returns(bool) {
         Fixing storage lastFixing = _fixings[_fixings.length - 1];
         uint nextFixingTimestamp = Utils.getTimeStamp(block.timestamp, lastFixing.timestamp, _fixingUpdateInterval);

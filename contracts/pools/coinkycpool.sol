@@ -17,7 +17,8 @@ contract CoinKYCPool is XMMPool, IKYC {
     // The list of KYCed user
     mapping (address => bool) _isKYCed;
 
-    constructor(address token, address owner, uint8 decimals, Terms term, uint64 minDeposit) XMMPool(owner, decimals, term, mindeposit) {
+    constructor(address token, address owner, uint8 decimals, Terms term, uint8 fee, uint8 penalty, uint64 minDeposit, uint8 minWithdrawalRatio)
+    XMMPool(owner, decimals, term, fee, penalty, minDeposit, minWithdrawalRatio) {
         Token = token;
     }
 
@@ -30,7 +31,8 @@ contract CoinKYCPool is XMMPool, IKYC {
     /// @notice Executes a deposit to the XMM from msg.sender
     /// @param longShort 0 if long 1 if short
     /// @param amount The amount to be deposited
-    function deposit(LongShort longShort, uint128 amount) external isActive isKYCed hasMinDeposit(amount) {
+    /// @param leverage The level of leverage (x1, x2, x3, x5, x7 or x10), if leverage is authorized
+    function deposit(LongShort longShort, uint128 amount, Leverage leverage) external isActive isKYCed isLeveragePossible(leverage) hasMinDeposit(amount) {
         (bool success, bytes memory res) = Token.call(abi.encodeWithSelector(IERC20.balanceOf.selector, msg.sender));
         require(success, "Call err");
 
@@ -44,31 +46,14 @@ contract CoinKYCPool is XMMPool, IKYC {
 
             require(allowance >= amount, "Insufficient allowance");
 
+            uint128 fee = uint128((uint136(amount) * Fee) / 1_000_000);
+            uint128 netAmt = SafeMath.sub128(amount, fee);
+
             (success, res) = Token.call(abi.encodeWithSelector(IERC20.transferFrom.selector, msg.sender, address(this), uint256(amount)));
 
             if (success && abi.decode(res, (bool))) {
-                uint lastFixingIndex = Fixings.length;
-                uint32 positionIndex = uint32(_positions[msg.sender].length);
-                uint timestamp = Fixings[lastFixingIndex].timestamp;
-
-                // If position is opened after mid update interval, the next fixing is used
-                if (block.timestamp > timestamp + _midFixingInterval) {
-                    timestamp += _fixingUpdateInterval;
-                    lastFixingIndex++;
-                }
-
-                Position memory position = Position(positionIndex, longShort, lastFixingIndex, timestamp, timestamp + _expiryInterval, amount);
-                _positions[msg.sender].push(position);
-                
-                if (longShort == LongShort.Long) {
-                    TotalLongPositions = SafeMath.SafeAdd128(TotalLongPositions, amount);
-                } else {
-                    TotalShortPositions = SafeMath.SafeAdd128(TotalShortPositions, amount);
-                }
-
-                getRatios();
-
-                emit Deposit(msg.sender, block.timestamp, position);
+                writeDeposit(msg.sender, _fixings.length - 1, longShort, netAmt, leverage);
+                (success, res) = Token.call(abi.encodeWithSelector(IERC20.transfer.selector, Owner, uint256(fee)));
             }
         }
     }
@@ -80,28 +65,44 @@ contract CoinKYCPool is XMMPool, IKYC {
     function reducePosition(uint32 positionIndex, uint128 amount) public override {
         if (_positions[msg.sender].length > positionIndex) {
             Position storage position = _positions[msg.sender][positionIndex];
-            if (position.startDate > block.timestamp) Penalty
-            else if (block.timestamp < position.expiry) Another Penalty
 
-            (LongShort ls, uint32 index, uint128 finalAmount, bool toDelete) = Utils.reducePosition(position, amount);
+            if (amount > position.amount) amount = position.amount;
+            uint128 penalty;
 
-            int64 proRata = Utils.getProRata(Utils.getTimeStamp(block.timestamp, StartDate, _fixingUpdateInterval), position, _expiryInterval);
-            int64 rate = getRate(ls, proRata, position.index0);
+            // If position is offset before expected term, a penalty applies
+            // The penalty amount will remain in pool liquidity
+            if (position.startDate > block.timestamp || block.timestamp < position.expiry) penalty = applyPenalty(amount);
 
-            if (ls == LongShort.Long) {
-                TotalLongPositions = SafeMath.SafeSub128(TotalLongPositions, finalAmount);
+            int64 rate = getRate(position.longShort, position.leverage, position.fixingIndex0);
+
+            // If rate is positive, only a pro-rata interest is paid
+            // If rate is negative, msg.sender shall pay the full amount due
+            if (rate > 0) {
+                uint64 proRata = Utils.getProRata(Utils.getTimeStamp(block.timestamp, StartDate, _fixingUpdateInterval), position, _expiryInterval);
+                rate = Math.multSigned(int64(proRata), rate);
+            }            
+
+            if (position.longShort == LongShort.Long) {
+                TotalLongPositions[uint8(position.leverage)] = SafeMath.sub128(TotalLongPositions[uint8(position.leverage)], amount);
             } else {
-                TotalShortPositions = SafeMath.SafeSub128(TotalShortPositions, finalAmount);
+                TotalShortPositions[uint8(position.leverage)] = SafeMath.sub128(TotalShortPositions[uint8(position.leverage)], amount);
             }
 
-            getRatios();
+            setRatios();
 
-            if (toDelete) Utils.removePositionFromArray(index, _positions[msg.sender]);
+            if (position.amount <= amount) Utils.removePositionFromArray(positionIndex, _positions[msg.sender]);
 
-            finalAmount = uint128(int128(((int256(int128(finalAmount)) << 32) * rate) >> 32));
-            (bool success, ) = Token.call(abi.encodeWithSelector(IERC20.transfer.selector, msg.sender, finalAmount));
+            // Interest is computed on the whole amount
+            int128 interest = int128((int160(uint160(amount)) * rate) >> 32);
+            // We remove the penalty
+            uint128 totalTransfer = SafeMath.sub128(amount, penalty);
+            // We charge or we pay the interest
+            if (rate < 0) totalTransfer = SafeMath.subOr0_128(totalTransfer, uint128(-interest));
+            else totalTransfer = SafeMath.add128(totalTransfer, uint128(interest));
 
-            if (success) emit PositionReduced(msg.sender, block.timestamp, finalAmount);
+            (bool success, ) = Token.call(abi.encodeWithSelector(IERC20.transfer.selector, msg.sender, uint256(totalTransfer)));
+
+            if (success) emit PositionReduced(msg.sender, block.timestamp, totalTransfer);
         }
     }
 }

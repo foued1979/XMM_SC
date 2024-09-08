@@ -17,6 +17,7 @@ contract CoinPool is XMMPool {
     /// @notice Executes a deposit to the XMM from msg.sender
     /// @param longShort 0 if long 1 if short
     /// @param amount The amount to be deposited
+    /// @param leverage The level of leverage (x1, x2, x3, x5, x7 or x10), if leverage is authorized
     function deposit(LongShort longShort, uint128 amount, Leverage leverage) external isActive isLeveragePossible(leverage) hasMinDeposit(amount) {
         (bool success, bytes memory res) = Token.call(abi.encodeWithSelector(IERC20.balanceOf.selector, msg.sender));
         require(success, "Call err");
@@ -32,13 +33,13 @@ contract CoinPool is XMMPool {
             require(allowance >= amount, "Insufficient allowance");
 
             uint128 fee = uint128((uint136(amount) * Fee) / 1_000_000);
-            amount -= fee;
+            uint128 netAmt = SafeMath.sub128(amount, fee);
 
             (success, res) = Token.call(abi.encodeWithSelector(IERC20.transferFrom.selector, msg.sender, address(this), uint256(amount)));
 
             if (success && abi.decode(res, (bool))) {
-                writeDeposit(msg.sender, _fixings.length - 1, longShort, amount, leverage);
-                (success, res) = Token.call(abi.encodeWithSelector(IERC20.transferFrom.selector, msg.sender, address(Owner), uint256(fee)));
+                writeDeposit(msg.sender, _fixings.length - 1, longShort, netAmt, leverage);
+                (success, res) = Token.call(abi.encodeWithSelector(IERC20.transfer.selector, Owner, uint256(fee)));
             }
         }
     }

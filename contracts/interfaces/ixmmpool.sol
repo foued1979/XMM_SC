@@ -8,5 +8,5 @@ interface IXMMPool {
     function setFirstFixing(uint64 spot, uint64 strike, uint64 volatility, uint64 optionPremium) external;
 
     /// @notice Sets the fixing
-    function setFixing(uint64 spot, uint64 strike, uint64 volatility, uint64 optionPremium) external;
+    function setFixing(uint64 spot, uint64 strike, uint64 volatility, uint64 optionPremium) external returns(bool);
 }
