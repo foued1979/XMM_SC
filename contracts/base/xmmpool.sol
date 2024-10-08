@@ -19,6 +19,7 @@ abstract contract XMMPool is IXMMPool {
      event PositionReduced(address indexed from, uint indexed timestamp, uint128 amount);
      event FixingMissed(uint indexed fixingTimestamp, uint fixingIndex);
      event MissedFixingUpdated(uint indexed timestamp, uint fixingIndex);
+     event UpdateFrequencyChanged(uint indexed timestamp, uint fixingIndex, uint newFrequency);
 
      event FeeChanged(uint indexed timestamp, uint8 oldFee, uint8 newFee);
      event PenaltyChanged(uint indexed timestamp, uint8 oldPenalty, uint8 newPenalty);
@@ -62,12 +63,13 @@ abstract contract XMMPool is IXMMPool {
     // ----------------------
     uint8 private _decimals;
 
-    uint internal _fixingUpdateInterval;
-    uint internal _midFixingInterval;
+    uint internal _currentFixingUpdateInterval;
+    uint internal _currentMidFixingInterval;
+    uint64 private _currentAccrualYF;
+
     uint internal _expiryInterval;
     uint64 private _expiryYearFraction;
-    uint64 private _acrualYF;
-
+    
     uint[] private _missedFixingsIndices;
 
     // The positions by depositors
@@ -75,6 +77,12 @@ abstract contract XMMPool is IXMMPool {
 
     // The list of fixings
     Fixing[] internal _fixings;
+
+    // Fixing Frequency Changes
+    uint[] internal _fixingIndexOfFreqUpdate;
+    uint[] internal _fixingUpdateIntervals;
+    uint[] internal _midFixingUpdateIntervals;
+    uint64[] private _accrualYFs;
 
     // Private fields to manage long positions
     mapping(uint8 => uint64) private _longRatios;
@@ -173,6 +181,32 @@ abstract contract XMMPool is IXMMPool {
         emit OwnerChanged(block.timestamp, msg.sender, newOwner);
     }
 
+    /// @notice Updates the update interval for the fixings
+    function changeUpdateInterval(UpdateIntervals updateInterval) external onlyOwner {
+        if (updateInterval == UpdateIntervals.OneMin) _currentFixingUpdateInterval = Utils.ONE_MINUTE_UPDATE_INTERVAL;
+        else if (updateInterval == UpdateIntervals.TwoMin) _currentFixingUpdateInterval = Utils.TWO_MINUTES_UPDATE_INTERVAL;
+        else if (updateInterval == UpdateIntervals.ThreeMin) _currentFixingUpdateInterval = Utils.THREE_MINUTES_UPDATE_INTERVAL;
+        else if (updateInterval == UpdateIntervals.FiveMin) _currentFixingUpdateInterval = Utils.FIVE_MINUTES_UPDATE_INTERVAL;
+        else if (updateInterval == UpdateIntervals.TenMin) _currentFixingUpdateInterval = Utils.TEN_MINUTES_UPDATE_INTERVAL;
+        else if (updateInterval == UpdateIntervals.FifteenMin) _currentFixingUpdateInterval = Utils.FIFTEEN_MINUTES_UPDATE_INTERVAL;
+        else if (updateInterval == UpdateIntervals.TwentyMin) _currentFixingUpdateInterval = Utils.TWENTY_MINUTES_UPDATE_INTERVAL;
+        else if (updateInterval == UpdateIntervals.ThirtyMin) _currentFixingUpdateInterval = Utils.THIRTY_MINUTES_UPDATE_INTERVAL;
+        else if (updateInterval == UpdateIntervals.OneH) _currentFixingUpdateInterval = Utils.ONE_HOUR_UPDATE_INTERVAL;
+        else if (updateInterval == UpdateIntervals.TwoH) _currentFixingUpdateInterval = Utils.TWO_HOURS_UPDATE_INTERVAL;
+        else if (updateInterval == UpdateIntervals.ThreeH) _currentFixingUpdateInterval = Utils.THREE_HOURS_UPDATE_INTERVAL;
+        else if (updateInterval == UpdateIntervals.FourH) _currentFixingUpdateInterval = Utils.FOUR_HOURS_UPDATE_INTERVAL;
+        
+        _fixingIndexOfFreqUpdate.push(_fixings.length);
+        _currentMidFixingInterval = _currentFixingUpdateInterval >> 1;
+        _currentAccrualYF = Utils.getAccrualYF(_currentFixingUpdateInterval, _expiryInterval);
+
+        _fixingUpdateIntervals.push(_currentFixingUpdateInterval);
+        _midFixingUpdateIntervals.push(_currentMidFixingInterval);
+        _accrualYFs.push(_currentAccrualYF);
+
+        emit UpdateFrequencyChanged(block.timestamp, _fixings.length, _currentFixingUpdateInterval);
+    }
+
     /// @notice Closes all the positions held by a user.
     function closeAllPositions() external {
         if (_positions[msg.sender].length > 0) {
@@ -211,7 +245,7 @@ abstract contract XMMPool is IXMMPool {
         if (_fixings.length > 0) return;
 
         // The start date is the 1st timestamp
-        StartDate = Utils.getTimeStamp(block.timestamp, 0, _fixingUpdateInterval);
+        StartDate = Utils.getTimeStamp(block.timestamp, 0, _currentFixingUpdateInterval);
         
         // We can update only from 5 minutes before the first fixing time
         require(block.timestamp - StartDate <= 300, "Not sync");
@@ -226,24 +260,28 @@ abstract contract XMMPool is IXMMPool {
     // From IXMMPool
     function setFixing(uint64 spot, uint64 strike, uint64 volatility, uint64 optionPremium) external onlyOwner returns(bool) {
         Fixing storage lastFixing = _fixings[_fixings.length - 1];
-        uint nextFixingTimestamp = Utils.getTimeStamp(block.timestamp, lastFixing.timestamp, _fixingUpdateInterval);
+        uint nextFixingTimestamp = Utils.getTimeStamp(block.timestamp, lastFixing.timestamp, _currentFixingUpdateInterval);
 
         uint threshold = 0;
-            // If the update interval is less than or equal to 5 min, the threshold is 1 min
-            if (_fixingUpdateInterval <= Utils.FIVE_MINUTES_UPDATE_INTERVAL) threshold = 60;
-            // Else if update interval is less than or equal to 15 min, the threshold is 2 min
-            else if (_fixingUpdateInterval <= Utils.FIFTEEN_MINUTES_UPDATE_INTERVAL) threshold = 120;
-            // Otherwise the threshold is 3 min
-            else threshold = 180;
+        // If the update interval is less than or equal to 2 min, the threshold is 15s
+        if (_currentFixingUpdateInterval <= Utils.TWO_MINUTES_UPDATE_INTERVAL) threshold = 15;
+        // If the update interval is equal to 3 min, the threshold is 30s
+        else if (_currentFixingUpdateInterval == Utils.THREE_MINUTES_UPDATE_INTERVAL) threshold = 30;
+        // If the update interval is equal to 5 min, the threshold is 1 min
+        else if (_currentFixingUpdateInterval == Utils.FIVE_MINUTES_UPDATE_INTERVAL) threshold = 60;
+        // Else if update interval is less than or equal to 15 min, the threshold is 2 min
+        else if (_currentFixingUpdateInterval <= Utils.FIFTEEN_MINUTES_UPDATE_INTERVAL) threshold = 120;
+        // Otherwise the threshold is 3 min
+        else threshold = 180;
         
         if (nextFixingTimestamp == lastFixing.timestamp) {
             // If the update is done within the threshold, we update the fixing
-            if (Math.sub(nextFixingTimestamp + _fixingUpdateInterval, block.timestamp) <= threshold) {
-                nextFixingTimestamp += _fixingUpdateInterval;
+            if (Math.sub(nextFixingTimestamp + _currentFixingUpdateInterval, block.timestamp) <= threshold) {
+                nextFixingTimestamp += _currentFixingUpdateInterval;
             // Otherwise, we are too early to update the fixing
             } else return false;
         }
-        else if (nextFixingTimestamp == lastFixing.timestamp + _fixingUpdateInterval) {
+        else if (nextFixingTimestamp == lastFixing.timestamp + _currentFixingUpdateInterval) {
             // If the update is done after the threshold, the fixing is missed
             if (Math.sub(block.timestamp, nextFixingTimestamp) > threshold) return false;
         }
@@ -251,7 +289,7 @@ abstract contract XMMPool is IXMMPool {
         // with last know spot value, and we will update the missing fixings later.
         else {
             // If we are threshold minutes before the next update, we adjust the next fixing timestamp
-            if (Math.absSub(nextFixingTimestamp + _fixingUpdateInterval, block.timestamp) <= threshold) nextFixingTimestamp += _fixingUpdateInterval;
+            if (Math.absSub(nextFixingTimestamp + _currentFixingUpdateInterval, block.timestamp) <= threshold) nextFixingTimestamp += _currentFixingUpdateInterval;
             // However if we are outside the threshold, above or below the next fixing timestamp, then the fixing is missed
             else if (Math.absSub(block.timestamp, nextFixingTimestamp) > threshold) return false;
 
@@ -281,11 +319,11 @@ abstract contract XMMPool is IXMMPool {
     
     function addTemporaryMissingFixings(uint64 lastSpot, uint lastFixingTimestamp, uint nextFixingTimestamp) private {
         uint lastFixingIndex = _fixings.length - 1;
-        uint numberOfMissedFixings = uint((nextFixingTimestamp - lastFixingTimestamp) / _fixingUpdateInterval) - 1;
+        uint numberOfMissedFixings = uint((nextFixingTimestamp - lastFixingTimestamp) / _currentFixingUpdateInterval) - 1;
 
         // No margin call will be executed since spot perf is 0
         for (uint i = 0; i < numberOfMissedFixings; i++) {
-            lastFixingTimestamp += _fixingUpdateInterval;
+            lastFixingTimestamp += _currentFixingUpdateInterval;
 
             Fixing memory fixing = Fixing(lastFixingTimestamp, lastSpot, 0, 0, 0);
 
@@ -351,11 +389,11 @@ abstract contract XMMPool is IXMMPool {
     }
 
     function writeDeposit(address user, uint lastFixingIndex, LongShort longShort, uint128 amount, Leverage leverage) internal {
-        uint timestamp = Utils.getTimeStamp(block.timestamp, _fixings[lastFixingIndex].timestamp, _fixingUpdateInterval);
+        uint timestamp = Utils.getTimeStamp(block.timestamp, _fixings[lastFixingIndex].timestamp, _currentFixingUpdateInterval);
 
         // If position is opened after mid update interval, the next fixing is used
-        if (block.timestamp > timestamp + _midFixingInterval) {
-            timestamp += _fixingUpdateInterval;
+        if (block.timestamp > timestamp + _currentMidFixingInterval) {
+            timestamp += _currentFixingUpdateInterval;
             lastFixingIndex++;
         }
 
@@ -388,7 +426,7 @@ abstract contract XMMPool is IXMMPool {
 
     function computeFactors(uint64 spotAtPeriodStart, uint64 spotAtPeriodEnd, uint64 premiumAtPeriodEnd) private view
     returns(int64[] memory longRateFactors, int64[] memory shortRateFactors) {
-        uint64 premiumPerf = Math.mult(premiumAtPeriodEnd, _acrualYF);
+        uint64 premiumPerf = Math.mult(premiumAtPeriodEnd, _currentAccrualYF);
         int64 spotPerf = Math.subToSigned(spotAtPeriodEnd, spotAtPeriodStart);
 
         longRateFactors = new int64[](6);
@@ -500,10 +538,16 @@ abstract contract XMMPool is IXMMPool {
     }
 
     function init(Terms term) private {
-        (_fixingUpdateInterval, _expiryInterval, _expiryYearFraction) = Utils.getTermInformation(term);
-        _midFixingInterval = _fixingUpdateInterval >> 1;
+        (_currentFixingUpdateInterval, _expiryInterval, _expiryYearFraction) = Utils.getTermInformation(term);
 
-        _acrualYF = Math.div(uint64(_fixingUpdateInterval) << 32, uint64(_expiryInterval) << 32);
+        _fixingIndexOfFreqUpdate.push(0);
+        _fixingUpdateIntervals.push(_currentFixingUpdateInterval);
+
+        _currentMidFixingInterval = _currentFixingUpdateInterval >> 1;
+        _midFixingUpdateIntervals.push(_currentMidFixingInterval);
+
+        _currentAccrualYF = Utils.getAccrualYF(_currentFixingUpdateInterval, _expiryInterval);
+        _accrualYFs.push(_currentAccrualYF);
 
         for (uint8 i = 0; i < 6; i++) {
             _longRateIndices[i].push(0);

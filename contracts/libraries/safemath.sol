@@ -3,7 +3,11 @@ pragma solidity >= 0.8.0;
 
 library SafeMath {
     function add(uint a, uint b) internal pure returns(uint c) {
-        require((c = a + b) >= a && c >= b, "Overflow");
+        unchecked {
+            c = a + b;
+            require(c >= a && c >= b, "Overflow");
+            return c;
+        }
     }
 
     function add128(uint128 a, uint128 b) internal pure returns(uint128 c) {

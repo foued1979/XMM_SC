@@ -2,6 +2,7 @@
 pragma solidity >= 0.8.0;
 
 interface IXMMPool {
+    /// @notice Sets a new owner for the pool
     function changeOwnership(address newOwner) external;
 
     /// @notice Sets the first fixing and activates the pool

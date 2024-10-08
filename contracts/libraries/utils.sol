@@ -24,13 +24,18 @@ library Utils {
     uint64 private constant TWO_MONTHS_YF = 706_022_021; // 60 days
     uint64 private constant THREE_MONTHS_YF = 1_059_033_032; // 90 days
 
+    uint internal constant ONE_MINUTE_UPDATE_INTERVAL = 60;
+    uint internal constant TWO_MINUTES_UPDATE_INTERVAL = 120;
+    uint internal constant THREE_MINUTES_UPDATE_INTERVAL = 180;
     uint internal constant FIVE_MINUTES_UPDATE_INTERVAL = 300;
-    uint private constant TEN_MINUTES_UPDATE_INTERVAL = 600;
+    uint internal constant TEN_MINUTES_UPDATE_INTERVAL = 600;
     uint internal constant FIFTEEN_MINUTES_UPDATE_INTERVAL = 900;
-    uint private constant THIRTY_MINUTES_UPDATE_INTERVAL = 1_800;
+    uint internal constant TWENTY_MINUTES_UPDATE_INTERVAL = 1_200;
+    uint internal constant THIRTY_MINUTES_UPDATE_INTERVAL = 1_800;
     uint internal constant ONE_HOUR_UPDATE_INTERVAL = 3_600;
-    uint private constant TWO_HOURS_UPDATE_INTERVAL = 7_200;
-    uint private constant FOUR_HOURS_UPDATE_INTERVAL = 14_400;
+    uint internal constant TWO_HOURS_UPDATE_INTERVAL = 7_200;
+    uint internal constant THREE_HOURS_UPDATE_INTERVAL = 10_800;
+    uint internal constant FOUR_HOURS_UPDATE_INTERVAL = 14_400;
 
     int64 private constant ONE_TIME_LEV = 0x100000000;
     int64 private constant TWO_TIME_LEV = 0x200000000;
@@ -76,7 +81,8 @@ library Utils {
         if (lev == 2) return THREE_TIME_LEV;
         if (lev == 3) return FIVE_TIME_LEV;
         if (lev == 4) return SEVEN_TIME_LEV;
-        if (lev == 5) return TEN_TIME_LEV;
+
+        return TEN_TIME_LEV;
     }
 
     // Function name has been changed to make sure that positionTerm is properly defined when function is called
@@ -91,6 +97,11 @@ library Utils {
     /// @notice Gets the start date of an XMM
     function getTimeStamp(uint blockTimestamp, uint startDate, uint updateInterval) internal pure returns(uint) {
         return startDate + uint((blockTimestamp - startDate) / updateInterval) * updateInterval;
+    }
+
+    /// @notice Returns the accrual period as a year fraction
+    function getAccrualYF(uint currentFixingUpdateInterva, uint expiryInterval) internal pure returns(uint64) {
+        return Math.div(uint64(currentFixingUpdateInterva) << 32, uint64(expiryInterval) << 32);
     }
 
     function removePositionFromArray(uint32 indexOfItemToRemove, Position[] storage positions) internal {
