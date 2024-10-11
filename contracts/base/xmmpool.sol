@@ -62,10 +62,11 @@ abstract contract XMMPool is IXMMPool {
     // - Private properties -
     // ----------------------
     uint8 private _decimals;
+    uint128 internal _accumulatedFee;
 
     uint internal _currentFixingUpdateInterval;
     uint internal _currentMidFixingInterval;
-    uint64 private _currentAccrualYF;
+    uint64 internal _currentAccrualYF;
 
     uint internal _expiryInterval;
     uint64 private _expiryYearFraction;
@@ -143,6 +144,11 @@ abstract contract XMMPool is IXMMPool {
     /// @notice Changes the leverage status
     function changeLeverageStatus(bool status) external onlyOwner {
         LeverageIsActive = status;
+    }
+
+    /// @notice Gets the total accumulated fee
+    function getAccumulatedFee() external view onlyOwner() returns(uint128) {
+        return _accumulatedFee;
     }
 
     /// @notice Gets the fixings
@@ -453,15 +459,30 @@ abstract contract XMMPool is IXMMPool {
     }
 
     function executeMarginCall(uint64 prevSpot, Fixing memory lastFixing) private {
+        uint8 i;
+
+        for (i = 0; i < 6; i++) {
+            // We transfer the accrued fee first
+            (uint128 feeshort, uint128 feeLong) = transferFee(TotalShortPositions[i], TotalLongPositions[i]);
+            TotalShortPositions[i] = SafeMath.sub128(TotalShortPositions[i], feeshort);
+            TotalLongPositions[i] = SafeMath.sub128(TotalLongPositions[i], feeLong);
+        }
+
+        // We adjust the ratios
+        setRatios();
+
         (int64[] memory longRateFactors, int64[] memory shortRateFactors) = computeFactors(prevSpot, lastFixing.spot, lastFixing.premium);
 
         transfer(longRateFactors, shortRateFactors);
 
-        for (uint8 k = 0; k < 6; k++) {
-            _longRateIndices[k].push(Math.addSigned(_longRateIndices[k][_longRateIndices[k].length - 1], longRateFactors[k]));
-            _shortRateIndices[k].push(Math.addSigned(_shortRateIndices[k][_shortRateIndices[k].length - 1], shortRateFactors[k]));
+        for (i = 0; i < 6; i++) {
+            _longRateIndices[i].push(Math.addSigned(_longRateIndices[i][_longRateIndices[i].length - 1], longRateFactors[i]));
+            _shortRateIndices[i].push(Math.addSigned(_shortRateIndices[i][_shortRateIndices[i].length - 1], shortRateFactors[i]));
         }
     }
+
+    /// @notice Transfers the accrued fee to the owner of the Pool
+    function transferFee(uint128 totalShortPosition, uint128 totalLongPosition) internal virtual returns(uint128 feeShort, uint128 feeLong);
 
     function transfer(int64[] memory longRateFactors, int64[] memory shortRateFactors) private {
         for (uint8 i = 0; i < 6; i++) {

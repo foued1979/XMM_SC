@@ -30,15 +30,9 @@ contract ETHKYCPool is XMMPool, IKYC {
         // Sanity check
         require(msg.value >> 128 == 0, "Deposit overflow");
 
-        uint128 amount = uint128(msg.value);
-
-        uint128 fee = uint128((uint136(amount) * Fee) / 1_000_000);
-        uint128 netAmt = SafeMath.sub128(amount, fee);
-
-        writeDeposit(msg.sender, _fixings.length - 1, longShort, netAmt, leverage);
-
-        address payable receiver = payable(Owner);
-        receiver.transfer(uint256(fee));
+        // We just write the deposit
+        // The fee is charged when fixing is updated
+        writeDeposit(msg.sender, _fixings.length - 1, longShort, uint128(msg.value), leverage);
     }
 
     /// @notice Reduces a position
@@ -87,5 +81,18 @@ contract ETHKYCPool is XMMPool, IKYC {
             receiver.transfer(uint256(totalTransfer));
             emit PositionReduced(msg.sender, block.timestamp, totalTransfer);
         }
+    }
+
+    function transferFee(uint128 totalShortPosition, uint128 totalLongPosition) internal override returns(uint128 feeShort, uint128 feeLong) {
+        address payable receiver = payable(Owner);
+
+        feeShort = uint128((uint136(totalShortPosition) * Fee * _currentAccrualYF / (1_000_000 * Utils.ONE_DAY_YF)));
+        receiver.transfer(uint256(feeShort));
+
+        feeLong = uint128((uint136(totalLongPosition) * Fee * _currentAccrualYF / (1_000_000 * Utils.ONE_DAY_YF)));
+        receiver.transfer(uint256(feeLong));
+
+        _accumulatedFee = SafeMath.add128(_accumulatedFee, feeShort);
+        _accumulatedFee = SafeMath.add128(_accumulatedFee, feeLong);
     }
 }

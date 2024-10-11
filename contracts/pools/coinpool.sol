@@ -3,6 +3,7 @@ pragma solidity >= 0.8.0;
 
 import "../base/xmmpool.sol";
 import "../libraries/safemath.sol";
+import "../libraries/utils.sol";
 import "../enums.sol";
 
 contract CoinPool is XMMPool {
@@ -32,17 +33,17 @@ contract CoinPool is XMMPool {
 
             require(allowance >= amount, "Insufficient allowance");
 
-            uint128 fee = uint128((uint136(amount) * Fee) / 1_000_000);
-            uint128 netAmt = SafeMath.sub128(amount, fee);
-
             (success, res) = Token.call(abi.encodeWithSelector(IERC20.transferFrom.selector, msg.sender, address(this), uint256(amount)));
 
             if (success && abi.decode(res, (bool))) {
-                writeDeposit(msg.sender, _fixings.length - 1, longShort, netAmt, leverage);
-                (success, res) = Token.call(abi.encodeWithSelector(IERC20.transfer.selector, Owner, uint256(fee)));
+                // We just write the deposit
+                // The fee is charged when fixing is updated
+                writeDeposit(msg.sender, _fixings.length - 1, longShort, amount, leverage);
             }
         }
     }
+
+Add 1xMM compensation to long position if they loose.
 
     /// @notice Reduces a position
     /// @param positionIndex The index of the position
@@ -57,7 +58,10 @@ contract CoinPool is XMMPool {
 
             // If position is offset before expected term, a penalty applies
             // The penalty amount will remain in pool liquidity
-            if (position.startDate > block.timestamp || block.timestamp < position.expiry) penalty = applyPenalty(amount);
+            if (position.startDate > block.timestamp || block.timestamp < position.expiry) {
+                // This penalty if the for the pool
+                penalty = applyPenalty(amount);
+            }
 
             int64 rate = getRate(position.longShort, position.leverage, position.fixingIndex0);
 
@@ -90,5 +94,16 @@ contract CoinPool is XMMPool {
 
             if (success) emit PositionReduced(msg.sender, block.timestamp, totalTransfer);
         }
+    }
+
+    function transferFee(uint128 totalShortPosition, uint128 totalLongPosition) internal override returns(uint128 feeShort, uint128 feeLong) {
+        feeShort = uint128((uint136(totalShortPosition) * Fee * _currentAccrualYF / (1_000_000 * Utils.ONE_DAY_YF)));
+        Token.call(abi.encodeWithSelector(IERC20.transfer.selector, Owner, uint256(feeShort)));
+
+        feeLong = uint128((uint136(totalLongPosition) * Fee * _currentAccrualYF / (1_000_000 * Utils.ONE_DAY_YF)));
+        Token.call(abi.encodeWithSelector(IERC20.transfer.selector, Owner, uint256(feeLong)));
+
+        _accumulatedFee = SafeMath.add128(_accumulatedFee, feeShort);
+        _accumulatedFee = SafeMath.add128(_accumulatedFee, feeLong);
     }
 }
