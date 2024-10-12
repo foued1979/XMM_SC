@@ -197,6 +197,16 @@ contract Token is ERC20, Bridgeable, IExchangeable {
         emit Deposited(block.timestamp, msg.sender, amountETH, 0);
     }
 
+    /// @notice Enables owner to send back some tokens to the Token contract
+    function ownerTransfersBack(uint256 amount) external onlyOwner {
+        require((uint256)(amount) <= _balances[Owner], "Insuffient balance");
+
+        _balances[Owner] = SafeMath.sub(_balances[Owner], amount);
+
+        AllocatedAmount = SafeMath.sub(AllocatedAmount, amount);
+        AvailableTokens = SafeMath.add(AvailableTokens, amount);
+    }
+
     /// @notice Enables a user to sell back an amount of Tokens against ETH
     /// if there is enough ETH available, and if the change is authorized
     /// @param amountToken The amount of tokens to be exchanged
