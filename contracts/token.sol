@@ -2,7 +2,7 @@
 pragma solidity >= 0.8.0;
 
 import "./base/erc20.sol";
-import "./base/Bridgeable.sol";
+import "./base/bridgeable.sol";
 import "./interfaces/iexchangeable.sol";
 import "./libraries/safemath.sol";
 
@@ -67,6 +67,7 @@ contract Token is ERC20, Bridgeable, IExchangeable {
         Name = name;
         AvailableTokens = TotalSupply;
         ETHDepositIsAllowed = false;
+        ETHExchangeIsAllowed = false;
         allocateToOwner(uint256(initialOwnerAllocation) * uint256(10 ** 18));
     }
 
@@ -106,11 +107,19 @@ contract Token is ERC20, Bridgeable, IExchangeable {
     }
 
     /// @notice Sets whether the deposit of ETH against token is allowed or not
-    function setAuthorizationForETHDeposit(bool status) external onlyOwner {
-        ETHDepositIsAllowed = status;
+    //          The exchange rate is expressed in pips
+    function setETHDepositExchangeRate(uint64 exchangeRate) external onlyOwner {
+        EthExchangeRate = exchangeRate;
+        ETHDepositIsAllowed = true;
+    }
+
+    /// @notice Sets the ETH deposit authorization to false
+    function removeETHDepositAuthorization() external onlyOwner {
+        ETHDepositIsAllowed = false;
     }
 
     /// @notice Updates the exchange rate between ETH and the Token
+    //          The exchange rate is expressed in pips
     function updateETHExchangeRate(uint64 exchangeRate) external onlyOwner {
         EthExchangeRate = exchangeRate;
         ETHExchangeIsAllowed = true;
@@ -118,7 +127,7 @@ contract Token is ERC20, Bridgeable, IExchangeable {
 
     /// @notice Updates the exchange rate between a token and our Token
     /// @param  tokenToBeReceived The token to be received in exchange of our Token
-    /// @param  exchangeRate The exchange rate, with 4 digits precision
+    /// @param  exchangeRate The exchange rate, with 4 digits precision (in pips)
     function updateTokenExchangeRate(address tokenToBeReceived, uint64 exchangeRate) external onlyOwner tokenIsApproved(tokenToBeReceived) {
         _exchangeRates[tokenToBeReceived] = exchangeRate;
         _exchangeIsAllowed[tokenToBeReceived] = true;

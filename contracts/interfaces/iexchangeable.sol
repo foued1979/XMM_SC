@@ -14,7 +14,10 @@ interface IExchangeable {
     function removeExchangeAuthorization(address tokenToBeReceived) external;
 
     /// @notice Sets whether the deposit of ETH against token is allowed or not
-    function setAuthorizationForETHDeposit(bool status) external;
+    function setETHDepositExchangeRate(uint64 exchangeRate) external;
+
+    /// @notice Sets the ETH deposit authorization to false
+    function removeETHDepositAuthorization() external;
 
     /// @notice Updates the exchange rate between ETH and the Token
     function updateETHExchangeRate(uint64 exchangeRate) external;

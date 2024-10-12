@@ -33,13 +33,13 @@ library SafeMath {
 
     function subOr0(uint a, uint b) internal pure returns(uint) {
         unchecked {
-            return a > b ? 0 : a - b;
+            return a > b ? a - b : 0;
         }
     }
 
     function subOr0_128(uint128 a, uint128 b) internal pure returns(uint128) {
         unchecked {
-            return a > b ? 0 : a - b;
+            return a > b ? a - b : 0;
         }
     }
 }

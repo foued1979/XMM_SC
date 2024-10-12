@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity >= 0.8.0;
 
-import "./interfaces/ixmmpool.sol";
+import "./interfaces/ifixingmanager.sol";
 import "./interfaces/ikyc.sol";
 import "./libraries/utils.sol";
 import "./enums.sol";
@@ -43,7 +43,7 @@ contract Manager {
         Owner = owner;
     }
 
-    function changeOwnership(address newOwner) external onlyOwner {
+    /* function changeOwnership(address newOwner) external onlyOwner {
         Owner = newOwner;
         emit OwnerChanged(block.timestamp, msg.sender, newOwner);
     }
@@ -143,5 +143,5 @@ contract Manager {
             if (address(_listOfETHPools[i]) != address(0x0)) IXMMPool(_listOfETHPools[i]).setFirstFixing(spot, strikes[i], volatilities[i], optionPremia[i]);
             if (address(_listOfETHKYCPools[i]) != address(0x0)) IXMMPool(_listOfETHKYCPools[i]).setFirstFixing(spot, strikes[i], volatilities[i], optionPremia[i]);
         }
-    }
+    } */
 }

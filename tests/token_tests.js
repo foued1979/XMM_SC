@@ -1,27 +1,70 @@
 const { loadFixture } = require('@nomicfoundation/hardhat-network-helpers');
 const { ethers } = require('hardhat');
 const { expect } = require('chai');
+const { boolean } = require('hardhat/internal/core/params/argumentTypes');
+
+const decimalAdjustment = BigInt(10 ** 18);
 
 async function _deploy() {
   const [owner] = await ethers.getSigners();
 
   const contractFactory = await ethers.getContractFactory("Token");
-  const token = await contractFactory.deploy("TEST", "Test token", 5_000_000, 250_000);
+  // Initial supply is 5 mios
+  // Allocation to owner is 250k
+  const token = await contractFactory.deploy("TEST", "Test token", 1, 5_000_000, 250_000);
 
   return [ owner, token ];
 }
 
-describe('Test token', function () {
-    it('Should deploy, have right parameters', async function () {
-      const [ owner, token ] = await loadFixture(_deploy);
-      
-      expect(await token.Owner()).to.equal(owner);
-      expect(await token.Symbol()).to.equal("TEST");
-      expect(await token.ChangeIsAllowed()).to.equal(false);
-      expect(await token.balanceOf(owner)).to.equal(250_000n * BigInt(10 ** 18));
-      expect(await token.totalSupply()).to.equal(5_000_000n * BigInt(10 ** 18));
-    });
+describe('Test ERC20 methods', function () {
+  it('Should deploy, have right parameters', async function () {
+    const [ owner, token ] = await loadFixture(_deploy);
 
+    expect(await token.Owner()).to.equal(owner);
+    expect(await token.Symbol()).to.equal("TEST");
+    expect(await token.balanceOf(owner)).to.equal(250_000n * decimalAdjustment);
+    expect(await token.totalSupply()).to.equal(5_000_000n * decimalAdjustment);
+  });
+
+  it('Should properly transfer tokens', async function() {
+    const [ owner, token ] = await loadFixture(_deploy);
+
+    var success = await token.transfer("0x1234567890123456789012345678901234567890", 100n * decimalAdjustment);
+    expect(await token.balanceOf(owner)).to.equal(249_900n * decimalAdjustment);
+  });
+
+  it('Should not allow transfer if amount exceeds balance', async function() {
+    const [ owner, token ] = await loadFixture(_deploy);
+
+    expect(await token.transfer("0x1234567890123456789012345678901234567890", 250_000n * decimalAdjustment + 1n)).to.be.revertedWith("Transfer err");
+  });
+
+  it('Should properly manage allowance', async function() {
+    const [ owner, token ] = await loadFixture(_deploy);
+    // We need to use spender address so that Hardhat can manage signature
+    const [ o, spender ] = await ethers.getSigners();
+
+    await token.approve(spender, 1_000n * BigInt(10 ** 18));
+    expect(await token.allowance(owner, spender)).to.equal(1_000n * decimalAdjustment);
+
+    await token.connect(spender).transferFrom(owner, spender, 550n * decimalAdjustment);
+
+    expect(await token.balanceOf(owner)).to.equal((250_000n - 550n) * decimalAdjustment);
+    expect(await token.balanceOf(spender)).to.equal(550n * decimalAdjustment);
+    expect(await token.allowance(owner, spender)).to.equal(450n * decimalAdjustment);
+  });
+
+  it('Should properly reject transferFrom if above allowance', async function() {
+    const [ owner, token ] = await loadFixture(_deploy);
+    // We need to use spender address so that Hardhat can manage signature
+    const [ o, spender ] = await ethers.getSigners();
+
+    await token.approve(spender, 500n * decimalAdjustment);
+    await expect(token.connect(spender).transferFrom(owner, spender, 501n * decimalAdjustment)).to.be.revertedWith("Insufficient allowance");
+  });
+});
+
+describe('Test token', function () {
     it('Allocation is done properly and is reflected in AllocatedAmount', async function () {
       const [ owner, token ] = await loadFixture(_deploy);
       
@@ -129,7 +172,7 @@ describe('Test token', function () {
       const prevETHBalance = await ethers.provider.getBalance(spender1.address);
 
       await expect(token.connect(spender1).depositEther({ value: eth })).to.be.revertedWith('Not allowed');
-      await token.setChangeAuthorization(true);
+      await token.setETHDepositExchangeRate(30_000_000);
 
       // Now we can transfer
       await token.connect(spender1).depositEther({ value: eth })
@@ -146,10 +189,13 @@ describe('Test token', function () {
       const [ owner1, spender1 ] = await ethers.getSigners();
 
       var eth = ethers.parseEther("0.5");
-      await token.setChangeAuthorization(true);
+      await token.setETHDepositExchangeRate(30_000_000);
       const prevETHBalance = await ethers.provider.getBalance(spender1.address);
 
       await token.connect(spender1).depositEther({ value: eth });
+      
+      await expect(token.sellBack(1_500_000_000_000_000_000_001n)).to.be.revertedWith("Not allowed");
+      await token.connect(owner).updateETHExchangeRate(30_000_000);
       await expect(token.connect(spender1).sellBack(1_500_000_000_000_000_000_001n)).to.be.revertedWith("Insufficient balance");
 
       await token.connect(spender1).sellBack(750_000_000_000_000_000_000n);
@@ -168,7 +214,7 @@ describe('Test token', function () {
       const [ owner1, spender1 ] = await ethers.getSigners();
 
       var eth = ethers.parseEther("2500");
-      await token.setChangeAuthorization(true);
+      await token.setETHDepositExchangeRate(30_000_000);
       const prevETHBalance = await ethers.provider.getBalance(spender1.address);
 
       await token.connect(spender1).depositEther({ value: eth });
@@ -187,7 +233,8 @@ describe('Test token', function () {
       const [ owner1, spender1 ] = await ethers.getSigners();
 
       var eth = ethers.parseEther("0.5");
-      await token.setChangeAuthorization(true);
+      await token.setETHDepositExchangeRate(30_000_000);
+      await token.updateETHExchangeRate(30_000_000);
       const prevETHBalance = await ethers.provider.getBalance(spender1.address);
 
       await token.connect(spender1).depositEther({ value: eth });
