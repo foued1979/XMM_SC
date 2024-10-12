@@ -10,8 +10,8 @@ contract CoinPool is XMMPool {
     /// @notice The token which managed by the XMM
     address public Token;
 
-    constructor(address token, address owner, uint8 decimals, Terms term, uint8 fee, uint8 penalty, uint64 minDeposit, uint8 minWithdrawalRatio)
-    XMMPool(owner, decimals, term, fee, penalty, minDeposit, minWithdrawalRatio) {
+    constructor(address token, address owner, address compensationToken, uint8 decimals, Terms term, uint8 fee, uint8 penalty, uint64 minDeposit, uint8 minWithdrawalRatio)
+    XMMPool(owner, compensationToken, decimals, term, fee, penalty, minDeposit, minWithdrawalRatio) {
         Token = token;
     }
 
@@ -43,8 +43,6 @@ contract CoinPool is XMMPool {
         }
     }
 
-Add 1xMM compensation to long position if they loose.
-
     /// @notice Reduces a position
     /// @param positionIndex The index of the position
     /// @param amount The reduction amount. If amount is bigger than position amount, the position is closed.
@@ -64,13 +62,17 @@ Add 1xMM compensation to long position if they loose.
             }
 
             int64 rate = getRate(position.longShort, position.leverage, position.fixingIndex0);
+            uint128 compensationAmt = 0;
 
             // If rate is positive, only a pro-rata interest is paid
             // If rate is negative, msg.sender shall pay the full amount due
             if (rate > 0) {
-                uint64 proRata = Utils.getProRata(Utils.getTimeStamp(block.timestamp, StartDate, _fixingUpdateInterval), position, _expiryInterval);
+                uint64 proRata = Utils.getProRata(Utils.getTimeStamp(block.timestamp, StartDate, _currentFixingUpdateInterval), position, _expiryInterval);
                 rate = Math.multSigned(int64(proRata), rate);
-            }            
+            }
+            else if (isCompensable(position.longShort)) {
+                compensationAmt = getCompensationAmount(position.amount, rate);
+            }        
 
             if (position.longShort == LongShort.Long) {
                 TotalLongPositions[uint8(position.leverage)] = SafeMath.sub128(TotalLongPositions[uint8(position.leverage)], amount);
@@ -92,7 +94,10 @@ Add 1xMM compensation to long position if they loose.
 
             (bool success, ) = Token.call(abi.encodeWithSelector(IERC20.transfer.selector, msg.sender, uint256(totalTransfer)));
 
-            if (success) emit PositionReduced(msg.sender, block.timestamp, totalTransfer);
+            if (success) {
+                if (compensationAmt != 0) CompensationToken.call(abi.encodeWithSelector(IERC20.transfer.selector, msg.sender, uint256(compensationAmt)));
+                emit PositionReduced(msg.sender, block.timestamp, totalTransfer);
+            }
         }
     }
 

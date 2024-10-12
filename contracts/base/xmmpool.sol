@@ -1,37 +1,27 @@
 // SPDX-License-Identifier: MIT
 pragma solidity >= 0.8.0;
 
+import "./fixingmanager.sol";
+import "../enums.sol";
 import "../interfaces/ierc20.sol";
-import "../interfaces/ixmmpool.sol";
 import "../libraries/math.sol";
 import "../libraries/safemath.sol";
 import "../libraries/utils.sol";
-import "../structures/fixing.sol";
 import "../structures/position.sol";
-import "../enums.sol";
 
-abstract contract XMMPool is IXMMPool {
+abstract contract XMMPool is FixingManager {
     /**********
      * Events *
      **********/
-     event OwnerChanged(uint indexed timestamp, address prevOwner, address newOwner);
-     event Deposit(address indexed from, uint indexed timestamp, Position position);
-     event PositionReduced(address indexed from, uint indexed timestamp, uint128 amount);
-     event FixingMissed(uint indexed fixingTimestamp, uint fixingIndex);
-     event MissedFixingUpdated(uint indexed timestamp, uint fixingIndex);
-     event UpdateFrequencyChanged(uint indexed timestamp, uint fixingIndex, uint newFrequency);
-
-     event FeeChanged(uint indexed timestamp, uint8 oldFee, uint8 newFee);
-     event PenaltyChanged(uint indexed timestamp, uint8 oldPenalty, uint8 newPenalty);
+    event Deposit(address indexed from, uint indexed timestamp, Position position);
+    event PositionReduced(address indexed from, uint indexed timestamp, uint128 amount);
+     
+    event FeeChanged(uint indexed timestamp, uint8 oldFee, uint8 newFee);
+    event PenaltyChanged(uint indexed timestamp, uint8 oldPenalty, uint8 newPenalty);
 
     /*****************
      * The modifiers *
      *****************/
-    modifier onlyOwner {
-        require(msg.sender == Owner, "Only owner");
-        _;
-    }
-
     modifier hasMinDeposit(uint128 amount) {
         require(amount >= MinDeposit, "Min deposit");
         _;
@@ -52,9 +42,6 @@ abstract contract XMMPool is IXMMPool {
         _;
     }
 
-    address public Owner;
-    bool public IsActivated;
-
     /***********************
      * Contract Properties *
      ***********************/
@@ -64,43 +51,12 @@ abstract contract XMMPool is IXMMPool {
     uint8 private _decimals;
     uint128 internal _accumulatedFee;
 
-    uint internal _currentFixingUpdateInterval;
-    uint internal _currentMidFixingInterval;
-    uint64 internal _currentAccrualYF;
-
-    uint internal _expiryInterval;
-    uint64 private _expiryYearFraction;
-    
-    uint[] private _missedFixingsIndices;
-
     // The positions by depositors
     mapping(address => Position[]) internal _positions;
-
-    // The list of fixings
-    Fixing[] internal _fixings;
-
-    // Fixing Frequency Changes
-    uint[] internal _fixingIndexOfFreqUpdate;
-    uint[] internal _fixingUpdateIntervals;
-    uint[] internal _midFixingUpdateIntervals;
-    uint64[] private _accrualYFs;
-
-    // Private fields to manage long positions
-    mapping(uint8 => uint64) private _longRatios;
-    mapping(uint8 => int64[]) private _longRateIndices;
-
-    // Private fields to manage short positions
-    mapping(uint8 => uint64) private _shortRatios;
-    mapping(uint8 => int64[]) private _shortRateIndices;
 
     // ---------------------
     // - Public properties -
     // ---------------------
-    /// @notice The start date of the XMM
-    uint public StartDate;
-
-    /// @notice The Term of the XMM
-    Terms public Term;
 
     /// @notice The penalty if position is not held for min accrual period
     uint8 public Penalty;
@@ -124,23 +80,22 @@ abstract contract XMMPool is IXMMPool {
     /// @notice The total amount of short positions, by leverage index
     mapping(uint8 => uint128) internal  TotalShortPositions;
     
-
-    /*************
-     * Functions *
-     *************/
-    constructor(address owner, uint8 decimals, Terms term, uint8 fee, uint8 penalty, uint64 minDeposit, uint8 minWithdrawalRatio) {
-        Owner = owner;
-        IsActivated = false;
-        Term = term;
+    /***************
+     * Constructor *
+     ***************/
+    constructor(address owner, address compensationToken, uint8 decimals, Terms term, uint8 fee, uint8 penalty, uint64 minDeposit, uint8 minWithdrawalRatio) FixingManager(owner, compensationToken, term) {
+        
         MinDeposit = uint128(minDeposit) * uint128(10 ** decimals);
         MinWithdrawal = (MinDeposit * minWithdrawalRatio) / 100;
         Penalty = penalty;
         Fee = fee;
 
         _decimals = decimals;
-        init(term);
     }
 
+    /*************
+     * Functions *
+     *************/
     /// @notice Changes the leverage status
     function changeLeverageStatus(bool status) external onlyOwner {
         LeverageIsActive = status;
@@ -151,68 +106,11 @@ abstract contract XMMPool is IXMMPool {
         return _accumulatedFee;
     }
 
-    /// @notice Gets the fixings
-    function getFixings() external view onlyOwner returns(Fixing[] memory) {
-        return _fixings;
-    }
-
-    /// @notice Gets the fixings `from` index `to` index
-    function getFixingsFromTo(uint from, uint to) external view onlyOwner returns(Fixing[] memory) {
-        if (to + 1 > _fixings.length) to = _fixings.length - 1;
-
-        Fixing[] memory res = new Fixing[](to - from + 1);
-        for (uint i = from; i <= to; i++) res[i - from] = _fixings[i];
-        return res;
-    }
-
     /// @notice Gets the total long and short positions for a given leverage factor
     function getPoolPositions(Leverage leverage) external view returns(uint128 long, uint128 short) {
         return (TotalLongPositions[uint8(leverage)], TotalShortPositions[uint8(leverage)]);
     }
-
-    /// @notice Gets the total long and short positions for a given leverage factor
-    function getLastIndices(Leverage leverage) external view returns(int64 long, int64 short) {
-        return (_longRateIndices[uint8(leverage)][_fixings.length - 1], _shortRateIndices[uint8(leverage)][_fixings.length - 1]);
-    }
-
-    /// @notice Returns the indices of the missed fixings, if ever.
-    ///         If there is no missed fixings, the array is empty
-    function getMissedFixings() external view returns(uint[] memory) {
-        return _missedFixingsIndices;
-    }
-
-    /// @notice Changes the ownership of the contract
-    function changeOwnership(address newOwner) external onlyOwner {
-        Owner = newOwner;
-        emit OwnerChanged(block.timestamp, msg.sender, newOwner);
-    }
-
-    /// @notice Updates the update interval for the fixings
-    function changeUpdateInterval(UpdateIntervals updateInterval) external onlyOwner {
-        if (updateInterval == UpdateIntervals.OneMin) _currentFixingUpdateInterval = Utils.ONE_MINUTE_UPDATE_INTERVAL;
-        else if (updateInterval == UpdateIntervals.TwoMin) _currentFixingUpdateInterval = Utils.TWO_MINUTES_UPDATE_INTERVAL;
-        else if (updateInterval == UpdateIntervals.ThreeMin) _currentFixingUpdateInterval = Utils.THREE_MINUTES_UPDATE_INTERVAL;
-        else if (updateInterval == UpdateIntervals.FiveMin) _currentFixingUpdateInterval = Utils.FIVE_MINUTES_UPDATE_INTERVAL;
-        else if (updateInterval == UpdateIntervals.TenMin) _currentFixingUpdateInterval = Utils.TEN_MINUTES_UPDATE_INTERVAL;
-        else if (updateInterval == UpdateIntervals.FifteenMin) _currentFixingUpdateInterval = Utils.FIFTEEN_MINUTES_UPDATE_INTERVAL;
-        else if (updateInterval == UpdateIntervals.TwentyMin) _currentFixingUpdateInterval = Utils.TWENTY_MINUTES_UPDATE_INTERVAL;
-        else if (updateInterval == UpdateIntervals.ThirtyMin) _currentFixingUpdateInterval = Utils.THIRTY_MINUTES_UPDATE_INTERVAL;
-        else if (updateInterval == UpdateIntervals.OneH) _currentFixingUpdateInterval = Utils.ONE_HOUR_UPDATE_INTERVAL;
-        else if (updateInterval == UpdateIntervals.TwoH) _currentFixingUpdateInterval = Utils.TWO_HOURS_UPDATE_INTERVAL;
-        else if (updateInterval == UpdateIntervals.ThreeH) _currentFixingUpdateInterval = Utils.THREE_HOURS_UPDATE_INTERVAL;
-        else if (updateInterval == UpdateIntervals.FourH) _currentFixingUpdateInterval = Utils.FOUR_HOURS_UPDATE_INTERVAL;
-        
-        _fixingIndexOfFreqUpdate.push(_fixings.length);
-        _currentMidFixingInterval = _currentFixingUpdateInterval >> 1;
-        _currentAccrualYF = Utils.getAccrualYF(_currentFixingUpdateInterval, _expiryInterval);
-
-        _fixingUpdateIntervals.push(_currentFixingUpdateInterval);
-        _midFixingUpdateIntervals.push(_currentMidFixingInterval);
-        _accrualYFs.push(_currentAccrualYF);
-
-        emit UpdateFrequencyChanged(block.timestamp, _fixings.length, _currentFixingUpdateInterval);
-    }
-
+    
     /// @notice Closes all the positions held by a user.
     function closeAllPositions() external {
         if (_positions[msg.sender].length > 0) {
@@ -225,6 +123,12 @@ abstract contract XMMPool is IXMMPool {
         if (_positions[msg.sender].length > positionIndex) {
             reducePosition(positionIndex, _positions[msg.sender][positionIndex].amount);
         }
+    }
+
+    /// @notice Creates a position on behaf of a user; e.g. if user transfers coin directly to the pool, pool owner
+    //          can write the position
+    function createPositionForUser(LongShort longShort, Leverage leverage, uint128 amount, address user) external onlyOwner {
+        writeDeposit(user, _fixings.length - 1, longShort, amount, leverage);
     }
 
     /// @notice Returns user's position at given index
@@ -245,72 +149,6 @@ abstract contract XMMPool is IXMMPool {
     // A position that is closed leads to re-organization of existing positions.
     function reducePosition(uint32 positionIndex, uint128 amount) public virtual;
 
-    /// @notice Sets the first fixing and activates the pool
-    // From IXMMPool
-    function setFirstFixing(uint64 spot, uint64 strike, uint64 volatility, uint64 optionPremium) external onlyOwner {
-        if (_fixings.length > 0) return;
-
-        // The start date is the 1st timestamp
-        StartDate = Utils.getTimeStamp(block.timestamp, 0, _currentFixingUpdateInterval);
-        
-        // We can update only from 5 minutes before the first fixing time
-        require(block.timestamp - StartDate <= 300, "Not sync");
-        
-        Fixing memory fixing = Fixing(StartDate, spot, strike, volatility, optionPremium);
-        _fixings.push(fixing);
-
-        IsActivated = true;
-    }
-
-    /// @notice Sets the latest fixing for the XMM
-    // From IXMMPool
-    function setFixing(uint64 spot, uint64 strike, uint64 volatility, uint64 optionPremium) external onlyOwner returns(bool) {
-        Fixing storage lastFixing = _fixings[_fixings.length - 1];
-        uint nextFixingTimestamp = Utils.getTimeStamp(block.timestamp, lastFixing.timestamp, _currentFixingUpdateInterval);
-
-        uint threshold = 0;
-        // If the update interval is less than or equal to 2 min, the threshold is 15s
-        if (_currentFixingUpdateInterval <= Utils.TWO_MINUTES_UPDATE_INTERVAL) threshold = 15;
-        // If the update interval is equal to 3 min, the threshold is 30s
-        else if (_currentFixingUpdateInterval == Utils.THREE_MINUTES_UPDATE_INTERVAL) threshold = 30;
-        // If the update interval is equal to 5 min, the threshold is 1 min
-        else if (_currentFixingUpdateInterval == Utils.FIVE_MINUTES_UPDATE_INTERVAL) threshold = 60;
-        // Else if update interval is less than or equal to 15 min, the threshold is 2 min
-        else if (_currentFixingUpdateInterval <= Utils.FIFTEEN_MINUTES_UPDATE_INTERVAL) threshold = 120;
-        // Otherwise the threshold is 3 min
-        else threshold = 180;
-        
-        if (nextFixingTimestamp == lastFixing.timestamp) {
-            // If the update is done within the threshold, we update the fixing
-            if (Math.sub(nextFixingTimestamp + _currentFixingUpdateInterval, block.timestamp) <= threshold) {
-                nextFixingTimestamp += _currentFixingUpdateInterval;
-            // Otherwise, we are too early to update the fixing
-            } else return false;
-        }
-        else if (nextFixingTimestamp == lastFixing.timestamp + _currentFixingUpdateInterval) {
-            // If the update is done after the threshold, the fixing is missed
-            if (Math.sub(block.timestamp, nextFixingTimestamp) > threshold) return false;
-        }
-        // However, if at least one fixings has been missed (e.g. due to a technical error), we fill in missing fixings
-        // with last know spot value, and we will update the missing fixings later.
-        else {
-            // If we are threshold minutes before the next update, we adjust the next fixing timestamp
-            if (Math.absSub(nextFixingTimestamp + _currentFixingUpdateInterval, block.timestamp) <= threshold) nextFixingTimestamp += _currentFixingUpdateInterval;
-            // However if we are outside the threshold, above or below the next fixing timestamp, then the fixing is missed
-            else if (Math.absSub(block.timestamp, nextFixingTimestamp) > threshold) return false;
-
-            // We add temporary fixings for the missed fixings, excluding the last fixing
-            // The missed fixings can be manually updated later
-            addTemporaryMissingFixings(lastFixing.spot, lastFixing.timestamp, nextFixingTimestamp);
-        }
-
-        Fixing memory fixing = Fixing(nextFixingTimestamp, spot, strike, volatility, optionPremium);
-        executeMarginCall(lastFixing.spot, fixing);
-        
-        _fixings.push(fixing);
-        return true;
-    }
-
     /// @notice Sets the new Fee for the pool
     function setNewFee(uint8 newFee) external onlyOwner {
         emit FeeChanged(block.timestamp, Fee, newFee);
@@ -321,66 +159,6 @@ abstract contract XMMPool is IXMMPool {
     function setNewPenalty(uint8 newPenalty) external onlyOwner {
         emit PenaltyChanged(block.timestamp, Penalty, newPenalty);
         Penalty = newPenalty;
-    }
-    
-    function addTemporaryMissingFixings(uint64 lastSpot, uint lastFixingTimestamp, uint nextFixingTimestamp) private {
-        uint lastFixingIndex = _fixings.length - 1;
-        uint numberOfMissedFixings = uint((nextFixingTimestamp - lastFixingTimestamp) / _currentFixingUpdateInterval) - 1;
-
-        // No margin call will be executed since spot perf is 0
-        for (uint i = 0; i < numberOfMissedFixings; i++) {
-            lastFixingTimestamp += _currentFixingUpdateInterval;
-
-            Fixing memory fixing = Fixing(lastFixingTimestamp, lastSpot, 0, 0, 0);
-
-            for (uint8 l = 0; l < 6; ++l) {
-                _longRateIndices[l].push(_longRateIndices[l][_longRateIndices[l].length - 1]);
-                _shortRateIndices[l].push(_shortRateIndices[l][_shortRateIndices[l].length - 1]);
-            }
-
-            _fixings.push(fixing);
-
-            lastFixingIndex++;
-            _missedFixingsIndices.push(lastFixingIndex);
-
-            emit FixingMissed(lastFixingTimestamp, lastFixingIndex);
-        }
-    }
-
-    /// @notice In case a fixing update has been missed, owner can update the missed past fixings
-    ///         To avoid multiple updates or wrong fixing updates, only the missed fixing index can be updated 1 time
-    function updateMissedFixing(uint missedFixingIndex, uint64 spot, uint64 strike, uint64 volatility, uint64 optionPremium) external onlyOwner {
-        require(Utils.itemExistsInArray(missedFixingIndex, _missedFixingsIndices), "Bad index");
-
-        Fixing storage prevFixing = _fixings[missedFixingIndex - 1];
-        Fixing storage fixing = _fixings[missedFixingIndex];
-
-        // We update the fixing ith the proper market data
-        fixing.spot = spot;
-        fixing.strike = strike;
-        fixing.volatility = volatility;
-        fixing.premium = optionPremium;
-
-        // We compute the new interest factor for both long and short side
-        // The updateIndex method also proceeds to margin call
-        (int64[] memory longRateFactors, int64[] memory shortRateFactors) = computeFactors(prevFixing.spot, fixing.spot, optionPremium);
-
-        transfer(longRateFactors, shortRateFactors);
-
-        // We update all the indices from missedFixingIndex to the last fixing index
-        // The update factors are longRateFactor for the long side and shortRateFactor for the short side
-        for (uint j = missedFixingIndex; j < _fixings.length; j++)
-        {
-            for (uint8 k = 0; k < 6; k++) {
-                _longRateIndices[k][j] = Math.addSigned(_longRateIndices[k][j - 1], longRateFactors[k]);
-                _shortRateIndices[k][j] = Math.addSigned(_shortRateIndices[k][j - 1], shortRateFactors[k]);
-            }
-        }
-
-        _missedFixingsIndices[missedFixingIndex] = _missedFixingsIndices[_missedFixingsIndices.length - 1];
-        _missedFixingsIndices.pop();
-
-        emit MissedFixingUpdated(block.timestamp, missedFixingIndex);
     }
 
     function getExistingPosition(address user, uint fixingIndex, Leverage leverage) internal view returns(bool, uint32) {
@@ -430,8 +208,11 @@ abstract contract XMMPool is IXMMPool {
         return uint128((uint136(amount) * Penalty) / 1_000_000);
     }
 
-    function computeFactors(uint64 spotAtPeriodStart, uint64 spotAtPeriodEnd, uint64 premiumAtPeriodEnd) private view
-    returns(int64[] memory longRateFactors, int64[] memory shortRateFactors) {
+    /****************************************
+     * FixingManager Methods Implementation *
+     ****************************************/
+    function computeFactors(uint64 spotAtPeriodStart, uint64 spotAtPeriodEnd, uint64 premiumAtPeriodEnd) internal view override
+     returns(int64[] memory longRateFactors, int64[] memory shortRateFactors) {
         uint64 premiumPerf = Math.mult(premiumAtPeriodEnd, _currentAccrualYF);
         int64 spotPerf = Math.subToSigned(spotAtPeriodEnd, spotAtPeriodStart);
 
@@ -458,7 +239,7 @@ abstract contract XMMPool is IXMMPool {
         return (longRateFactors, shortRateFactors);
     }
 
-    function executeMarginCall(uint64 prevSpot, Fixing memory lastFixing) private {
+    function executeMarginCall(uint64 prevSpot, Fixing memory lastFixing) internal override {
         uint8 i;
 
         for (i = 0; i < 6; i++) {
@@ -481,10 +262,7 @@ abstract contract XMMPool is IXMMPool {
         }
     }
 
-    /// @notice Transfers the accrued fee to the owner of the Pool
-    function transferFee(uint128 totalShortPosition, uint128 totalLongPosition) internal virtual returns(uint128 feeShort, uint128 feeLong);
-
-    function transfer(int64[] memory longRateFactors, int64[] memory shortRateFactors) private {
+    function transfer(int64[] memory longRateFactors, int64[] memory shortRateFactors) internal override {
         for (uint8 i = 0; i < 6; i++) {
             // If longRateFactor is negative, long pays short
             // longRateFactor is equal to the premium accrual
@@ -493,6 +271,12 @@ abstract contract XMMPool is IXMMPool {
             else { transferShortToLong(i, uint64(-shortRateFactors[i])); }
         }
     }
+
+    /*******************
+     * Virtual Methods *
+     *******************/
+    /// @notice Transfers the accrued fee to the owner of the Pool
+    function transferFee(uint128 totalShortPosition, uint128 totalLongPosition) internal virtual returns(uint128 feeShort, uint128 feeLong);
 
     function transferShortToLong(uint8 index, uint64 netPerf) private {
         if (netPerf == 0) return;
@@ -507,6 +291,9 @@ abstract contract XMMPool is IXMMPool {
         setRatios();
     }
 
+    /*******************
+     * Private Methods *
+     *******************/
     function transferLongToShort(uint8 index, uint64 netPerf) private {
         if (netPerf == 0) return;
 
@@ -555,27 +342,6 @@ abstract contract XMMPool is IXMMPool {
                 uint160 long = uint160(TotalLongPositions[i]) << 32;
                 _shortRatios[i] = uint64(long / totalShort);
             }
-        }
-    }
-
-    function init(Terms term) private {
-        (_currentFixingUpdateInterval, _expiryInterval, _expiryYearFraction) = Utils.getTermInformation(term);
-
-        _fixingIndexOfFreqUpdate.push(0);
-        _fixingUpdateIntervals.push(_currentFixingUpdateInterval);
-
-        _currentMidFixingInterval = _currentFixingUpdateInterval >> 1;
-        _midFixingUpdateIntervals.push(_currentMidFixingInterval);
-
-        _currentAccrualYF = Utils.getAccrualYF(_currentFixingUpdateInterval, _expiryInterval);
-        _accrualYFs.push(_currentAccrualYF);
-
-        for (uint8 i = 0; i < 6; i++) {
-            _longRateIndices[i].push(0);
-            _shortRateIndices[i].push(0);
-
-            _longRatios[i] = 0;
-            _shortRatios[i] = 0;
         }
     }
 }

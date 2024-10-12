@@ -5,3 +5,4 @@ enum LongShort {Long, Short}
 enum Terms { OneDay, OneWeek, TwoWeeks, ThreeWeeks, OneMonth, TwoMonths, ThreeMonths }
 enum Leverage { One, Two, Three, Five, Seven, Ten }
 enum UpdateIntervals { OneMin, TwoMin, ThreeMin, FiveMin, TenMin, FifteenMin, TwentyMin, ThirtyMin, OneH, TwoH, ThreeH, FourH }
+enum CompensatedSides {None, Long, Short, All}

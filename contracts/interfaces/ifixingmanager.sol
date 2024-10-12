@@ -1,10 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity >= 0.8.0;
 
-interface IXMMPool {
-    /// @notice Sets a new owner for the pool
-    function changeOwnership(address newOwner) external;
-
+interface IFixingManager {
     /// @notice Sets the first fixing and activates the pool
     function setFirstFixing(uint64 spot, uint64 strike, uint64 volatility, uint64 optionPremium) external;
 

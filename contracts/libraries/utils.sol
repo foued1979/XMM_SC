@@ -84,11 +84,11 @@ library Utils {
 
         return TEN_TIME_LEV;
     }
-
-    // Function name has been changed to make sure that positionTerm is properly defined when function is called
-    // positionTerm corresponds to the timestamp of the position end date.
+    
+    /// @notice Gets the position pro-rated holding time. If position has been hold for a longer period of time
+    //          than initially expected, the pro-rated time is equal to 1
     function getProRata(uint tradeTimestamp, Position storage position, uint positionTimeSpanInterval) internal view returns(uint64) {
-        uint holdingPeriod = SafeMath.sub(tradeTimestamp, position.startDate);
+        uint holdingPeriod = SafeMath.subOr0(tradeTimestamp, position.startDate);
 
         if (holdingPeriod > positionTimeSpanInterval) return Math.One_32;
         return uint64((holdingPeriod << 32) / positionTimeSpanInterval);

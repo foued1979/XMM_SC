@@ -6,8 +6,8 @@ import "../enums.sol";
 
 contract ETHPool is XMMPool {
 
-    constructor(address owner, uint8 decimals, Terms term, uint8 fee, uint8 penalty, uint64 minDeposit, uint8 minWithdrawalRatio)
-    XMMPool(owner, decimals, term, fee, penalty, minDeposit, minWithdrawalRatio) { }
+    constructor(address owner, address compensationToken, uint8 decimals, Terms term, uint8 fee, uint8 penalty, uint64 minDeposit, uint8 minWithdrawalRatio)
+    XMMPool(owner, compensationToken, decimals, term, fee, penalty, minDeposit, minWithdrawalRatio) { }
 
     /// @notice Executes a deposit to the XMM from msg.sender
     /// @param longShort 0 if long 1 if short
@@ -35,13 +35,17 @@ contract ETHPool is XMMPool {
             if (position.startDate > block.timestamp || block.timestamp < position.expiry) penalty = applyPenalty(amount);
 
             int64 rate = getRate(position.longShort, position.leverage, position.fixingIndex0);
+            uint128 compensationAmt = 0;
 
             // If rate is positive, only a pro-rata interest is paid
             // If rate is negative, msg.sender shall pay the full amount due
             if (rate > 0) {
-                uint64 proRata = Utils.getProRata(Utils.getTimeStamp(block.timestamp, StartDate, _fixingUpdateInterval), position, _expiryInterval);
+                uint64 proRata = Utils.getProRata(Utils.getTimeStamp(block.timestamp, StartDate, _currentFixingUpdateInterval), position, _expiryInterval);
                 rate = Math.multSigned(int64(proRata), rate);
-            }            
+            }
+            else if (isCompensable(position.longShort)) {
+                compensationAmt = getCompensationAmount(position.amount, rate);
+            }        
 
             if (position.longShort == LongShort.Long) {
                 TotalLongPositions[uint8(position.leverage)] = SafeMath.sub128(TotalLongPositions[uint8(position.leverage)], amount);
@@ -63,6 +67,7 @@ contract ETHPool is XMMPool {
 
             address payable receiver = payable(msg.sender);
             receiver.transfer(uint256(totalTransfer));
+            if (compensationAmt != 0) CompensationToken.call(abi.encodeWithSelector(IERC20.transfer.selector, msg.sender, uint256(compensationAmt)));
             emit PositionReduced(msg.sender, block.timestamp, totalTransfer);
         }
     }

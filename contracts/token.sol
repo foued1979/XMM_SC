@@ -280,7 +280,7 @@ contract Token is ERC20, Bridgeable, IExchangeable {
     function addPendingBridgeIn(address forUser, uint64 fromChainId, uint128 amount) external override onlyOwner {
         require(AvailableTokens >= uint256(amount), "Insufficient balance");
         
-        pendingBridgeInAmountByChain[forUser][fromChainId] = SafeMath.add(pendingBridgeInAmountByChain[forUser][fromChainId], amount);
+        pendingBridgeInAmountByChain[forUser][fromChainId] = SafeMath.add128(pendingBridgeInAmountByChain[forUser][fromChainId], amount);
         addUserForBridingIn(forUser);
 
         AvailableTokens = SafeMath.sub(AvailableTokens, amount);
