@@ -159,7 +159,7 @@ describe('Test token', function () {
     });
   });
 
-  describe('Test payable', function() {
+  describe('Test payable functions', function() {
     function abs(x) {
       return x < 0 ? -x : x;
     }

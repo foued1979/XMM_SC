@@ -65,11 +65,14 @@ contract CoinKYCPool is XMMPool, IKYC {
 
             if (amount > position.amount) amount = position.amount;
             uint128 penalty;
+            // The feePenalty if for the Owner, to compensate the fact that position is not held until maturity
+            uint128 feePenalty = 0;
 
             // If position is offset before expected term, a penalty applies
-            // The penalty amount will remain in pool liquidity
             if (position.startDate > block.timestamp || block.timestamp < position.expiry) {
-                // This penalty if the for the pool
+                if (position.startDate + ((position.expiry - position.startDate) >> 1) > block.timestamp) feePenalty = applyFeePenalty(amount);
+
+                // This penalty is the for the pool and will remain in pool liquidity
                 penalty = applyPenalty(amount);
             }
 
@@ -98,8 +101,11 @@ contract CoinKYCPool is XMMPool, IKYC {
 
             // Interest is computed on the whole amount
             int128 interest = int128((int160(uint160(amount)) * rate) >> 32);
-            // We remove the penalty
+
+            // We remove the penalties
             uint128 totalTransfer = SafeMath.sub128(amount, penalty);
+            if (feePenalty != 0) totalTransfer = SafeMath.sub128(totalTransfer, feePenalty);
+
             // We charge or we pay the interest
             if (rate < 0) totalTransfer = SafeMath.subOr0_128(totalTransfer, uint128(-interest));
             else totalTransfer = SafeMath.add128(totalTransfer, uint128(interest));
@@ -107,6 +113,7 @@ contract CoinKYCPool is XMMPool, IKYC {
             (bool success, ) = Token.call(abi.encodeWithSelector(IERC20.transfer.selector, msg.sender, uint256(totalTransfer)));
 
             if (success) {
+                if (feePenalty != 0) Token.call(abi.encodeWithSelector(IERC20.transfer.selector, Owner, uint256(feePenalty)));
                 if (compensationAmt != 0) CompensationToken.call(abi.encodeWithSelector(IERC20.transfer.selector, msg.sender, uint256(compensationAmt)));
                 emit PositionReduced(msg.sender, block.timestamp, totalTransfer);
             }

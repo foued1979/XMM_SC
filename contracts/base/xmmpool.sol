@@ -61,6 +61,9 @@ abstract contract XMMPool is FixingManager {
     /// @notice The penalty if position is not held for min accrual period
     uint8 public Penalty;
 
+    /// @notice Indicates whether the PenaltyFee will apply if user offset position before maturity
+    bool public ApplyPenaltyFee;
+
     /// @notice The minimum deposit size
     uint128 public MinDeposit;
 
@@ -88,6 +91,7 @@ abstract contract XMMPool is FixingManager {
         MinDeposit = uint128(minDeposit) * uint128(10 ** decimals);
         MinWithdrawal = (MinDeposit * minWithdrawalRatio) / 100;
         Penalty = penalty;
+        ApplyPenaltyFee = false;
         Fee = fee;
 
         _decimals = decimals;
@@ -161,6 +165,11 @@ abstract contract XMMPool is FixingManager {
         Penalty = newPenalty;
     }
 
+    /// @notice Sets whether the PenaltyFee will apply to users offsetting position before maturity
+    function setApplyPenaltyFee(bool status) external onlyOwner {
+        ApplyPenaltyFee = status;
+    }
+
     function getExistingPosition(address user, uint fixingIndex, Leverage leverage) internal view returns(bool, uint32) {
         Position[] storage positions = _positions[user];
 
@@ -201,6 +210,25 @@ abstract contract XMMPool is FixingManager {
         setRatios();
 
         emit Deposit(msg.sender, block.timestamp, position);
+    }
+
+    /// @notice Applies a minimum fee penalty
+    function applyFeePenalty(uint128 amount) internal view returns(uint128) {
+        if (!ApplyPenaltyFee) return 0;
+
+        uint128 dailyFee = uint128(uint128(Fee) * amount / 1_000_000);
+
+        if (Term == Terms.OneDay) {
+            return dailyFee >> 1;
+        } else if (Term == Terms.OneWeek) {
+            return dailyFee;
+        } else if (Term == Terms.TwoWeeks || Term == Terms.ThreeWeeks) {
+            return dailyFee * 3;
+        } else if (Term == Terms.OneMonth) {
+            return dailyFee * 5;
+        }
+
+        return dailyFee * 7;
     }
 
     /// @notice Returns the penalty amount
