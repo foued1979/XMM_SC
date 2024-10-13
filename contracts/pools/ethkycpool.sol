@@ -14,8 +14,8 @@ contract ETHKYCPool is XMMPool, IKYC {
     // The list of KYCed user
     mapping (address => bool) _isKYCed;
 
-    constructor(address owner, address compensationToken, uint8 decimals, Terms term, uint8 fee, uint8 penalty, uint64 minDeposit, uint8 minWithdrawalRatio)
-    XMMPool(owner, compensationToken, decimals, term, fee, penalty, minDeposit, minWithdrawalRatio) { }
+    constructor(address owner, address compensationToken, uint8 poolTokenDecimals, uint8 compensationTokenDecimals, Terms term, uint8 fee, uint8 penalty, uint64 minDeposit, uint8 minWithdrawalRatio)
+    XMMPool(owner, compensationToken, poolTokenDecimals, compensationTokenDecimals, term, fee, penalty, minDeposit, minWithdrawalRatio) { }
 
     /// @notice Sets the KYC status for a user
     /// @param user The user address
@@ -66,7 +66,7 @@ contract ETHKYCPool is XMMPool, IKYC {
                 rate = Math.multSigned(int64(proRata), rate);
             }
             else if (isCompensable(position.longShort)) {
-                compensationAmt = getCompensationAmount(position.amount, rate);
+                compensationAmt = getCompensationAmount(position.amount, rate, _poolTokenDecimals);
             }       
 
             if (position.longShort == LongShort.Long) {

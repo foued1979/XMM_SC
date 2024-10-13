@@ -33,10 +33,14 @@ abstract contract Compensable is Owned {
     /// @notice The conversion rate: Pool_Token -> CompensationToken
     uint64 public ConversionRate;
 
+    // Private Fields
+    uint8 private _compensationTokenDecimals;
+
     /***************
      * Constructor *
      ***************/
-    constructor(address owner, address compensationToken) Owned(owner) {
+    constructor(address owner, address compensationToken, uint8 compensationTokenDecimals) Owned(owner) {
+        _compensationTokenDecimals = compensationTokenDecimals;
         CompensationToken = compensationToken;
         CompensationIsActive = false;
         CompensatedSide = CompensatedSides.Long;
@@ -95,11 +99,15 @@ abstract contract Compensable is Owned {
         ConversionRate = (conversionRate << 32) / 10_000;
     }
 
-    function getCompensationAmount(uint128 positionSize, int64 loss) internal view returns(uint128) {
+    function getCompensationAmount(uint128 positionSize, int64 loss, uint8 poolTokenDecimals) internal view returns(uint128) {
         if (!CompensationIsActive) return 0;
-        
+
+        int8 decimalDiff = int8(poolTokenDecimals) - int8(_compensationTokenDecimals);
+
         uint64 absLoss = uint64(loss);
         uint64 ratio = Math.mult(ConversionRate, Math.mult(absLoss, CompensationRatio));
-        return uint128((positionSize * ratio) >> 32);
+        uint128 amt = uint128((positionSize * ratio) >> 32);
+
+        return Math.adjustAmountDecimals(amt, decimalDiff);
     }
 }

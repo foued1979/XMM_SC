@@ -10,8 +10,9 @@ contract CoinPool is XMMPool {
     /// @notice The token which managed by the XMM
     address public Token;
 
-    constructor(address token, address owner, address compensationToken, uint8 decimals, Terms term, uint8 fee, uint8 penalty, uint64 minDeposit, uint8 minWithdrawalRatio)
-    XMMPool(owner, compensationToken, decimals, term, fee, penalty, minDeposit, minWithdrawalRatio) {
+    constructor(address token, address owner, address compensationToken, uint8 poolTokenDecimals, uint8 compensationTokenDecimals, Terms term, uint8 fee,
+     uint8 penalty, uint64 minDeposit, uint8 minWithdrawalRatio)
+    XMMPool(owner, compensationToken, poolTokenDecimals, compensationTokenDecimals, term, fee, penalty, minDeposit, minWithdrawalRatio) {
         Token = token;
     }
 
@@ -74,7 +75,7 @@ contract CoinPool is XMMPool {
                 rate = Math.multSigned(int64(proRata), rate);
             }
             else if (isCompensable(position.longShort)) {
-                compensationAmt = getCompensationAmount(position.amount, rate);
+                compensationAmt = getCompensationAmount(position.amount, rate, _poolTokenDecimals);
             }        
 
             if (position.longShort == LongShort.Long) {

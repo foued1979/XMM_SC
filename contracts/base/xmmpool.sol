@@ -48,7 +48,7 @@ abstract contract XMMPool is FixingManager {
     // ----------------------
     // - Private properties -
     // ----------------------
-    uint8 private _decimals;
+    uint8 internal _poolTokenDecimals;
     uint128 internal _accumulatedFee;
 
     // The positions by depositors
@@ -86,15 +86,16 @@ abstract contract XMMPool is FixingManager {
     /***************
      * Constructor *
      ***************/
-    constructor(address owner, address compensationToken, uint8 decimals, Terms term, uint8 fee, uint8 penalty, uint64 minDeposit, uint8 minWithdrawalRatio) FixingManager(owner, compensationToken, term) {
+    /// @param minDeposit The minimum deposit expressed in unit of poolToken; e.g. 10 for 10 poolToken minimum deposit
+    constructor(address owner, address compensationToken, uint8 poolTokenDecimals, uint8 compensationTokenDecimals, Terms term, uint8 fee, uint8 penalty,
+     uint64 minDeposit, uint8 minWithdrawalRatio) FixingManager(owner, compensationToken, compensationTokenDecimals, term) {
+        _poolTokenDecimals = poolTokenDecimals;
+        MinDeposit = uint128(minDeposit) * uint128(10 ** poolTokenDecimals);
         
-        MinDeposit = uint128(minDeposit) * uint128(10 ** decimals);
         MinWithdrawal = (MinDeposit * minWithdrawalRatio) / 100;
         Penalty = penalty;
         ApplyPenaltyFee = false;
         Fee = fee;
-
-        _decimals = decimals;
     }
 
     /*************
@@ -103,6 +104,10 @@ abstract contract XMMPool is FixingManager {
     /// @notice Changes the leverage status
     function changeLeverageStatus(bool status) external onlyOwner {
         LeverageIsActive = status;
+    }
+
+    function changeMinimumDeposit(uint64 minDeposit) external onlyOwner {
+        MinDeposit = uint128(minDeposit) * uint128(10 ** _poolTokenDecimals);
     }
 
     /// @notice Gets the total accumulated fee

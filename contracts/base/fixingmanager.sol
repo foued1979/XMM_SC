@@ -47,7 +47,7 @@ abstract contract FixingManager is Compensable, IFixingManager {
     mapping(uint8 => uint64) internal _shortRatios;
     mapping(uint8 => int64[]) internal _shortRateIndices;
 
-    constructor(address owner, address compensationToken, Terms term) Compensable(owner, compensationToken) {
+    constructor(address owner, address compensationToken, uint8 compensationTokenDecimals, Terms term) Compensable(owner, compensationToken, compensationTokenDecimals) {
         Term = term;
         init(term);
     }

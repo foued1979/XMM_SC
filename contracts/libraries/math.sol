@@ -156,6 +156,20 @@ library Math {
     }
   }
 
+  function adjustAmountDecimals(uint128 amt, int8 decimalAdj) internal pure returns(uint128) {
+    if (decimalAdj == 0) return amt;
+
+    unchecked {
+      if (decimalAdj < 0) {
+        uint8 f = uint8(-decimalAdj);
+        return amt / uint128(10 ** f);
+      }
+      else {
+        return amt * uint128(10 ** uint8(decimalAdj));
+      }
+    }
+  }
+
   /**
   * @notice Calculates 1 / x rounding towards zero.
   */
