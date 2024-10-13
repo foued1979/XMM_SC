@@ -29,6 +29,9 @@ contract ERC20 is IERC20 {
     mapping(address => uint256) internal _balances;
     mapping(address => mapping(address => uint256)) private _allowances;
 
+    /***************
+     * Constructor *
+     ***************/
     constructor(string memory symbol, uint32 initialSupply, uint8 decimals) {
         Owner = msg.sender;
         Symbol = symbol;

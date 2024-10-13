@@ -1,19 +1,17 @@
 // SPDX-License-Identifier: MIT
 pragma solidity >= 0.8.0;
 
-import "./base/erc20.sol";
+import "./base/allocatable.sol";
 import "./base/bridgeable.sol";
 import "./interfaces/iexchangeable.sol";
 import "./libraries/safemath.sol";
 
-contract Token is ERC20, Bridgeable, IExchangeable {
+contract Token is Allocatable, Bridgeable, IExchangeable {
     /**********
      * Events *
      **********/
+    /// @notice The Burnt event is triggered when tokens are burnt
     event Burnt(uint indexed timstamp, uint256 amount);
-    /// @notice The Allocated event is triggered when Owner allocates some token to
-    /// a beneficiary
-    event Allocated(uint indexed timestamp, address indexed beneficiary, uint256 amount);
 
     /*************
      * Modifiers *
@@ -53,8 +51,6 @@ contract Token is ERC20, Bridgeable, IExchangeable {
 
     // Other public Properties
     address[] public ApprovedTokens;
-    uint256 public AllocatedAmount;
-    uint256 public AvailableTokens;
 
     // Parameters to manage other token exchanges
     mapping(address => bool) private _tokenIsApproved;
@@ -62,27 +58,12 @@ contract Token is ERC20, Bridgeable, IExchangeable {
     mapping(address => bool) private _exchangeIsAllowed;
 
     constructor(string memory symbol, string memory name, uint64 chainId, uint32 initialSupply, uint32 initialOwnerAllocation) 
-        ERC20(symbol, initialSupply, uint8(18)) Bridgeable(chainId) payable {
+        Allocatable(symbol, initialSupply, uint8(18)) Bridgeable(chainId) payable {
 
         Name = name;
-        AvailableTokens = TotalSupply;
         ETHDepositIsAllowed = false;
         ETHExchangeIsAllowed = false;
         allocateToOwner(uint256(initialOwnerAllocation) * uint256(10 ** 18));
-    }
-
-    /// @notice Allocates a number of token to a beneficiary
-    /// @param to The beneficiary
-    /// @param amount The amount
-    function allocate(address to, uint256 amount) external onlyOwner {
-        require(to != Owner, "No no");
-        require(amount <= AvailableTokens, "Insufficient supply");
-
-        _balances[to] = SafeMath.add(_balances[to], amount);
-        AllocatedAmount = SafeMath.add(AllocatedAmount, amount);
-        AvailableTokens = SafeMath.sub(AvailableTokens, amount);
-
-        emit Allocated(block.timestamp, to, amount);
     }
 
     /// @notice Burns a number of token

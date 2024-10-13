@@ -6,19 +6,20 @@ const { boolean } = require('hardhat/internal/core/params/argumentTypes');
 const decimalAdjustment = BigInt(10 ** 18);
 
 async function _deploy() {
-  const [owner] = await ethers.getSigners();
-
   const contractFactory = await ethers.getContractFactory("Token");
   // Initial supply is 5 mios
   // Allocation to owner is 250k
-  const token = await contractFactory.deploy("TEST", "Test token", 1, 5_000_000, 250_000);
+  return await contractFactory.deploy("TEST", "Test token", 1, 5_000_000, 250_000);
+}
 
-  return [ owner, token ];
+async function _deployERC20() {
+  const contractFactory = await ethers.getContractFactory("Allocatable");
+  return await contractFactory.deploy("COIN", 10_000, 18);
 }
 
 describe('Test base token functions', function () {
     it('Allocation is done properly and is reflected in AllocatedAmount', async function () {
-      const [ owner, token ] = await loadFixture(_deploy);
+      const token = await loadFixture(_deploy);
       
       const ownerAmount = 250_000n * BigInt(10 ** 18);
       const amount1 = 100n * BigInt(10 ** 18);
@@ -33,7 +34,8 @@ describe('Test base token functions', function () {
     });
 
     it('Owner cannot transfer to himself', async function() {
-      const [ owner, token ] = await loadFixture(_deploy);
+      const token = await loadFixture(_deploy);
+      const [ owner, spender ] = await ethers.getSigners();
 
       const ownerAmount = 250_000n * BigInt(10 ** 18);
 
@@ -42,8 +44,8 @@ describe('Test base token functions', function () {
     });
 
     it('Cannot allocate more than available', async function() {
-
-      const [ owner, token ] = await loadFixture(_deploy);
+      const token = await loadFixture(_deploy);
+      const [ owner, spender ] = await ethers.getSigners();
 
       const totalSupply = await token.totalSupply();
       const ownerBalance = await token.balanceOf(owner.address);
@@ -59,7 +61,8 @@ describe('Test base token functions', function () {
     });
 
     it('Burn is working properly', async function() {
-      const [ owner, token ] = await loadFixture(_deploy);
+      const token = await loadFixture(_deploy);
+      
       const totalSupply = await token.totalSupply();
 
       await expect(token.burn(totalSupply)).to.be.revertedWith("Burn failed");
@@ -74,52 +77,89 @@ describe('Test base token functions', function () {
     });
 
     it('Approve and Allowance work as expeced', async function() {
-        const [ owner, token ] = await loadFixture(_deploy);
-        const [ owner1, spender1 ] = await ethers.getSigners();
+      const token = await loadFixture(_deploy);
+      const [ owner, spender ] = await ethers.getSigners();
   
-        const newBalance = 2_500n * BigInt(10 ** 18);
-        await token.allocate(spender1.address, newBalance);
+      const newBalance = 2_500n * BigInt(10 ** 18);
+      await token.allocate(spender.address, newBalance);
   
-        await token.connect(spender1).approve(owner, newBalance / 2n);
-        const allowance = await token.allowance(spender1, owner1);
+      await token.connect(spender).approve(owner, newBalance / 2n);
+      const allowance = await token.allowance(spender, owner);
   
-        expect(allowance).to.equal(newBalance / 2n);
-        await token.connect(owner).transferFrom(spender1, "0x1234567890123456789012345678901234567890", newBalance / 4n);
-        const balance90 = await token.balanceOf("0x1234567890123456789012345678901234567890");
+      expect(allowance).to.equal(newBalance / 2n);
+      await token.connect(owner).transferFrom(spender, "0x1234567890123456789012345678901234567890", newBalance / 4n);
+      const balance90 = await token.balanceOf("0x1234567890123456789012345678901234567890");
   
-        expect(balance90).to.equal(newBalance / 4n);
-        await expect(token.transferFrom(spender1, "0x1234567890123456789012345678901234567890", newBalance)).to.be.revertedWith("Insufficient allowance");
-        await expect(token.transferFrom(spender1, "0x1234567890123456789012345678901234567890", newBalance / 2n)).to.be.revertedWith("Insufficient allowance");
+      expect(balance90).to.equal(newBalance / 4n);
+      await expect(token.transferFrom(spender, "0x1234567890123456789012345678901234567890", newBalance)).to.be.revertedWith("Insufficient allowance");
+      await expect(token.transferFrom(spender, "0x1234567890123456789012345678901234567890", newBalance / 2n)).to.be.revertedWith("Insufficient allowance");
   
-        await token.connect(spender1).approve(owner, newBalance);
-        await expect(token.transferFrom(spender1, "0x1234567890123456789012345678901234567890", 3n * newBalance / 4n + 1n)).to.be.revertedWith("Insufficient funds");
+      await token.connect(spender).approve(owner, newBalance);
+      await expect(token.transferFrom(spender, "0x1234567890123456789012345678901234567890", 3n * newBalance / 4n + 1n)).to.be.revertedWith("Insufficient funds");
     });
 
     it('Exchange functions work properly for Coin', async function() {
-        const [ owner, token ] = await loadFixture(_deploy);
+      const token = await loadFixture(_deploy);
+      const tokenAddress = await token.getAddress()
+      const [ owner, spender ] = await ethers.getSigners();
 
-        await expect(token.getExchangeRate("0x1234567890123456789012345678901234567890")).to.be.revertedWith("Not approved");
+      const approvedToken = await loadFixture(_deployERC20);
+      const approvedTokenAddress = await approvedToken.getAddress();
 
-        await token.addApprovedToken("0x1234567890123456789012345678901234567890");
-        var [ exchangeIsAllowed, exchangeRate ] = await token.getExchangeRate("0x1234567890123456789012345678901234567890");
+      // We allocate some ERC20 to token
+      await approvedToken.allocate(tokenAddress, 1_500n * BigInt(10 ** 18));
+      var balanceOfERC20 = await approvedToken.balanceOf(tokenAddress);
+      expect(balanceOfERC20).to.equal(1_500n * BigInt(10 ** 18));
 
-        expect(exchangeIsAllowed).to.equal(false);
-        expect(exchangeRate).to.equal(0);
+      // We allocate some tokens to spender
+      await token.allocate(spender, 500n * BigInt(10 ** 18));
+      const allocatedAmt = await token.AllocatedAmount();
 
-        var approvedTokens = await token.getApprovedTokens();
-        expect(approvedTokens.length).to.equal(1);
-        expect(approvedTokens[0]).to.equal("0x1234567890123456789012345678901234567890");
+      // There is no exchange rate yet
+      await expect(token.getExchangeRate(approvedTokenAddress)).to.be.revertedWith("Not approved");
 
-        await token.updateTokenExchangeRate("0x1234567890123456789012345678901234567890", 1_500_000);
-        [ exchangeIsAllowed, exchangeRate ] = await token.getExchangeRate("0x1234567890123456789012345678901234567890");
+      // We add an approved token for exchange
+      await token.addApprovedToken(approvedTokenAddress);
 
-        expect(exchangeIsAllowed).to.equal(true);
-        expect(exchangeRate).to.equal(1_500_000);
+      // We cannot change yet
+      var [ exchangeIsAllowed, exchangeRate ] = await token.getExchangeRate(approvedTokenAddress);
+      expect(exchangeIsAllowed).to.equal(false);
+      expect(exchangeRate).to.equal(0);
 
-        await token.removeExchangeAuthorization("0x1234567890123456789012345678901234567890");
+      // Though the token is approved
+      var approvedTokens = await token.getApprovedTokens();
+      expect(approvedTokens.length).to.equal(1);
+      expect(approvedTokens[0]).to.equal(approvedTokenAddress);
 
-        [ exchangeIsAllowed, exchangeRate ] = await token.getExchangeRate("0x1234567890123456789012345678901234567890");
+      // We update the exchange rate, which enables change
+      await token.updateTokenExchangeRate(approvedTokenAddress, 1_500_000n);
+      [ exchangeIsAllowed, exchangeRate ] = await token.getExchangeRate(approvedTokenAddress);
 
-        expect(exchangeIsAllowed).to.equal(false);
+      expect(exchangeIsAllowed).to.equal(true);
+      expect(exchangeRate).to.equal(1_500_000n);
+
+      // We test the sellBack function
+      await token.connect(spender).sellBackAgainst(150n * BigInt(10 ** 18), approvedTokenAddress);
+      var balanceOfSpender = await approvedToken.balanceOf(spender);
+      expect(balanceOfSpender).to.equal(1n * BigInt(10 ** 18));
+
+      // We make sure that we can remove exchange auth.
+      await token.removeExchangeAuthorization(approvedTokenAddress);
+      [ exchangeIsAllowed, exchangeRate ] = await token.getExchangeRate(approvedTokenAddress);
+      expect(exchangeIsAllowed).to.equal(false);
+    });
+
+    it('Exchange functions work properly for ETH', async function() {
+      const [ owner, token ] = await loadFixture(_deploy);
+
+      var ethExchangeRate = await expect(token.EthExchangeRate());
+      expect(ethExchangeRate).to.equal(0);
+
+      // We update the exchange
+      await token.updateETHExchangeRate(30_000_000);
+      ethExchangeRate = await token.EthExchangeRate();
+      var exchangeIsAllowed = await token.update
+      var [ exchangeIsAllowed, exchangeRate ] = await token.getExchangeRate("0x1234567890123456789012345678901234567890");
+
     });
   });
