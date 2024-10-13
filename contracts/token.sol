@@ -160,6 +160,11 @@ contract Token is ERC20, Bridgeable, IExchangeable {
         ApprovedTokens.push(token);
     }
 
+    /// @notice Gets approved tokens
+    function getApprovedTokens() external view returns(address[] memory) {
+        return ApprovedTokens;
+    }
+
     /// @notice Enables a user to deposit ETH and receive Tokens in exchange
     /// The conversion rate applies at a fixed rate, updated by Owner
     function depositEther() external payable ethDepositIsAllowed returns(uint256) {

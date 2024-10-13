@@ -76,7 +76,12 @@ contract ETHPool is XMMPool {
 
             address payable receiver = payable(msg.sender);
             receiver.transfer(uint256(totalTransfer));
-            if (feePenalty != 0) Token.call(abi.encodeWithSelector(IERC20.transfer.selector, Owner, uint256(feePenalty)));
+
+            if (feePenalty != 0) {
+                address payable owner = payable(Owner);
+                owner.transfer(uint256(feePenalty));
+            }
+            
             if (compensationAmt != 0) CompensationToken.call(abi.encodeWithSelector(IERC20.transfer.selector, msg.sender, uint256(compensationAmt)));
             emit PositionReduced(msg.sender, block.timestamp, totalTransfer);
         }

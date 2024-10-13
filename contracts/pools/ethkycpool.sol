@@ -49,7 +49,7 @@ contract ETHKYCPool is XMMPool, IKYC {
             uint128 feePenalty = 0;
 
             // If position is offset before expected term, a penalty applies
-            if (position.startDate > block.timestamp || block.timestamp < position.expiry) 
+            if (position.startDate > block.timestamp || block.timestamp < position.expiry) {
                 if (position.startDate + ((position.expiry - position.startDate) >> 1) > block.timestamp) feePenalty = applyFeePenalty(amount);
 
                 // This penalty is the for the pool and will remain in pool liquidity
@@ -92,7 +92,12 @@ contract ETHKYCPool is XMMPool, IKYC {
 
             address payable receiver = payable(msg.sender);
             receiver.transfer(uint256(totalTransfer));
-            if (feePenalty != 0) Token.call(abi.encodeWithSelector(IERC20.transfer.selector, Owner, uint256(feePenalty)));
+
+            if (feePenalty != 0) {
+                address payable owner = payable(Owner);
+                owner.transfer(uint256(feePenalty));
+            }
+            
             if (compensationAmt != 0) CompensationToken.call(abi.encodeWithSelector(IERC20.transfer.selector, msg.sender, uint256(compensationAmt)));
             emit PositionReduced(msg.sender, block.timestamp, totalTransfer);
         }
