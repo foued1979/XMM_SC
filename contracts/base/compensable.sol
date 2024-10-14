@@ -27,6 +27,14 @@ abstract contract Compensable is Owned {
     /// @notice The compensated side; 0-None, 1-Long, 2-Short, 3-All
     CompensatedSides public CompensatedSide;
 
+    /// @notice The penalty rebate threshold
+    // If user has more than threshold => 15% discount
+    // If user has more than 2 * threshold => 30% discount
+    // If user has more than 4 * threshold => 50% discount
+    uint32 public RebateThreshold;
+    uint32 private _2threshold;
+    uint32 private _4threshold;
+
     /// @notice The compensation ratio to the loss
     uint64 public CompensationRatio;
 
@@ -41,6 +49,11 @@ abstract contract Compensable is Owned {
      ***************/
     constructor(address owner, address compensationToken, uint8 compensationTokenDecimals) Owned(owner) {
         _compensationTokenDecimals = compensationTokenDecimals;
+
+        RebateThreshold = 50;
+        _2threshold = 100;
+        _4threshold = 200;
+
         CompensationToken = compensationToken;
         CompensationIsActive = false;
         CompensatedSide = CompensatedSides.Long;
@@ -77,6 +90,27 @@ abstract contract Compensable is Owned {
     function changeCompensationSide(CompensatedSides newCompensationSide) external onlyOwner {
         CompensatedSide = newCompensationSide;
         emit CompensationSideChanged(block.timestamp, newCompensationSide);
+    }
+
+    /// @notice Updates the thresholds for minimum fee rebate
+    function changeRebateThreshold(uint32 newThreshold) external onlyOwner {
+        RebateThreshold = newThreshold;
+        _2threshold = 2 * newThreshold;
+        _4threshold = 4 * newThreshold;
+    }
+
+    function getRebatedMinimumFee(address user, uint128 minFee) internal returns(uint128) {
+        (bool success, bytes memory res) = CompensationToken.call(abi.encodeWithSelector(IERC20.balanceOf.selector, user));
+
+        if (success) {
+            uint32 balance = uint32(abi.decode(res, (uint256)) / (10 ** _compensationTokenDecimals));
+
+            if (balance >= _4threshold) return minFee * 60 / 100;
+            if (balance >= _2threshold) return minFee * 70 / 100;
+            if (balance >= RebateThreshold) return minFee * 85 / 100;
+        }
+
+        return minFee;
     }
 
     function isCompensable(LongShort position) internal view returns(bool) {

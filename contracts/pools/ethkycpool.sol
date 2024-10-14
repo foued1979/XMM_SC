@@ -29,10 +29,20 @@ contract ETHKYCPool is XMMPool, IKYC {
     function deposit(LongShort longShort, Leverage leverage) external payable isActive isKYCed isLeveragePossible(leverage) hasMinDeposit(uint128(msg.value)) {
         // Sanity check
         require(msg.value >> 128 == 0, "Deposit overflow");
+        uint128 amount = uint128(msg.value);
+
+        uint timestamp = Utils.getTimeStamp(block.timestamp, _fixings[_fixings.length - 1].timestamp, _currentFixingUpdateInterval);
+        uint128 minFee = getMinimumFee(msg.sender, timestamp, timestamp + _expiryInterval, amount);
+        // The deposit can only be an increase in position
+        // -> hence, we remove the minFee from the deposit
+        amount = SafeMath.sub128(amount, minFee);
+
+        address payable receiver = payable(Owner);
+        receiver.transfer(uint256(minFee));
 
         // We just write the deposit
         // The fee is charged when fixing is updated
-        writeDeposit(msg.sender, _fixings.length - 1, longShort, uint128(msg.value), leverage);
+        writeDeposit(msg.sender, _fixings.length - 1, timestamp, longShort, amount, minFee, leverage);
     }
 
     /// @notice Reduces a position
@@ -45,13 +55,10 @@ contract ETHKYCPool is XMMPool, IKYC {
 
             if (amount > position.amount) amount = position.amount;
             uint128 penalty;
-            // The feePenalty if for the Owner, to compensate the fact that position is not held until maturity
-            uint128 feePenalty = 0;
+            uint128 fee = getPositionFee(block.timestamp, position.startDate, position.expiry, amount, position.minFeePaid);
 
             // If position is offset before expected term, a penalty applies
             if (position.startDate > block.timestamp || block.timestamp < position.expiry) {
-                if (position.startDate + ((position.expiry - position.startDate) >> 1) > block.timestamp) feePenalty = applyFeePenalty(amount);
-
                 // This penalty is the for the pool and will remain in pool liquidity
                 penalty = applyPenalty(amount);
             }
@@ -82,9 +89,9 @@ contract ETHKYCPool is XMMPool, IKYC {
             // Interest is computed on the whole amount
             int128 interest = int128((int160(uint160(amount)) * rate) >> 32);
 
-            // We remove the penalties
+            // We remove the penalty and fee
             uint128 totalTransfer = SafeMath.sub128(amount, penalty);
-            if (feePenalty != 0) totalTransfer = SafeMath.sub128(totalTransfer, feePenalty);
+            totalTransfer = SafeMath.sub128(totalTransfer, fee);
 
             // We charge or we pay the interest
             if (rate < 0) totalTransfer = SafeMath.subOr0_128(totalTransfer, uint128(-interest));
@@ -93,9 +100,9 @@ contract ETHKYCPool is XMMPool, IKYC {
             address payable receiver = payable(msg.sender);
             receiver.transfer(uint256(totalTransfer));
 
-            if (feePenalty != 0) {
+            if (fee > 0) {
                 address payable owner = payable(Owner);
-                owner.transfer(uint256(feePenalty));
+                owner.transfer(uint256(fee));
             }
             
             if (compensationAmt != 0) CompensationToken.call(abi.encodeWithSelector(IERC20.transfer.selector, msg.sender, uint256(compensationAmt)));

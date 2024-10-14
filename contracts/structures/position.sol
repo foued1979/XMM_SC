@@ -11,4 +11,5 @@ struct Position {
     uint startDate;
     uint expiry;
     uint128 amount;
+    uint128 minFeePaid;
 }

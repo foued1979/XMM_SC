@@ -136,8 +136,13 @@ abstract contract XMMPool is FixingManager {
 
     /// @notice Creates a position on behaf of a user; e.g. if user transfers coin directly to the pool, pool owner
     //          can write the position
-    function createPositionForUser(LongShort longShort, Leverage leverage, uint128 amount, address user) external onlyOwner {
-        writeDeposit(user, _fixings.length - 1, longShort, amount, leverage);
+    /// @param amount   The amount of the position, inclusive of the fee -> if a client transfers 100 tokens, and the fee is 1 token
+    //                  amount = 100 and fee = 1
+    function createPositionForUser(LongShort longShort, Leverage leverage, uint128 amount, uint128 fee, address user) external onlyOwner {
+        amount = SafeMath.sub128(amount, fee);
+        uint timestamp = Utils.getTimeStamp(block.timestamp, _fixings[_fixings.length - 1].timestamp, _currentFixingUpdateInterval);
+        
+        writeDeposit(user, _fixings.length - 1, timestamp, longShort, amount, fee, leverage);
     }
 
     /// @notice Returns user's position at given index
@@ -175,37 +180,39 @@ abstract contract XMMPool is FixingManager {
         ApplyPenaltyFee = status;
     }
 
-    function getExistingPosition(address user, uint fixingIndex, Leverage leverage) internal view returns(bool, uint32) {
+    function getExistingPosition(address user, uint fixingIndex, LongShort longShort, Leverage leverage) internal view returns(bool, uint32) {
         Position[] storage positions = _positions[user];
 
         for (uint32 i = 0; i < positions.length; i++) {
             Position storage position = positions[i];
-            if (position.leverage == leverage && position.fixingIndex0 == fixingIndex) return (true, i);
+            if (position.longShort == longShort && position.leverage == leverage && position.fixingIndex0 == fixingIndex) return (true, i);
         }
 
         return (false, uint32(positions.length));
     }
 
-    function writeDeposit(address user, uint lastFixingIndex, LongShort longShort, uint128 amount, Leverage leverage) internal {
-        uint timestamp = Utils.getTimeStamp(block.timestamp, _fixings[lastFixingIndex].timestamp, _currentFixingUpdateInterval);
-
+    function writeDeposit(address user, uint lastFixingIndex, uint timestamp, LongShort longShort, uint128 amount, uint128 minFeePaid, Leverage leverage) internal {
         // If position is opened after mid update interval, the next fixing is used
         if (block.timestamp > timestamp + _currentMidFixingInterval) {
             timestamp += _currentFixingUpdateInterval;
             lastFixingIndex++;
         }
 
-        (bool hasPosition, uint32 positionIndex) = getExistingPosition(user, lastFixingIndex, leverage);
-        Position memory position;
+        (bool hasPosition, uint32 positionIndex) = getExistingPosition(user, lastFixingIndex, longShort, leverage);
 
         if (hasPosition) {
-            position = _positions[user][positionIndex];
-        } else {
-            position = Position(positionIndex, longShort, leverage, lastFixingIndex, timestamp, timestamp + _expiryInterval, amount);
-        }
+            Position storage position = _positions[user][positionIndex];
+            position.amount = SafeMath.add128(position.amount, amount);
+            position.minFeePaid = SafeMath.add128(position.minFeePaid, minFeePaid);
 
-        _positions[user].push(position);
-                
+            emit Deposit(user, block.timestamp, position);
+        } else {
+            Position memory position = Position(positionIndex, longShort, leverage, lastFixingIndex, timestamp, timestamp + _expiryInterval, amount, minFeePaid);
+            _positions[user].push(position);
+
+            emit Deposit(user, block.timestamp, position);
+        }
+           
         if (longShort == LongShort.Long) {
             TotalLongPositions[uint8(leverage)] = SafeMath.add128(TotalLongPositions[uint8(leverage)], amount);
         } else {
@@ -213,27 +220,28 @@ abstract contract XMMPool is FixingManager {
         }
 
         setRatios();
-
-        emit Deposit(msg.sender, block.timestamp, position);
     }
 
-    /// @notice Applies a minimum fee penalty
-    function applyFeePenalty(uint128 amount) internal view returns(uint128) {
-        if (!ApplyPenaltyFee) return 0;
+    function getMinimumFee(address user, uint positionStartDate, uint positionEndDate, uint128 positionAmt) internal returns(uint128) {
+        uint128 holdingPeriod = uint128(((positionEndDate - positionStartDate) / 60) >> 1);
+        // 1_440 minutes within a day
+        // The Fee is in %bps on a daily basis 
+        uint128 minFee = uint128(uint128(Fee) * holdingPeriod * positionAmt / 1_440_000_000);
+        return getRebatedMinimumFee(user, minFee);
+    }
 
-        uint128 dailyFee = uint128(uint128(Fee) * amount / 1_000_000);
+    /// @notice Gets the fee for the position
+    function getPositionFee(uint tradeDate, uint positionStartDate, uint positionEndDate, uint128 positionAmt, uint128 minFeePaid) internal view returns(uint128) {
+        // HoldingPeriod represents the number of minutes during which position is held
+        uint128 holdingPeriod = uint128((tradeDate - positionStartDate) / 60);
+        uint128 minHoldingPeriod = uint128(((positionEndDate - positionStartDate) / 60) >> 1);
 
-        if (Term == Terms.OneDay) {
-            return dailyFee >> 1;
-        } else if (Term == Terms.OneWeek) {
-            return dailyFee;
-        } else if (Term == Terms.TwoWeeks || Term == Terms.ThreeWeeks) {
-            return dailyFee * 3;
-        } else if (Term == Terms.OneMonth) {
-            return dailyFee * 5;
-        }
+        // If the holding period is less than the minimum holding period, Fee has already been charged
+        if (holdingPeriod <= minHoldingPeriod) return 0;
 
-        return dailyFee * 7;
+        // 1_440 minutes within a day
+        // The Fee is in %bps on a daily basis 
+        return uint128(uint128(Fee) * holdingPeriod * positionAmt / 1_440_000_000) - minFeePaid;
     }
 
     /// @notice Returns the penalty amount
@@ -273,23 +281,24 @@ abstract contract XMMPool is FixingManager {
     }
 
     function executeMarginCall(uint64 prevSpot, Fixing memory lastFixing) internal override {
-        uint8 i;
+        // To transfer the fee at each fixing period, we need to incorporate leap years
+        // otherwise we will have a discrepancy between the fee computed when user go out of the position
+        // and the fee actually charged (where user may be charged less fee during leap years and therefore
+        // create a negative balance in the ppol)
+        //uint8 i;
 
-        for (i = 0; i < 6; i++) {
-            // We transfer the accrued fee first
-            (uint128 feeshort, uint128 feeLong) = transferFee(TotalShortPositions[i], TotalLongPositions[i]);
-            TotalShortPositions[i] = SafeMath.sub128(TotalShortPositions[i], feeshort);
-            TotalLongPositions[i] = SafeMath.sub128(TotalLongPositions[i], feeLong);
-        }
-
-        // We adjust the ratios
-        setRatios();
+        //for (i = 0; i < 6; i++) {
+        //    // We transfer the fee first
+        //    (uint128 feeshort, uint128 feeLong) = transferFee(TotalShortPositions[i], TotalLongPositions[i]);
+        //    TotalShortPositions[i] = SafeMath.sub128(TotalShortPositions[i], feeshort);
+        //    TotalLongPositions[i] = SafeMath.sub128(TotalLongPositions[i], feeLong);
+        //}
 
         (int64[] memory longRateFactors, int64[] memory shortRateFactors) = computeFactors(prevSpot, lastFixing.spot, lastFixing.premium);
 
         transfer(longRateFactors, shortRateFactors);
 
-        for (i = 0; i < 6; i++) {
+        for (uint8 i = 0; i < 6; i++) {
             _longRateIndices[i].push(Math.addSigned(_longRateIndices[i][_longRateIndices[i].length - 1], longRateFactors[i]));
             _shortRateIndices[i].push(Math.addSigned(_shortRateIndices[i][_shortRateIndices[i].length - 1], shortRateFactors[i]));
         }
