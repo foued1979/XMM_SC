@@ -2,16 +2,11 @@
 pragma solidity >= 0.8.0;
 
 interface IExchangeable {
-    event Deposited(uint indexed timestamp, address indexed from, uint256 amountETH, uint256 amountToken);
-    event ChangedBack(uint indexed timestamp, address indexed beneficiary, uint256 amountTokens);
-    event ChangedBackFor(uint indexed timestamp, address indexed beneficiary, address tokenReceived, uint256 amount);
-    event Withdrawn(uint indexed timestamp, address indexed from, uint256 amount);    
-
     /// @notice Sets the change authorization status to false
     function removeETHExchangeAuthorization() external;
 
     /// @notice Sets the change authorization status for a token to false
-    function removeExchangeAuthorization(address tokenToBeReceived) external;
+    function removeExchangeAuthorizationForToken(address tokenToBeReceived) external;
 
     /// @notice Sets whether the deposit of ETH against token is allowed or not
     function setETHDepositExchangeRate(uint64 exchangeRate) external;
@@ -30,15 +25,15 @@ interface IExchangeable {
     /// @notice Returns the quantity of ETH available for change against Token
     function getAvailableQuantityOfETH() external view returns(uint256);
 
+    /// @notice Returns the available quantity of a token to be exchanged
+    function getExchangeInfoForToken(address tokenToBeReceived) external view returns(bool, uint64);
+
     /// @notice Returns the available quantity of a token to be exchanged against our Token
     function getAvailableQuantityOfToken(address tokenToBeReceived) external returns(uint256);
 
     /// @notice Enables a user to deposit ETH and receive Tokens in exchange
     /// The conversion rate applies at a fixed rate, updated by Owner
     function depositEther() external payable returns(uint256);
-
-    /// @notice Deposits ETH for future token exchange
-    function depositEtherForExchange() external payable;
 
     /// @notice Enables a user to sell back an amount of Tokens against ETH
     /// if there is enough ETH available, and if the change is authorized

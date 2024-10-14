@@ -21,7 +21,7 @@ abstract contract Bridgeable {
     }
 
     modifier isValidChain(uint64 chainId) {
-        require(chainId != _chainId && chainIsValid(chainId));
+        require(chainId != _chainId && chainIsValid(chainId), "Chain err");
         _;
     }
 
@@ -63,6 +63,11 @@ abstract contract Bridgeable {
     /// @param forChainId The target chain Id to cancel
     function cancelBridgeOut(uint64 forChainId) external onlyIfHavePendingRequest(forChainId) {
         this.revertBridgeOutRequestForUser(msg.sender, forChainId);
+    }
+
+    /// @notice Gets the list of valid chain Ids for which bridge is possible
+    function getValidChainIds() external view returns(uint64[] memory) {
+        return _validChainIds;
     }
 
     /// @notice Returns the array of addresses awaiting for bridging in

@@ -8,7 +8,7 @@ contract ETHPool is XMMPool {
 
     constructor(address owner, address compensationToken, uint8 poolTokenDecimals, uint8 compensationTokenDecimals, Terms term, uint8 fee, uint8 penalty, uint64 minDeposit, uint8 minWithdrawalRatio)
     XMMPool(owner, compensationToken, poolTokenDecimals, compensationTokenDecimals, term, fee, penalty, minDeposit, minWithdrawalRatio) { }
-
+    
     /// @notice Executes a deposit to the XMM from msg.sender
     /// @param longShort 0 if long 1 if short
     /// @param leverage The level of leverage (x1, x2, x3, x5, x7 or x10), if leverage is authorized

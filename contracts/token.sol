@@ -12,6 +12,10 @@ contract Token is Allocatable, Bridgeable, IExchangeable {
      **********/
     /// @notice The Burnt event is triggered when tokens are burnt
     event Burnt(uint indexed timstamp, uint256 amount);
+    event Deposited(uint indexed timestamp, address indexed from, uint256 amountETH, uint256 amountToken);
+    event ChangedBack(uint indexed timestamp, address indexed beneficiary, uint256 amountTokens);
+    event ChangedBackFor(uint indexed timestamp, address indexed beneficiary, address tokenReceived, uint256 amount);
+    event Withdrawn(uint indexed timestamp, address indexed from, uint256 amount);    
 
     /*************
      * Modifiers *
@@ -66,6 +70,10 @@ contract Token is Allocatable, Bridgeable, IExchangeable {
         allocateToOwner(uint256(initialOwnerAllocation) * uint256(10 ** 18));
     }
 
+    receive() external payable {
+        emit Deposited(block.timestamp, msg.sender, msg.value, 0);
+    }
+
     /// @notice Burns a number of token
     /// @param amount The amount to be allocated
     function burn(uint256 amount) external onlyOwner {
@@ -83,7 +91,7 @@ contract Token is Allocatable, Bridgeable, IExchangeable {
     }
 
     /// @notice Sets the change authorization status for a token to false
-    function removeExchangeAuthorization(address tokenToBeReceived) external onlyOwner tokenIsApproved(tokenToBeReceived) {
+    function removeExchangeAuthorizationForToken(address tokenToBeReceived) external onlyOwner tokenIsApproved(tokenToBeReceived) {
         _exchangeIsAllowed[tokenToBeReceived] = false;
     }
 
@@ -121,11 +129,11 @@ contract Token is Allocatable, Bridgeable, IExchangeable {
 
     /// @notice Returns the latest exchange rate associated to the token to be received
     /// @return Whether the exchange is authorized and the latest exchange rate
-    function getExchangeRate(address tokenToBeReceived) external view tokenIsApproved(tokenToBeReceived) returns(bool, uint64) {
+    function getExchangeInfoForToken(address tokenToBeReceived) external view tokenIsApproved(tokenToBeReceived) returns(bool, uint64) {
         return (_exchangeIsAllowed[tokenToBeReceived], _exchangeRates[tokenToBeReceived]);
     }
 
-    /// @notice Returns the available quantity of a token to be exchanged against our Token
+    /// @notice Returns the available quantity of a token to be exchanged
     function getAvailableQuantityOfToken(address tokenToBeReceived) public tokenIsApproved(tokenToBeReceived) returns(uint256) {
         (bool success , bytes memory res) = tokenToBeReceived.call(abi.encodeWithSelector(IERC20.balanceOf.selector, address(this)));
 
@@ -173,14 +181,6 @@ contract Token is Allocatable, Bridgeable, IExchangeable {
         _balances[msg.sender] += amountToken;
 
         return amountToken;
-    }
-
-    /// @notice Deposits ETH for future token exchange
-    function depositEtherForExchange() external payable onlyOwner {
-        uint256 amountETH = msg.value;
-        if (amountETH == 0) return;
-
-        emit Deposited(block.timestamp, msg.sender, amountETH, 0);
     }
 
     /// @notice Enables owner to send back some tokens to the Token contract
@@ -307,15 +307,17 @@ contract Token is Allocatable, Bridgeable, IExchangeable {
     /// @param toChainId The destination Chain id
     /// @param amount The amount to be bridged out
     function requestBridgeOut(uint64 toChainId, uint128 amount) external override isValidChain(toChainId) {
-        require(_balances[msg.sender] >= amount, "Insufficient balance");
+        address user = msg.sender;
 
-        pendingBridgeOutAmountByChain[msg.sender][toChainId] = SafeMath.add128(pendingBridgeOutAmountByChain[msg.sender][toChainId], amount);
-        _balances[msg.sender] = SafeMath.sub(_balances[msg.sender], uint256(amount));
+        require(_balances[user] >= amount, "Insufficient balance");
 
-        addUserForBridingOut(msg.sender);
-        addPendingChainIdBridgeToUser(pendingChainIdBridgesOutForUser[msg.sender], toChainId);
+        pendingBridgeOutAmountByChain[user][toChainId] = SafeMath.add128(pendingBridgeOutAmountByChain[user][toChainId], amount);
+        _balances[user] = SafeMath.sub(_balances[user], uint256(amount));
 
-        emit BridgeOutRequested(block.timestamp, msg.sender, toChainId, amount);
+        addUserForBridingOut(user);
+        addPendingChainIdBridgeToUser(pendingChainIdBridgesOutForUser[user], toChainId);
+
+        emit BridgeOutRequested(block.timestamp, user, toChainId, amount);
     }
 
     /// @notice Cancels a bridging request for a user and for a chainId
