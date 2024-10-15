@@ -35,6 +35,19 @@ describe('Test base token functions', function () {
       expect(await token.AvailableTokens()).to.equal(5_000_000n * BigInt(10 ** 18) - (ownerAmount + amount1 + amount2));
     });
 
+    it('Can allocate to different users', async function() {
+      const token = await loadFixture(_deploy);
+      const amount1 = 200n * BigInt(10 ** 18);
+
+      await token.allocate("0x1234567890123456789012345678901111111111", amount1);
+      await token.allocate("0x1234567890123456789012345678902222222222", 2n * amount1);
+      await token.allocate("0x1234567890123456789012345678903333333333", 3n * amount1);
+
+      expect(await token.balanceOf("0x1234567890123456789012345678901111111111")).to.equal(amount1);
+      expect(await token.balanceOf("0x1234567890123456789012345678902222222222")).to.equal(2n * amount1);
+      expect(await token.balanceOf("0x1234567890123456789012345678903333333333")).to.equal(3n * amount1);
+    });
+
     it('Owner cannot transfer to himself', async function() {
       const token = await loadFixture(_deploy);
       const [ owner, spender ] = await ethers.getSigners();
@@ -184,8 +197,10 @@ describe('Test base token functions', function () {
       var availableTokens = await token.AvailableTokens();
 
       // We test the sellBack function
-      await token.connect(spender).sellBack(150n * BigInt(10 ** 18));
+      const tx = await token.connect(spender).sellBack(150n * BigInt(10 ** 18));
+      var receipt = await tx.wait();
 
+      expect(await ethers.provider.getBalance(spender.address)).to.equal(1000005n * BigInt(10 ** 16) - receipt.gasUsed * receipt.gasPrice);
       expect(await token.balanceOf(spender)).to.equal(350n * BigInt(10 ** 18));
       expect(await token.AllocatedAmount()).to.equal(allocatedAmt - 150n * BigInt(10 ** 18));
       expect(await token.AvailableTokens()).to.equal(availableTokens + 150n * BigInt(10 ** 18));

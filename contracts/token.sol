@@ -325,7 +325,7 @@ contract Token is Allocatable, Bridgeable, IExchangeable {
     /// @param forChainId The target chain Id to cancel
     function revertBridgeOutRequestForUser(address forUser, uint64 forChainId) external override onlyOwner {
         // We credit back the tokens to the user
-        _balances[msg.sender] = SafeMath.add(_balances[msg.sender], uint256(pendingBridgeOutAmountByChain[forUser][forChainId]));
+        _balances[forUser] = SafeMath.add(_balances[forUser], uint256(pendingBridgeOutAmountByChain[forUser][forChainId]));
         pendingBridgeOutAmountByChain[forUser][forChainId] = 0;
 
         removePendingChainIdBridgeForUser(forUser, pendingBridgesOut, pendingChainIdBridgesOutForUser[forUser], forChainId);
@@ -337,6 +337,8 @@ contract Token is Allocatable, Bridgeable, IExchangeable {
     function validateBridgeOut(address forUser, uint64 forChainId) external override onlyOwner {
         // We add the bridge quantity back to the available tokens
         uint128 amt = pendingBridgeOutAmountByChain[forUser][forChainId];
+        
+        AllocatedAmount = SafeMath.sub(AllocatedAmount, uint256(amt));
         AvailableTokens = SafeMath.add(AvailableTokens, uint256(amt));
 
         pendingBridgeOutAmountByChain[forUser][forChainId] = 0;

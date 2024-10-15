@@ -114,8 +114,8 @@
       ]
     },
     "C:\\Users\\Frederic\\XMM_SC\\contracts\\token.sol": {
-      "lastModificationDate": 1728927277803,
-      "contentHash": "4828e3380744d78e038f9d6eedcd39d3",
+      "lastModificationDate": 1728983587836,
+      "contentHash": "2e3537f0ca8685147f8bb46839b72ccf",
       "sourceName": "contracts/token.sol",
       "solcConfig": {
         "version": "0.8.24",
