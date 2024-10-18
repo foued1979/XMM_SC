@@ -95,13 +95,26 @@ contract CoinPool is XMMPool {
             // Interest is computed on the whole amount
             int128 interest = int128((int160(uint160(amount)) * rate) >> 32);
 
-            // We remove the penalty and fee
+            // We remove the penalty
+            // Fee is removed only if user has enough cash at offset
             uint128 totalTransfer = SafeMath.sub128(amount, penalty);
-            totalTransfer = SafeMath.sub128(totalTransfer, fee);
 
             // We charge or we pay the interest
             if (rate < 0) totalTransfer = SafeMath.subOr0_128(totalTransfer, uint128(-interest));
             else totalTransfer = SafeMath.add128(totalTransfer, uint128(interest));
+
+            // If a user has lost all is money, we cannot charge a fee
+            if (totalTransfer == 0) {
+                fee = 0;
+            }
+            else {
+                if (totalTransfer <= fee) {
+                    fee = totalTransfer;
+                    totalTransfer = 0;
+                } else {
+                    totalTransfer = SafeMath.sub128(totalTransfer, fee);
+                }
+            }
 
             (bool success, ) = Token.call(abi.encodeWithSelector(IERC20.transfer.selector, msg.sender, uint256(totalTransfer)));
 
