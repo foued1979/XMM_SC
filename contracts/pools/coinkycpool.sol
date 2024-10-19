@@ -74,7 +74,7 @@ contract CoinKYCPool is XMMPool, IKYC {
 
             if (amount > position.amount) amount = position.amount;
             uint128 penalty;
-            uint128 fee = getPositionFee(block.timestamp, position.startDate, position.expiry, amount, position.minFeePaid);
+            uint128 fee = getPositionFee(msg.sender, block.timestamp, position.startDate, position.expiry, amount, position.minFeePaid);
 
             // If position is offset before expected term, a penalty applies
             if (position.startDate > block.timestamp || block.timestamp < position.expiry) {

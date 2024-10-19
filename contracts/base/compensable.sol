@@ -27,11 +27,18 @@ abstract contract Compensable is Owned {
     /// @notice The compensated side; 0-None, 1-Long, 2-Short, 3-All
     CompensatedSides public CompensatedSide;
 
-    /// @notice The penalty rebate threshold
+    /// @notice The fee rebate threshold
+    // User gts 2.5% rebate on the reminaing fee for each FeeRebateThreshold level that
+    // user's position being offset will represent; up to 35%
+    // E.g. if FeeRebateThreshold is 100 1XMM, a user who has 600 tokens will have:
+    // 6 * 2.5% discount = 15% discount
+    uint32 public FeeRebateThreshold;
+
+    /// @notice The mininum fee rebate threshold
     // If user has more than threshold => 15% discount
     // If user has more than 2 * threshold => 30% discount
     // If user has more than 4 * threshold => 50% discount
-    uint32 public RebateThreshold;
+    uint32 public MinFeeRebateThreshold;
     uint32 private _2threshold;
     uint32 private _4threshold;
 
@@ -50,9 +57,10 @@ abstract contract Compensable is Owned {
     constructor(address owner, address compensationToken, uint8 compensationTokenDecimals) Owned(owner) {
         _compensationTokenDecimals = compensationTokenDecimals;
 
-        RebateThreshold = 50;
+        MinFeeRebateThreshold = 50;
         _2threshold = 100;
         _4threshold = 200;
+        FeeRebateThreshold = 50;
 
         CompensationToken = compensationToken;
         CompensationIsActive = false;
@@ -93,10 +101,31 @@ abstract contract Compensable is Owned {
     }
 
     /// @notice Updates the thresholds for minimum fee rebate
-    function changeRebateThreshold(uint32 newThreshold) external onlyOwner {
-        RebateThreshold = newThreshold;
+    function changeFeeRebateThreshold(uint32 newThreshold) external onlyOwner {
+        FeeRebateThreshold = newThreshold;
+    }
+
+    /// @notice Updates the thresholds for minimum fee rebate
+    function changeMinFeeRebateThreshold(uint32 newThreshold) external onlyOwner {
+        MinFeeRebateThreshold = newThreshold;
         _2threshold = 2 * newThreshold;
         _4threshold = 4 * newThreshold;
+    }
+
+    function getRebatedFee(address user, uint128 fee) internal returns(uint128) {
+        (bool success, bytes memory res) = CompensationToken.call(abi.encodeWithSelector(IERC20.balanceOf.selector, user));
+
+        if (success) {
+            uint32 balance = uint32(abi.decode(res, (uint256)) / (10 ** _compensationTokenDecimals));
+
+            uint32 mul = uint32(balance / FeeRebateThreshold);
+            
+            for (uint32 i = 14; i > 0; i--) {
+                if (mul >= i) return uint128(fee * uint128(1000 - (i * 25))) / 1000;
+            }
+        }
+
+        return fee;
     }
 
     function getRebatedMinimumFee(address user, uint128 minFee) internal returns(uint128) {
@@ -107,7 +136,7 @@ abstract contract Compensable is Owned {
 
             if (balance >= _4threshold) return minFee * 60 / 100;
             if (balance >= _2threshold) return minFee * 70 / 100;
-            if (balance >= RebateThreshold) return minFee * 85 / 100;
+            if (balance >= MinFeeRebateThreshold) return minFee * 85 / 100;
         }
 
         return minFee;

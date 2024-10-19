@@ -231,7 +231,7 @@ abstract contract XMMPool is FixingManager {
     }
 
     /// @notice Gets the fee for the position
-    function getPositionFee(uint tradeDate, uint positionStartDate, uint positionEndDate, uint128 positionAmt, uint128 minFeePaid) internal view returns(uint128) {
+    function getPositionFee(address user, uint tradeDate, uint positionStartDate, uint positionEndDate, uint128 positionAmt, uint128 minFeePaid) internal returns(uint128) {
         // HoldingPeriod represents the number of minutes during which position is held
         uint128 holdingPeriod = uint128((tradeDate - positionStartDate) / 60);
         uint128 minHoldingPeriod = uint128(((positionEndDate - positionStartDate) / 60) >> 1);
@@ -241,7 +241,8 @@ abstract contract XMMPool is FixingManager {
 
         // 1_440 minutes within a day
         // The Fee is in %bps on a daily basis 
-        return uint128(uint128(Fee) * holdingPeriod * positionAmt / 1_440_000_000) - minFeePaid;
+        uint128 fee = uint128(uint128(Fee) * holdingPeriod * positionAmt / 1_440_000_000) - minFeePaid;
+        return getRebatedFee(user, fee);
     }
 
     /// @notice Returns the penalty amount
