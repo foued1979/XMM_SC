@@ -55,6 +55,7 @@ contract Token is Allocatable, Bridgeable, IExchangeable {
 
     // Other public Properties
     address[] public ApprovedTokens;
+    mapping(address => uint8) private _approvedTokenDecimals;
 
     // Parameters to manage other token exchanges
     mapping(address => bool) private _tokenIsApproved;
@@ -142,11 +143,15 @@ contract Token is Allocatable, Bridgeable, IExchangeable {
     }
 
     /// @notice Adds a token which can be traded against our Token
-    function addApprovedToken(address token) external onlyOwner {
+    function addApprovedToken(address token, uint8 decimals) external onlyOwner {
+        require(decimals <= 18, "Decimal err");
         if (_tokenIsApproved[token]) return;
+
         _tokenIsApproved[token] = true;
         _exchangeIsAllowed[token] = false;
+
         ApprovedTokens.push(token);
+        _approvedTokenDecimals[token] = decimals;
     }
 
     /// @notice Gets approved tokens
@@ -224,7 +229,10 @@ contract Token is Allocatable, Bridgeable, IExchangeable {
     function sellBackAgainst(uint128 amountToken, address tokenToBeReceived) external exchangeIsAllowedForToken(tokenToBeReceived) {
         require(_balances[msg.sender] >= amountToken, "Insufficient balance");
 
+        uint8 decimalAdjust = 18 - _approvedTokenDecimals[tokenToBeReceived];
+
         uint256 amountExpectedToken = (uint256(amountToken) * uint256(_precision)) / uint256(_exchangeRates[tokenToBeReceived]);
+        if (decimalAdjust != 0) amountExpectedToken /= (10 ** decimalAdjust);
         uint256 availableQuantity = getAvailableQuantityOfToken(tokenToBeReceived);
 
         // We make sure that the available quantity of expected token is bigger than the requested amount of expected token

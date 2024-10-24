@@ -128,4 +128,8 @@ describe("Test bridge functions", function() {
     expect(pendingBridgeOut.length).to.equal(1);
     expect(pendingBridgeOut[0]).to.equal(spender2.address);
   });
+
+  it('Can add bridge in requests', async function() {
+    throw console.error();
+  });
 });

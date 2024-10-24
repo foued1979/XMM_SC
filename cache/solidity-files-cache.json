@@ -114,8 +114,8 @@
       ]
     },
     "C:\\Users\\Frederic\\XMM_SC\\contracts\\token.sol": {
-      "lastModificationDate": 1728983587836,
-      "contentHash": "2e3537f0ca8685147f8bb46839b72ccf",
+      "lastModificationDate": 1729750896004,
+      "contentHash": "1593de6a5dc24fefb5f70a8dd4749f81",
       "sourceName": "contracts/token.sol",
       "solcConfig": {
         "version": "0.8.24",
@@ -524,8 +524,8 @@
       ]
     },
     "C:\\Users\\Frederic\\XMM_SC\\contracts\\pools\\coinpool.sol": {
-      "lastModificationDate": 1728913607965,
-      "contentHash": "64fb1407f0cf47eb1267a46c9fb52d7c",
+      "lastModificationDate": 1729331002177,
+      "contentHash": "9615ebc3dad7d008cce61eb60bc1fef5",
       "sourceName": "contracts/pools/coinpool.sol",
       "solcConfig": {
         "version": "0.8.24",
@@ -565,8 +565,8 @@
       ]
     },
     "C:\\Users\\Frederic\\XMM_SC\\contracts\\base\\xmmpool.sol": {
-      "lastModificationDate": 1728913001512,
-      "contentHash": "1a2fa55c2bc32512da6e8590ca5f84a9",
+      "lastModificationDate": 1729331067533,
+      "contentHash": "ee2aff6fa70ff53d1c3e5e6bddf9f903",
       "sourceName": "contracts/base/xmmpool.sol",
       "solcConfig": {
         "version": "0.8.24",
@@ -651,8 +651,8 @@
       ]
     },
     "C:\\Users\\Frederic\\XMM_SC\\contracts\\base\\compensable.sol": {
-      "lastModificationDate": 1728911846931,
-      "contentHash": "4bf7e624e237a092d38e9f440079d0da",
+      "lastModificationDate": 1729330889379,
+      "contentHash": "bdab45c6594b13f6568138c8790063d5",
       "sourceName": "contracts/base/compensable.sol",
       "solcConfig": {
         "version": "0.8.24",
@@ -838,8 +838,8 @@
       ]
     },
     "C:\\Users\\Frederic\\XMM_SC\\contracts\\pools\\coinkycpool.sol": {
-      "lastModificationDate": 1728913589385,
-      "contentHash": "828d7824b74550f20523ccc441d21a97",
+      "lastModificationDate": 1729331011941,
+      "contentHash": "1f934c0cad9ce4635de0e82a292ca2c8",
       "sourceName": "contracts/pools/coinkycpool.sol",
       "solcConfig": {
         "version": "0.8.24",
@@ -878,8 +878,8 @@
       ]
     },
     "C:\\Users\\Frederic\\XMM_SC\\contracts\\pools\\ethkycpool.sol": {
-      "lastModificationDate": 1728913556287,
-      "contentHash": "ff411e7de65f33c53d167f7f23349586",
+      "lastModificationDate": 1729331021573,
+      "contentHash": "2f3624463d0bd5865997ebc9b1128d23",
       "sourceName": "contracts/pools/ethkycpool.sol",
       "solcConfig": {
         "version": "0.8.24",
@@ -918,8 +918,8 @@
       ]
     },
     "C:\\Users\\Frederic\\XMM_SC\\contracts\\pools\\ethpool.sol": {
-      "lastModificationDate": 1728924705645,
-      "contentHash": "95c13b2decdb85d4dc210389cc1aa89a",
+      "lastModificationDate": 1729331031519,
+      "contentHash": "f2ea31b89bff5a4e0c9641167714adc1",
       "sourceName": "contracts/pools/ethpool.sol",
       "solcConfig": {
         "version": "0.8.24",

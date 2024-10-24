@@ -1,14 +1,14 @@
-import { ethers } from "hardhat";
+const { ethers } = require('hardhat');
 
 async function main() {
-  const [owner, addr1, addr2] = await ethers.getSigners();
+  const [owner ] = await ethers.getSigners();
   console.log(`Signer is ${owner.address}`);
 
-  const libtest = await ethers.deployContract("LibTest");
-  await libtest.waitForDeployment();
+  const token = await ethers.deployContract("Token");
+  await token.waitForDeployment();
 
-  console.log(`LibTest contract has been deployed to ${libtest.target}`);
-  console.log(`Owner is ${await libtest.Owner()}\n`);
+  console.log(`LibTest contract has been deployed to ${token.target}`);
+  console.log(`Owner is ${await token.Owner()}\n`);
 }
 
 // We recommend this pattern to be able to use async/await everywhere

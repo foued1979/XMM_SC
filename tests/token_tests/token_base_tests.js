@@ -18,6 +18,11 @@ async function _deployERC20() {
   return await contractFactory.deploy("COIN", 10_000, 18);
 }
 
+async function _deployERC20_6() {
+  const contractFactory = await ethers.getContractFactory("Allocatable");
+  return await contractFactory.deploy("COIN", 10_000, 6);
+}
+
 describe('Test base token functions', function () {
     it('Allocation is done properly and is reflected in AllocatedAmount', async function () {
       const token = await loadFixture(_deploy);
@@ -135,7 +140,7 @@ describe('Test base token functions', function () {
       await expect(token.getExchangeInfoForToken(approvedTokenAddress)).to.be.revertedWith("Not approved");
 
       // We add an approved token for exchange
-      await token.addApprovedToken(approvedTokenAddress);
+      await token.addApprovedToken(approvedTokenAddress, 18);
 
       // We cannot change yet
       var [ exchangeIsAllowed, exchangeRate ] = await token.getExchangeInfoForToken(approvedTokenAddress);
@@ -166,6 +171,42 @@ describe('Test base token functions', function () {
       await token.removeExchangeAuthorizationForToken(approvedTokenAddress);
       [ exchangeIsAllowed, exchangeRate ] = await token.getExchangeInfoForToken(approvedTokenAddress);
       expect(exchangeIsAllowed).to.be.false;
+    });
+
+    it('Add approved token with 6 decimals is working', async function() {
+      const decimals = 6;
+      const token = await loadFixture(_deploy);
+      const tokenAddress = await token.getAddress()
+      const [ owner, spender ] = await ethers.getSigners();
+
+      const approvedToken = await loadFixture(_deployERC20_6);
+      const approvedTokenAddress = await approvedToken.getAddress();
+
+      // We allocate some ERC20 to token
+      await approvedToken.allocate(tokenAddress, 1_500n * BigInt(10 ** decimals));
+
+      var balanceOfERC20 = await approvedToken.balanceOf(tokenAddress);
+      expect(balanceOfERC20).to.equal(1_500n * BigInt(10 ** decimals));
+
+      // We allocate some tokens to spender
+      await token.allocate(spender, 500n * BigInt(10 ** 18));
+      const allocatedAmt = await token.AllocatedAmount();
+      var availableTokens = await token.AvailableTokens();
+
+      // We add an approved token for exchange
+      await token.addApprovedToken(approvedTokenAddress, decimals);
+
+      // We update the exchange rate, which enables change
+      await token.updateTokenExchangeRate(approvedTokenAddress, 150n * ratePrecision);
+      [ exchangeIsAllowed, exchangeRate ] = await token.getExchangeInfoForToken(approvedTokenAddress);
+
+      // We test the sellBack function
+      await token.connect(spender).sellBackAgainst(150n * BigInt(10 ** 18), approvedTokenAddress);
+      var balanceOfSpender = await approvedToken.balanceOf(spender);
+      expect(balanceOfSpender).to.equal(1n * BigInt(10 ** decimals));
+      expect(await token.balanceOf(spender)).to.equal(350n * BigInt(10 ** 18));
+      expect(await token.AllocatedAmount()).to.equal(allocatedAmt - 150n * BigInt(10 ** 18));
+      expect(await token.AvailableTokens()).to.equal(availableTokens + 150n * BigInt(10 ** 18));
     });
 
     it('Exchange functions work properly for ETH', async function() {
