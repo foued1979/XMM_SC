@@ -332,6 +332,8 @@ contract Token is Allocatable, Bridgeable, IExchangeable {
     /// @param forUser The user address to cancel
     /// @param forChainId The target chain Id to cancel
     function revertBridgeOutRequestForUser(address forUser, uint64 forChainId) external override onlyOwner {
+        if (pendingBridgeOutAmountByChain[forUser][forChainId] == 0) return;
+
         // We credit back the tokens to the user
         _balances[forUser] = SafeMath.add(_balances[forUser], uint256(pendingBridgeOutAmountByChain[forUser][forChainId]));
         pendingBridgeOutAmountByChain[forUser][forChainId] = 0;

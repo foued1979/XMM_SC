@@ -25,10 +25,10 @@ abstract contract Bridgeable {
         _;
     }
 
-    modifier onlyIfHavePendingRequest(uint64 onChainId) {
-        require(pendingBridgeOutAmountByChain[msg.sender][onChainId] > 0);
-        _;
-    }
+    //modifier onlyIfHavePendingRequest(uint64 onChainId) {
+    //    require(pendingBridgeOutAmountByChain[msg.sender][onChainId] > 0);
+    //    _;
+    //}
 
     // Properties
     address private _owner;
@@ -61,9 +61,9 @@ abstract contract Bridgeable {
 
     /// @notice Cancels a bridging request for msg.sender and for a chainId
     /// @param forChainId The target chain Id to cancel
-    function cancelBridgeOut(uint64 forChainId) external onlyIfHavePendingRequest(forChainId) {
-        this.revertBridgeOutRequestForUser(msg.sender, forChainId);
-    }
+    //function cancelBridgeOut(uint64 forChainId) external onlyIfHavePendingRequest(forChainId) {
+    //    this.revertBridgeOutRequestForUser(msg.sender, forChainId);
+    //}
 
     /// @notice Gets the list of valid chain Ids for which bridge is possible
     function getValidChainIds() external view returns(uint64[] memory) {
