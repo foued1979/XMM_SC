@@ -331,7 +331,7 @@ contract Token is Allocatable, Bridgeable, IExchangeable {
     /// @notice Cancels a bridging request for a user and for a chainId
     /// @param forUser The user address to cancel
     /// @param forChainId The target chain Id to cancel
-    function revertBridgeOutRequestForUser(address forUser, uint64 forChainId) external override onlyOwner {
+    function cancelBridgeOut(address forUser, uint64 forChainId) external override onlyOwner {
         if (pendingBridgeOutAmountByChain[forUser][forChainId] == 0) return;
 
         // We credit back the tokens to the user

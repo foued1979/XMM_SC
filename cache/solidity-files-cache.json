@@ -114,8 +114,8 @@
       ]
     },
     "C:\\Users\\Frederic\\XMM_SC\\contracts\\token.sol": {
-      "lastModificationDate": 1729752956667,
-      "contentHash": "3671024315ef5d8bc3eaebba075243fe",
+      "lastModificationDate": 1729753480835,
+      "contentHash": "cf0bdf9d271f1df0e4aec46b8900ee9b",
       "sourceName": "contracts/token.sol",
       "solcConfig": {
         "version": "0.8.24",
@@ -415,8 +415,8 @@
       ]
     },
     "C:\\Users\\Frederic\\XMM_SC\\contracts\\base\\bridgeable.sol": {
-      "lastModificationDate": 1729752956611,
-      "contentHash": "5a7c08fc7545003b5cb5ccbda52f9510",
+      "lastModificationDate": 1729753467612,
+      "contentHash": "770e19f9dc742ad71085840c4e8f9b31",
       "sourceName": "contracts/base/bridgeable.sol",
       "solcConfig": {
         "version": "0.8.24",

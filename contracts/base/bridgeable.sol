@@ -152,7 +152,7 @@ abstract contract Bridgeable {
     /// @notice Cancels a bridging request for a user and for a chainId
     /// @param forUser The user address to cancel
     /// @param forChainId The target chain Id to cancel
-    function revertBridgeOutRequestForUser(address forUser, uint64 forChainId) external virtual;
+    function cancelBridgeOut(address forUser, uint64 forChainId) external virtual;
 
     /// @notice Validates a bridge in for a user and for a chain Id
     function validateBridgeOut(address forUser, uint64 forChainId) external virtual;
