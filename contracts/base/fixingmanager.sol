@@ -39,6 +39,13 @@ abstract contract FixingManager is Compensable, IFixingManager {
     // The list of fixings
     Fixing[] internal _fixings;
 
+    // The list of fixingIndex0 for which perf has reached 0 during lifetime
+    // We use cartography to facilitate lookup
+    // The probability to have 1 position with -100% perf is very low; most likely
+    // these mapping will not have a significant size
+    mapping(uint => bool) private _longZeros;
+    mapping(uint => bool) private _shortZeros;
+
     // Private fields to manage long positions
     mapping(uint8 => uint64) internal _longRatios;
     mapping(uint8 => int64[]) internal _longRateIndices;
@@ -164,7 +171,15 @@ abstract contract FixingManager is Compensable, IFixingManager {
         executeMarginCall(lastFixing.spot, fixing);
         
         _fixings.push(fixing);
+
         return true;
+    }
+
+    /// @notice Writes the indices of position which have reached -100% perf
+    function addIndexofZeros(uint[] memory longZeros, uint[] memory shortZeros) external onlyOwner {
+        // We add the new fixingIndex0s which are leading to -100% perf as of fixing date
+        for (uint i = 0; i < longZeros.length; i++) _longZeros[longZeros[i]] = true;
+        for (uint i = 0; i < shortZeros.length; i++) _shortZeros[shortZeros[i]] = true;
     }
 
     /// @notice In case a fixing update has been missed, owner can update the missed past fixings
@@ -210,6 +225,18 @@ abstract contract FixingManager is Compensable, IFixingManager {
      returns(int64[] memory longRateFactors, int64[] memory shortRateFactors);
     function executeMarginCall(uint64 prevSpot, Fixing memory lastFixing) internal virtual;
     function transfer(int64[] memory longRateFactors, int64[] memory shortRateFactors) internal virtual;
+
+    /********************
+     * Internal Methods *
+     ********************/
+    /// @notice Returns whether a position started at fixingIndex0 has reached 0 during position lifetime
+    function isZeroPerf(uint fixingIndex0, LongShort longShort) internal view returns(bool) {
+        if (longShort == LongShort.Long) {
+            return _longZeros[fixingIndex0];
+        } else {
+            return _shortZeros[fixingIndex0];
+        }
+    }
 
     /*******************
      * Private Methods *

@@ -180,6 +180,9 @@ abstract contract XMMPool is FixingManager {
         ApplyPenaltyFee = status;
     }
 
+    /********************
+     * Internal Methods *
+     ********************/
     function getExistingPosition(address user, uint fixingIndex, LongShort longShort, Leverage leverage) internal view returns(bool, uint32) {
         Position[] storage positions = _positions[user];
 
