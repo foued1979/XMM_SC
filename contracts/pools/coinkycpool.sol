@@ -72,6 +72,13 @@ contract CoinKYCPool is XMMPool, IKYC {
         if (_positions[msg.sender].length > positionIndex) {
             Position storage position = _positions[msg.sender][positionIndex];
 
+            // If the position reached -100% perf during its lifetime
+            // we just delete the position.
+            if (isZeroPerf(position.fixingIndex0, position.longShort)) {
+                Utils.removePositionFromArray(positionIndex, _positions[msg.sender]);
+                return;
+            }
+
             if (amount > position.amount) amount = position.amount;
             uint128 penalty;
             uint128 fee = getPositionFee(msg.sender, block.timestamp, position.startDate, position.expiry, amount, position.minFeePaid);

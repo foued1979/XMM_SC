@@ -98,7 +98,7 @@ contract CoinPool is XMMPool {
 
             setRatios();
 
-            if (position.amount == amount) Utils.removePositionFromArray(positionIndex, _positions[msg.sender]);
+            if (position.amount <= amount) Utils.removePositionFromArray(positionIndex, _positions[msg.sender]);
 
             // Interest is computed on the whole amount
             int128 interest = int128((int160(uint160(amount)) * rate) >> 32);
