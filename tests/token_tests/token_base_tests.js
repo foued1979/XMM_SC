@@ -1,7 +1,6 @@
 const { loadFixture } = require('@nomicfoundation/hardhat-network-helpers');
 const { ethers } = require('hardhat');
 const { expect } = require('chai');
-const { boolean } = require('hardhat/internal/core/params/argumentTypes');
 
 const decimalAdjustment = BigInt(10 ** 18);
 const ratePrecision = 10_000n;

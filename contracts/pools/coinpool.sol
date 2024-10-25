@@ -10,6 +10,7 @@ contract CoinPool is XMMPool {
     /// @notice The token which managed by the XMM
     address public Token;
 
+    /// @param minWithdrawalRatio   The ratio that will get the minimum withdrawal amount, where MinWithdrawalAmt = minDeposit * minWithdrawalRatio
     constructor(address token, address owner, address compensationToken, uint8 poolTokenDecimals, uint8 compensationTokenDecimals, Terms term, uint8 fee,
      uint8 penalty, uint64 minDeposit, uint8 minWithdrawalRatio)
     XMMPool(owner, compensationToken, poolTokenDecimals, compensationTokenDecimals, term, fee, penalty, minDeposit, minWithdrawalRatio) {

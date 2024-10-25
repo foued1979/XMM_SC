@@ -524,8 +524,8 @@
       ]
     },
     "C:\\Users\\Frederic\\XMM_SC\\contracts\\pools\\coinpool.sol": {
-      "lastModificationDate": 1729331002177,
-      "contentHash": "9615ebc3dad7d008cce61eb60bc1fef5",
+      "lastModificationDate": 1729851366910,
+      "contentHash": "507abba4df6eb1a33197396499988df6",
       "sourceName": "contracts/pools/coinpool.sol",
       "solcConfig": {
         "version": "0.8.24",
@@ -565,8 +565,8 @@
       ]
     },
     "C:\\Users\\Frederic\\XMM_SC\\contracts\\base\\xmmpool.sol": {
-      "lastModificationDate": 1729331067533,
-      "contentHash": "ee2aff6fa70ff53d1c3e5e6bddf9f903",
+      "lastModificationDate": 1729759145247,
+      "contentHash": "195b178710bfc6add0daa983e1c302c1",
       "sourceName": "contracts/base/xmmpool.sol",
       "solcConfig": {
         "version": "0.8.24",
@@ -609,8 +609,8 @@
       ]
     },
     "C:\\Users\\Frederic\\XMM_SC\\contracts\\base\\fixingmanager.sol": {
-      "lastModificationDate": 1728821412448,
-      "contentHash": "27b540a862991e515f4ab9e3a93ff7a2",
+      "lastModificationDate": 1729850453559,
+      "contentHash": "ad6032140839a12d85e2a17f5cb16b54",
       "sourceName": "contracts/base/fixingmanager.sol",
       "solcConfig": {
         "version": "0.8.24",
