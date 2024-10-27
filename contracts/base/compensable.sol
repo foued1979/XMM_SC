@@ -18,9 +18,6 @@ abstract contract Compensable is Owned {
     /// @notice The compensation token
     address public CompensationToken;
 
-    /// @notice The compensation token balance
-    uint128 public CompensationTokenBalance;
-
     /// @notice Indicates whether the compensation is active
     bool public CompensationIsActive;
 
@@ -80,15 +77,6 @@ abstract contract Compensable is Owned {
         _compensationTokenDecimals = newTokenDecimals;
     }
 
-    /// @notice Updates the compensation token balance
-    function updateCompensationTokenBalance() external {
-        (bool success, bytes memory res) = CompensationToken.call(abi.encodeWithSelector(IERC20.balanceOf.selector, address(this)));
-
-        if (success) {
-            CompensationTokenBalance = abi.decode(res, (uint128));
-        }
-    }
-
     /// @notice Activates or deactivates the compensation
     function changeCompensationActivation(bool status) external onlyOwner {
         CompensationIsActive = status;
@@ -111,6 +99,15 @@ abstract contract Compensable is Owned {
         MinFeeRebateThreshold = newThreshold;
         _2threshold = 2 * newThreshold;
         _4threshold = 4 * newThreshold;
+    }
+
+    function getCompensationTokenBalance() external returns(uint128) {
+        (bool success, bytes memory res) = CompensationToken.call(abi.encodeWithSelector(IERC20.balanceOf.selector, address(this)));
+        if (success) {
+            return uint128(abi.decode(res, (uint256)));
+        }
+
+        return 0;
     }
 
     function getRebatedFee(address user, uint128 fee) internal returns(uint128) {
@@ -163,7 +160,7 @@ abstract contract Compensable is Owned {
         ConversionRate = (conversionRate << 32) / 10_000;
     }
 
-    function getCompensationAmount(uint128 positionSize, int64 loss, uint8 poolTokenDecimals) internal view returns(uint128) {
+    function getCompensationAmount(uint128 positionSize, int64 loss, uint8 poolTokenDecimals) internal returns(uint128) {
         if (!CompensationIsActive) return 0;
 
         int8 decimalDiff = int8(poolTokenDecimals) - int8(_compensationTokenDecimals);
@@ -171,7 +168,10 @@ abstract contract Compensable is Owned {
         uint64 absLoss = uint64(loss);
         uint64 ratio = Math.mult(ConversionRate, Math.mult(absLoss, CompensationRatio));
         uint128 amt = uint128((positionSize * ratio) >> 32);
+        amt = Math.adjustAmountDecimals(amt, decimalDiff);
 
-        return Math.adjustAmountDecimals(amt, decimalDiff);
+        uint128 compensationTokenBalance = this.getCompensationTokenBalance();
+        if (amt >= compensationTokenBalance) amt = compensationTokenBalance;
+        return amt;
     }
 }
