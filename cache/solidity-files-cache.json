@@ -524,8 +524,8 @@
       ]
     },
     "C:\\Users\\Frederic\\XMM_SC\\contracts\\pools\\coinpool.sol": {
-      "lastModificationDate": 1729851366910,
-      "contentHash": "507abba4df6eb1a33197396499988df6",
+      "lastModificationDate": 1730001293545,
+      "contentHash": "d91a035b712279e4ea261e4464530892",
       "sourceName": "contracts/pools/coinpool.sol",
       "solcConfig": {
         "version": "0.8.24",
@@ -565,8 +565,8 @@
       ]
     },
     "C:\\Users\\Frederic\\XMM_SC\\contracts\\base\\xmmpool.sol": {
-      "lastModificationDate": 1729759145247,
-      "contentHash": "195b178710bfc6add0daa983e1c302c1",
+      "lastModificationDate": 1730002701685,
+      "contentHash": "42f22db34c36daceec6cd21a1cd8fd46",
       "sourceName": "contracts/base/xmmpool.sol",
       "solcConfig": {
         "version": "0.8.24",
@@ -609,8 +609,8 @@
       ]
     },
     "C:\\Users\\Frederic\\XMM_SC\\contracts\\base\\fixingmanager.sol": {
-      "lastModificationDate": 1729850453559,
-      "contentHash": "ad6032140839a12d85e2a17f5cb16b54",
+      "lastModificationDate": 1730003617177,
+      "contentHash": "b1119b16e78e320bac31aaabffdb2342",
       "sourceName": "contracts/base/fixingmanager.sol",
       "solcConfig": {
         "version": "0.8.24",
@@ -838,8 +838,8 @@
       ]
     },
     "C:\\Users\\Frederic\\XMM_SC\\contracts\\pools\\coinkycpool.sol": {
-      "lastModificationDate": 1729331011941,
-      "contentHash": "1f934c0cad9ce4635de0e82a292ca2c8",
+      "lastModificationDate": 1730001337943,
+      "contentHash": "6f3c560692ebebf9b8606e7d07955134",
       "sourceName": "contracts/pools/coinkycpool.sol",
       "solcConfig": {
         "version": "0.8.24",
@@ -878,8 +878,8 @@
       ]
     },
     "C:\\Users\\Frederic\\XMM_SC\\contracts\\pools\\ethkycpool.sol": {
-      "lastModificationDate": 1729331021573,
-      "contentHash": "2f3624463d0bd5865997ebc9b1128d23",
+      "lastModificationDate": 1730001397027,
+      "contentHash": "eb1a7e1c063e2f49398dbe57a2e0b331",
       "sourceName": "contracts/pools/ethkycpool.sol",
       "solcConfig": {
         "version": "0.8.24",
@@ -918,8 +918,8 @@
       ]
     },
     "C:\\Users\\Frederic\\XMM_SC\\contracts\\pools\\ethpool.sol": {
-      "lastModificationDate": 1729331031519,
-      "contentHash": "f2ea31b89bff5a4e0c9641167714adc1",
+      "lastModificationDate": 1730001363482,
+      "contentHash": "f2a8efccd7ed57e1de68915e13115be9",
       "sourceName": "contracts/pools/ethpool.sol",
       "solcConfig": {
         "version": "0.8.24",
