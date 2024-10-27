@@ -195,14 +195,22 @@ abstract contract XMMPool is FixingManager {
     }
 
     function writeDeposit(address user, uint lastFixingIndex, uint timestamp, LongShort longShort, uint128 amount, uint128 minFeePaid, Leverage leverage) internal {
+        uint8 lev = uint8(leverage);
+        bool isNextFixing = false;
+
         // If position is opened after mid update interval, the next fixing is used
         if (block.timestamp > timestamp + _currentMidFixingInterval) {
             timestamp += _currentFixingUpdateInterval;
             lastFixingIndex++;
+            isNextFixing = true;
         }
 
+        // We check if a user already has a position similar to this new order
+        // Positions are equal when side, leverage and fixingIndex are the same
         (bool hasPosition, uint32 positionIndex) = getExistingPosition(user, lastFixingIndex, longShort, leverage);
 
+        // If user already has a position which is equivalent to the current order
+        // we just update the existing position
         if (hasPosition) {
             Position storage position = _positions[user][positionIndex];
             position.amount = SafeMath.add128(position.amount, amount);
@@ -217,12 +225,24 @@ abstract contract XMMPool is FixingManager {
         }
            
         if (longShort == LongShort.Long) {
-            TotalLongPositions[uint8(leverage)] = SafeMath.add128(TotalLongPositions[uint8(leverage)], amount);
+            // If the next fixing is used, the amount cannot be added to the current positions
+            // The amount is pending to be added; when we update the fixing, we will add the pending positions
+            if (isNextFixing) { 
+                _longAmountForNextFixing[lev] = SafeMath.add128(_longAmountForNextFixing[lev], amount); 
+            } else { 
+                TotalLongPositions[lev] = SafeMath.add128(TotalLongPositions[lev], amount); 
+                }
         } else {
-            TotalShortPositions[uint8(leverage)] = SafeMath.add128(TotalShortPositions[uint8(leverage)], amount);
+            // If the next fixing is used, the amount cannot be added to the current positions
+            // The amount is pending to be added; when we update the fixing, we will add the pending positions
+            if (isNextFixing) { 
+                _shortAmountForNextFixing[lev] = SafeMath.add128(_shortAmountForNextFixing[lev], amount);
+            } else {
+                TotalShortPositions[lev] = SafeMath.add128(TotalShortPositions[lev], amount);
+            }
         }
 
-        setRatios();
+        if (!isNextFixing) setRatios();
     }
 
     function getMinimumFee(address user, uint positionStartDate, uint positionEndDate, uint128 positionAmt) internal returns(uint128) {
@@ -256,6 +276,15 @@ abstract contract XMMPool is FixingManager {
     /****************************************
      * FixingManager Methods Implementation *
      ****************************************/
+    function incorporateNextNotionals() internal override {
+        for (uint8 i = 0; i < 6; i++) {
+            TotalLongPositions[i] = SafeMath.sub128(TotalLongPositions[i], _longAmountForNextFixing[i]);
+            TotalShortPositions[i] = SafeMath.sub128(TotalShortPositions[i], _shortAmountForNextFixing[i]);
+            _longAmountForNextFixing[i] = 0;
+            _shortAmountForNextFixing[i] = 0;
+        }
+    }
+
     function computeFactors(uint64 spotAtPeriodStart, uint64 spotAtPeriodEnd, uint64 premiumAtPeriodEnd) internal view override
      returns(int64[] memory longRateFactors, int64[] memory shortRateFactors) {
         uint64 premiumPerf = Math.mult(premiumAtPeriodEnd, _currentAccrualYF);
@@ -285,19 +314,6 @@ abstract contract XMMPool is FixingManager {
     }
 
     function executeMarginCall(uint64 prevSpot, Fixing memory lastFixing) internal override {
-        // To transfer the fee at each fixing period, we need to incorporate leap years
-        // otherwise we will have a discrepancy between the fee computed when user go out of the position
-        // and the fee actually charged (where user may be charged less fee during leap years and therefore
-        // create a negative balance in the ppol)
-        //uint8 i;
-
-        //for (i = 0; i < 6; i++) {
-        //    // We transfer the fee first
-        //    (uint128 feeshort, uint128 feeLong) = transferFee(TotalShortPositions[i], TotalLongPositions[i]);
-        //    TotalShortPositions[i] = SafeMath.sub128(TotalShortPositions[i], feeshort);
-        //    TotalLongPositions[i] = SafeMath.sub128(TotalLongPositions[i], feeLong);
-        //}
-
         (int64[] memory longRateFactors, int64[] memory shortRateFactors) = computeFactors(prevSpot, lastFixing.spot, lastFixing.premium);
 
         transfer(longRateFactors, shortRateFactors);
@@ -337,6 +353,58 @@ abstract contract XMMPool is FixingManager {
         setRatios();
     }
 
+    /********************
+     * Internal Methods *
+     ********************/
+    function getRate(LongShort longShort, Leverage leverage, uint fixingIndex0) internal view returns(int64) {
+        uint8 index = uint8(leverage);
+        int64 currentIndexValue = longShort == LongShort.Long ? _longRateIndices[index][_fixings.length - 1] : _shortRateIndices[index][_fixings.length - 1];
+        int64 initialIndexValue = longShort == LongShort.Long ? _longRateIndices[index][fixingIndex0] : _shortRateIndices[index][fixingIndex0];
+        return Math.subSigned(currentIndexValue, initialIndexValue);
+    }
+
+    function setRatios() internal {
+        setLongRatios();
+        setShortRatios();
+    }
+
+    /// @notice Adjusts the rate of the position, updates the amounts and returns the compensation amount, if any
+    function checkPosition(Position storage position, uint128 amount, int64 rate) internal returns(int64 adjustedRate, uint128 compensationAmt) {
+        compensationAmt = 0;
+        adjustedRate = rate;
+        uint8 lev = uint8(position.leverage);
+
+        // If rate is positive, only a pro-rata interest is paid
+            // If rate is negative, msg.sender shall pay the full amount due
+        if (rate > 0) {
+            uint64 proRata = Utils.getProRata(Utils.getTimeStamp(block.timestamp, StartDate, _currentFixingUpdateInterval), position, _expiryInterval);
+            adjustedRate = Math.multSigned(int64(proRata), rate);
+        }
+        else if (isCompensable(position.longShort)) {
+            compensationAmt = getCompensationAmount(position.amount, rate, _poolTokenDecimals);
+        }
+
+        // If the position was pending to be accounted, the fixingIndex0 should be equal 
+        // to _fixings last index + 1 <=> _fixings.length
+        bool positionIsNextFixing = position.fixingIndex0 == _fixings.length;
+
+        if (position.longShort == LongShort.Long) {
+            if (positionIsNextFixing) {
+                _longAmountForNextFixing[lev] = SafeMath.sub128(_longAmountForNextFixing[lev], amount);
+            } else {
+                TotalLongPositions[lev] = SafeMath.sub128(TotalLongPositions[lev], amount);
+            }
+        } else {
+            if (positionIsNextFixing) {
+                _shortAmountForNextFixing[lev] = SafeMath.sub128(_shortAmountForNextFixing[lev], amount);
+            } else {
+                TotalShortPositions[lev] = SafeMath.sub128(TotalShortPositions[lev], amount);
+            }
+        }
+
+        if (!positionIsNextFixing) setRatios();
+    }
+
     /*******************
      * Private Methods *
      *******************/
@@ -351,18 +419,6 @@ abstract contract XMMPool is FixingManager {
         TotalShortPositions[index] = SafeMath.add128(TotalShortPositions[index], transferAmt);
 
         setRatios();
-    }
-
-    function getRate(LongShort longShort, Leverage leverage, uint fixingIndex0) internal view returns(int64) {
-        uint8 index = uint8(leverage);
-        int64 currentIndexValue = longShort == LongShort.Long ? _longRateIndices[index][_fixings.length - 1] : _shortRateIndices[index][_fixings.length - 1];
-        int64 initialIndexValue = longShort == LongShort.Long ? _longRateIndices[index][fixingIndex0] : _shortRateIndices[index][fixingIndex0];
-        return Math.subSigned(currentIndexValue, initialIndexValue);
-    }
-
-    function setRatios() internal {
-        setLongRatios();
-        setShortRatios();
     }
 
     function setLongRatios() private {

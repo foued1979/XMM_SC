@@ -89,27 +89,12 @@ contract CoinKYCPool is XMMPool, IKYC {
                 penalty = applyPenalty(amount);
             }
 
-            int64 rate = getRate(position.longShort, position.leverage, position.fixingIndex0);
-            uint128 compensationAmt = 0;
+            // Via checkPosition, we check the prorated rate if user offsets the position before the term.
+            // We also check if the position was pending for the next fixing, to adjust the pending notionals
+            // not the live positions.
+            (int64 rate, uint128 compensationAmt) = checkPosition(position, amount, getRate(position.longShort, position.leverage, position.fixingIndex0));
 
-            // If rate is positive, only a pro-rata interest is paid
-            // If rate is negative, msg.sender shall pay the full amount due
-            if (rate > 0) {
-                uint64 proRata = Utils.getProRata(Utils.getTimeStamp(block.timestamp, StartDate, _currentFixingUpdateInterval), position, _expiryInterval);
-                rate = Math.multSigned(int64(proRata), rate);
-            }
-            else if (isCompensable(position.longShort)) {
-                compensationAmt = compensationAmt = getCompensationAmount(position.amount, rate, _poolTokenDecimals);
-            } 
-
-            if (position.longShort == LongShort.Long) {
-                TotalLongPositions[uint8(position.leverage)] = SafeMath.sub128(TotalLongPositions[uint8(position.leverage)], amount);
-            } else {
-                TotalShortPositions[uint8(position.leverage)] = SafeMath.sub128(TotalShortPositions[uint8(position.leverage)], amount);
-            }
-
-            setRatios();
-
+            // If amount equals the position amount, we remove the position from user's positions
             if (position.amount <= amount) Utils.removePositionFromArray(positionIndex, _positions[msg.sender]);
 
             // Interest is computed on the whole amount

@@ -46,9 +46,13 @@ abstract contract FixingManager is Compensable, IFixingManager {
     mapping(uint => bool) private _longZeros;
     mapping(uint => bool) private _shortZeros;
 
-    // Private fields to manage long positions
+    // Internal fields to manage long positions
     mapping(uint8 => uint64) internal _longRatios;
     mapping(uint8 => int64[]) internal _longRateIndices;
+
+    // Internal fields to manage delayed positions
+    mapping(uint8 => uint128) internal _longAmountForNextFixing;
+    mapping(uint8 => uint128) internal _shortAmountForNextFixing;
 
     // Private fields to manage short positions
     mapping(uint8 => uint64) internal _shortRatios;
@@ -169,6 +173,8 @@ abstract contract FixingManager is Compensable, IFixingManager {
 
         Fixing memory fixing = Fixing(nextFixingTimestamp, spot, strike, volatility, optionPremium);
         executeMarginCall(lastFixing.spot, fixing);
+
+        incorporateNextNotionals();
         
         _fixings.push(fixing);
 
@@ -221,6 +227,7 @@ abstract contract FixingManager is Compensable, IFixingManager {
     /*******************
      * Virtual Methods *
      *******************/
+    function incorporateNextNotionals() internal virtual;
     function computeFactors(uint64 spotAtPeriodStart, uint64 spotAtPeriodEnd, uint64 premiumAtPeriodEnd) internal view virtual
      returns(int64[] memory longRateFactors, int64[] memory shortRateFactors);
     function executeMarginCall(uint64 prevSpot, Fixing memory lastFixing) internal virtual;
