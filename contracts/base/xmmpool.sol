@@ -114,10 +114,17 @@ abstract contract XMMPool is FixingManager {
     function getAccumulatedFee() external view onlyOwner() returns(uint128) {
         return _accumulatedFee;
     }
+    
+    /// @notice Gets the total long and short positions for a given leverage factor
+    function getPoolPendingPositions(Leverage leverage) external view returns(uint128 long, uint128 short) {
+        uint8 lev = uint8(leverage);
+        return (_longAmountForNextFixing[lev], _shortAmountForNextFixing[lev]);
+    }
 
     /// @notice Gets the total long and short positions for a given leverage factor
     function getPoolPositions(Leverage leverage) external view returns(uint128 long, uint128 short) {
-        return (TotalLongPositions[uint8(leverage)], TotalShortPositions[uint8(leverage)]);
+        uint8 lev = uint8(leverage);
+        return (TotalLongPositions[lev], TotalShortPositions[lev]);
     }
     
     /// @notice Closes all the positions held by a user.
