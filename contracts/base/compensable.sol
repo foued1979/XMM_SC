@@ -74,9 +74,10 @@ abstract contract Compensable is Owned {
      * Functions *
      *************/
     /// @notice Changes the compensation token
-    function changeCompensationToken(address newToken) external onlyOwner {
+    function changeCompensationToken(address newToken, uint8 newTokenDecimals) external onlyOwner {
         emit CompensationTokenChanged(block.timestamp, CompensationToken, newToken);
         CompensationToken = newToken;
+        _compensationTokenDecimals = newTokenDecimals;
     }
 
     /// @notice Updates the compensation token balance
