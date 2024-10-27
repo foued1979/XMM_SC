@@ -193,6 +193,10 @@ abstract contract Bridgeable {
         pendingBridgesOut.push(user);
     }
 
+    // Removes a pending chaind Id bridge for a user
+    // The method is generic to remove the pending chain Id for a bridge in or a
+    // bridge out. The method calling this function should provide the right
+    // parameters.
     function removePendingChainIdBridgeForUser(address forUser, address[] storage pendingUsers, uint64[] storage pendingChainIdBridgesForUser, uint64 chainId) internal {
         for (uint i = 0; i < pendingChainIdBridgesForUser.length; i++) {
             if (pendingChainIdBridgesForUser[i] == chainId) {
@@ -208,6 +212,9 @@ abstract contract Bridgeable {
     /*******************
      * Private methods *
      *******************/
+    // The method is generic to remove user from pending bridge in or pending
+    // bridge out. The method calling this function should provide the right
+    // parameters.
     function removeUserFromPendingBridges(address user, address[] storage pendingUsers) private {
         for (uint i = 0; i < pendingUsers.length; i++) {
             if (pendingUsers[i] == user) {
