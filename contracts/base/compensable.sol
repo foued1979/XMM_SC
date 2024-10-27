@@ -161,11 +161,11 @@ abstract contract Compensable is Owned {
     }
 
     function getCompensationAmount(uint128 positionSize, int64 loss, uint8 poolTokenDecimals) internal returns(uint128) {
-        if (!CompensationIsActive) return 0;
+        if (!CompensationIsActive || loss > 0) return 0;
 
         int8 decimalDiff = int8(poolTokenDecimals) - int8(_compensationTokenDecimals);
 
-        uint64 absLoss = uint64(loss);
+        uint64 absLoss = uint64(-loss);
         uint64 ratio = Math.mult(ConversionRate, Math.mult(absLoss, CompensationRatio));
         uint128 amt = uint128((positionSize * ratio) >> 32);
         amt = Math.adjustAmountDecimals(amt, decimalDiff);

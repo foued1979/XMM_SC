@@ -27,10 +27,14 @@ abstract contract Owned is IOwned {
     }
 
     /// @notice Changes the ownership of the contract
-    function changeOwnership(address newOwner) external onlyOwner {
-        IsActivated = false;
+    function changeOwnership(address newOwner, bool activationStatus) external onlyOwner {
+        IsActivated = activationStatus;
         
         Owner = newOwner;
         emit OwnerChanged(block.timestamp, msg.sender, newOwner);
+    }
+
+    function changePoolActivation(bool status) external onlyOwner {
+        IsActivated = status;
     }
 }
