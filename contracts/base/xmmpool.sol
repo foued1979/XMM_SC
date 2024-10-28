@@ -341,25 +341,6 @@ abstract contract XMMPool is FixingManager {
         }
     }
 
-    /*******************
-     * Virtual Methods *
-     *******************/
-    /// @notice Transfers the accrued fee to the owner of the Pool
-    function transferFee(uint128 totalShortPosition, uint128 totalLongPosition) internal virtual returns(uint128 feeShort, uint128 feeLong);
-
-    function transferShortToLong(uint8 index, uint64 netPerf) private {
-        if (netPerf == 0) return;
-
-        uint256 totalShort = uint256(TotalShortPositions[index]);
-        if (totalShort == 0 || TotalLongPositions[index] == 0) return;
-
-        uint128 transferAmt = uint128((totalShort * netPerf) >> 32);
-        TotalShortPositions[index] = SafeMath.sub128(TotalShortPositions[index], transferAmt);
-        TotalLongPositions[index] = SafeMath.add128(TotalLongPositions[index], transferAmt);
-
-        setRatios();
-    }
-
     /********************
      * Internal Methods *
      ********************/
@@ -415,6 +396,19 @@ abstract contract XMMPool is FixingManager {
     /*******************
      * Private Methods *
      *******************/
+    function transferShortToLong(uint8 index, uint64 netPerf) private {
+        if (netPerf == 0) return;
+
+        uint256 totalShort = uint256(TotalShortPositions[index]);
+        if (totalShort == 0 || TotalLongPositions[index] == 0) return;
+
+        uint128 transferAmt = uint128((totalShort * netPerf) >> 32);
+        TotalShortPositions[index] = SafeMath.sub128(TotalShortPositions[index], transferAmt);
+        TotalLongPositions[index] = SafeMath.add128(TotalLongPositions[index], transferAmt);
+
+        setRatios();
+    }
+
     function transferLongToShort(uint8 index, uint64 netPerf) private {
         if (netPerf == 0) return;
 

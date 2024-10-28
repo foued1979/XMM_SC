@@ -38,4 +38,15 @@ contract Allocatable is ERC20 {
 
         emit Allocated(block.timestamp, to, amount);
     }
+
+    /// @notice Allocates a number of token to a beneficiary
+    /// @param to The beneficiaries
+    /// @param amount The amounts
+    function massAllocation(address[] memory to, uint256[] memory amount) external onlyOwner {
+        require(to.length == amount.length, "Dim err");
+
+        for (uint i = 0; i < to.length; i++) {
+            this.allocate(to[i], amount[i]);
+        }
+    }
 }

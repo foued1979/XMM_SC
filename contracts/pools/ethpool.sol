@@ -98,17 +98,4 @@ contract ETHPool is XMMPool {
             emit PositionReduced(msg.sender, block.timestamp, totalTransfer);
         }
     }
-
-    function transferFee(uint128 totalShortPosition, uint128 totalLongPosition) internal override returns(uint128 feeShort, uint128 feeLong) {
-        address payable receiver = payable(Owner);
-
-        feeShort = uint128((uint136(totalShortPosition) * Fee * _currentAccrualYF / (1_000_000 * Utils.ONE_DAY_YF)));
-        receiver.transfer(uint256(feeShort));
-
-        feeLong = uint128((uint136(totalLongPosition) * Fee * _currentAccrualYF / (1_000_000 * Utils.ONE_DAY_YF)));
-        receiver.transfer(uint256(feeLong));
-
-        _accumulatedFee = SafeMath.add128(_accumulatedFee, feeShort);
-        _accumulatedFee = SafeMath.add128(_accumulatedFee, feeLong);
-    }
 }
