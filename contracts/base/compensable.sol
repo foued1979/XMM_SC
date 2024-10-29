@@ -101,6 +101,7 @@ abstract contract Compensable is Owned {
         _4threshold = 4 * newThreshold;
     }
 
+    /// @notice Gets the amount of CompensationToken held by the Pool
     function getCompensationTokenBalance() external returns(uint128) {
         (bool success, bytes memory res) = CompensationToken.call(abi.encodeWithSelector(IERC20.balanceOf.selector, address(this)));
         if (success) {
@@ -110,6 +111,21 @@ abstract contract Compensable is Owned {
         return 0;
     }
 
+    /// @notice The compensation ratio as a percentage; e.g. 1 for 1%, 2 for 2%, etc. up to 100
+    function setCompensationRatio(uint8 ratio) external onlyOwner {
+        if (ratio > 100) { ratio = 100; CompensationRatio = Math.One_32; }
+        else CompensationRatio = (ratio << 32) / 100;
+    }
+
+    /// @notice Sets the conversion rate Pool_Token -> CompensationToken
+    //          The conversion rate is expressed in pips <=> 10_000 for 1 unit
+    function setConversionRate(uint32 conversionRate) external onlyOwner {
+        ConversionRate = (conversionRate << 32) / 10_000;
+    }
+
+    /********************
+     * Internal Methods *
+     ********************/
     function getRebatedFee(address user, uint128 fee) internal returns(uint128) {
         (bool success, bytes memory res) = CompensationToken.call(abi.encodeWithSelector(IERC20.balanceOf.selector, user));
 
@@ -146,18 +162,6 @@ abstract contract Compensable is Owned {
 
         if (position == LongShort.Long) return CompensatedSide == CompensatedSides.Long;
         return CompensatedSide == CompensatedSides.Short;
-    }
-
-    /// @notice The compensation ratio as a percentage; e.g. 1 for 1%, 2 for 2%, etc. up to 100
-    function setCompensationRatio(uint8 ratio) external onlyOwner {
-        if (ratio > 100) { ratio = 100; CompensationRatio = Math.One_32; }
-        else CompensationRatio = (ratio << 32) / 100;
-    }
-
-    /// @notice Sets the conversion rate Pool_Token -> CompensationToken
-    //          The conversion rate is expressed in pips <=> 10_000 for 1 unit
-    function setConversionRate(uint32 conversionRate) external onlyOwner {
-        ConversionRate = (conversionRate << 32) / 10_000;
     }
 
     function getCompensationAmount(uint128 positionSize, int64 loss, uint8 poolTokenDecimals) internal returns(uint128) {

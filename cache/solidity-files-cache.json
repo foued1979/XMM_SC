@@ -651,8 +651,8 @@
       ]
     },
     "C:\\Users\\Frederic\\XMM_SC\\contracts\\base\\compensable.sol": {
-      "lastModificationDate": 1730005797628,
-      "contentHash": "ebb108b6c2dec8999f3cb35aaaacb966",
+      "lastModificationDate": 1730186213610,
+      "contentHash": "0a3176bd83c36b20b72a2228bad2850f",
       "sourceName": "contracts/base/compensable.sol",
       "solcConfig": {
         "version": "0.8.24",
