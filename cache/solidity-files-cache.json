@@ -609,8 +609,8 @@
       ]
     },
     "C:\\Users\\Frederic\\XMM_SC\\contracts\\base\\fixingmanager.sol": {
-      "lastModificationDate": 1730003617177,
-      "contentHash": "b1119b16e78e320bac31aaabffdb2342",
+      "lastModificationDate": 1730448498119,
+      "contentHash": "b5a7215d3500156b69d4541b5123e463",
       "sourceName": "contracts/base/fixingmanager.sol",
       "solcConfig": {
         "version": "0.8.24",
