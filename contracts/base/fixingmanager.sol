@@ -101,6 +101,19 @@ abstract contract FixingManager is Compensable, IFixingManager {
         return res;
     }
 
+    /// @notice Gets the total long and short positions for all leverages
+    function getAllLastRateIndices() external view returns(int64[] memory long, int64[] memory short) {
+        long = new int64[](6);
+        short = new int64[](6);
+
+        uint lastFixingIndex = _fixings.length - 1;
+
+        for (uint8 i = 0; i < 6; i++) {
+            long[i] = _longRateIndices[i][lastFixingIndex];
+            short[i] = _shortRateIndices[i][lastFixingIndex];
+        }
+    }
+
     /// @notice Gets the total long and short positions for a given leverage factor
     function getLastRateIndices(Leverage leverage) external view returns(int64 long, int64 short) {
         uint8 lev = uint8(leverage);
