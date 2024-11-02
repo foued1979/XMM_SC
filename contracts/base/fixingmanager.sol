@@ -186,11 +186,11 @@ abstract contract FixingManager is Compensable, IFixingManager {
         }
 
         Fixing memory fixing = Fixing(nextFixingTimestamp, spot, strike, volatility, optionPremium);
-        executeMarginCall(lastFixing.spot, fixing);
-
-        incorporateNextNotionals();
+        executeMarginCall(lastFixing.spot, _fixings[_fixings.length - 1], fixing);
         
         _fixings.push(fixing);
+
+        incorporateNextNotionals();
 
         return true;
     }
@@ -244,7 +244,7 @@ abstract contract FixingManager is Compensable, IFixingManager {
     function incorporateNextNotionals() internal virtual;
     function computeFactors(uint64 spotAtPeriodStart, uint64 spotAtPeriodEnd, uint64 premiumAtPeriodEnd) internal view virtual
      returns(int64[] memory longRateFactors, int64[] memory shortRateFactors);
-    function executeMarginCall(uint64 prevSpot, Fixing memory lastFixing) internal virtual;
+    function executeMarginCall(uint64 prevSpot, Fixing memory prevFixing, Fixing memory lastFixing) internal virtual;
     function transfer(int64[] memory longRateFactors, int64[] memory shortRateFactors) internal virtual;
 
     /********************

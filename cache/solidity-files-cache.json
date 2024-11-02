@@ -335,49 +335,6 @@
       ],
       "artifacts": []
     },
-    "C:\\Users\\Frederic\\XMM_SC\\contracts\\manager.sol": {
-      "lastModificationDate": 1728719468099,
-      "contentHash": "58f27a20ad8fd29757d2ea01dfb65641",
-      "sourceName": "contracts/manager.sol",
-      "solcConfig": {
-        "version": "0.8.24",
-        "settings": {
-          "optimizer": {
-            "enabled": true,
-            "runs": 100
-          },
-          "evmVersion": "paris",
-          "outputSelection": {
-            "*": {
-              "*": [
-                "abi",
-                "evm.bytecode",
-                "evm.deployedBytecode",
-                "evm.methodIdentifiers",
-                "metadata"
-              ],
-              "": [
-                "ast"
-              ]
-            }
-          }
-        }
-      },
-      "imports": [
-        "./interfaces/ifixingmanager.sol",
-        "./interfaces/ikyc.sol",
-        "./libraries/utils.sol",
-        "./enums.sol",
-        "./pools/coinpool.sol",
-        "./pools/coinkycpool.sol"
-      ],
-      "versionPragmas": [
-        ">= 0.8.0"
-      ],
-      "artifacts": [
-        "Manager"
-      ]
-    },
     "C:\\Users\\Frederic\\XMM_SC\\node_modules\\hardhat\\console.sol": {
       "lastModificationDate": 1720795956637,
       "contentHash": "896f68942c3a20e9ae3c3c5bfd3add54",
@@ -565,8 +522,8 @@
       ]
     },
     "C:\\Users\\Frederic\\XMM_SC\\contracts\\base\\xmmpool.sol": {
-      "lastModificationDate": 1730112747659,
-      "contentHash": "58e10fb9563026667b6f0a369d9e59e1",
+      "lastModificationDate": 1730524025606,
+      "contentHash": "065d0edcf204b0acb33207989114f3cc",
       "sourceName": "contracts/base/xmmpool.sol",
       "solcConfig": {
         "version": "0.8.24",
@@ -609,8 +566,8 @@
       ]
     },
     "C:\\Users\\Frederic\\XMM_SC\\contracts\\base\\fixingmanager.sol": {
-      "lastModificationDate": 1730448498119,
-      "contentHash": "b5a7215d3500156b69d4541b5123e463",
+      "lastModificationDate": 1730524025595,
+      "contentHash": "3a42c635cdc3a3dfaf74c59af81522bf",
       "sourceName": "contracts/base/fixingmanager.sol",
       "solcConfig": {
         "version": "0.8.24",

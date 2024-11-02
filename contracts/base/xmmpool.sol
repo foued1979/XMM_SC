@@ -292,9 +292,9 @@ abstract contract XMMPool is FixingManager {
         }
     }
 
-    function computeFactors(uint64 spotAtPeriodStart, uint64 spotAtPeriodEnd, uint64 premiumAtPeriodEnd) internal view override
+    function computeFactors(uint64 spotAtPeriodStart, uint64 spotAtPeriodEnd, uint64 premiumAtPeriodStart) internal view override
      returns(int64[] memory longRateFactors, int64[] memory shortRateFactors) {
-        uint64 premiumPerf = Math.mult(premiumAtPeriodEnd, _currentAccrualYF);
+        uint64 premiumPerf = Math.mult(premiumAtPeriodStart, _currentAccrualYF);
         int64 spotPerf = Math.subToSigned(spotAtPeriodEnd, spotAtPeriodStart);
 
         longRateFactors = new int64[](6);
@@ -320,8 +320,8 @@ abstract contract XMMPool is FixingManager {
         return (longRateFactors, shortRateFactors);
     }
 
-    function executeMarginCall(uint64 prevSpot, Fixing memory lastFixing) internal override {
-        (int64[] memory longRateFactors, int64[] memory shortRateFactors) = computeFactors(prevSpot, lastFixing.spot, lastFixing.premium);
+    function executeMarginCall(uint64 prevSpot, Fixing memory prevFixing, Fixing memory lastFixing) internal override {
+        (int64[] memory longRateFactors, int64[] memory shortRateFactors) = computeFactors(prevSpot, lastFixing.spot, prevFixing.premium);
 
         transfer(longRateFactors, shortRateFactors);
 
