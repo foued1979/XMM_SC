@@ -1,7 +1,11 @@
 node_modules
+cache
+artifacts
 .env
+.vs
 
 # Hardhat files
+/.vs
 /cache
 /artifacts
 
