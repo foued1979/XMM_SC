@@ -114,6 +114,29 @@ abstract contract XMMPool is FixingManager {
     function getAccumulatedFee() external view onlyOwner() returns(uint128) {
         return _accumulatedFee;
     }
+
+    /// @notice Gets performance of mag.sender's position at the given position index 
+    function getPositionPerformance(uint32 positionIndex) public view returns(int64) {
+        require(positionIndex < _positions[msg.sender].length, "Index err");
+        Position storage pos = _positions[msg.sender][positionIndex];
+
+        // If position went through 0, returns 0 perf
+        if (isZeroPerf(pos.fixingIndex0, pos.longShort)) return 0;
+        uint8 lev = uint8(pos.leverage);
+
+        int64[] storage indices = pos.longShort == LongShort.Long ? _longRateIndices[lev] : _shortRateIndices[lev];
+
+        return Math.subSigned(indices[indices.length - 1], indices[pos.fixingIndex0]); 
+    }
+
+    /// @notice Gets performance of all msg.sender's positions
+    function getPositionPerformances() external view returns(int64[] memory perfs) {
+        perfs = new int64[](_positions[msg.sender].length);
+
+        for (uint32 i = 0; i < _positions[msg.sender].length; i++) {
+            perfs[i] = getPositionPerformance(i);
+        }
+    }
     
     /// @notice Gets the total long and short positions for a given leverage factor
     function getPoolPendingPositions(Leverage leverage) external view returns(uint128 long, uint128 short) {
