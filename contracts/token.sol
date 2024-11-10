@@ -2,11 +2,10 @@
 pragma solidity >= 0.8.0;
 
 import "./base/allocatable.sol";
-import "./base/bridgeable.sol";
-import "./interfaces/iexchangeable.sol";
+import "./base/exchangeable.sol";
 import "./libraries/safemath.sol";
 
-contract Token is Allocatable, Bridgeable, IExchangeable {
+contract Token is Allocatable, Exchangeable {
     /**********
      * Events *
      **********/
@@ -17,57 +16,16 @@ contract Token is Allocatable, Bridgeable, IExchangeable {
     event ChangedBackFor(uint indexed timestamp, address indexed beneficiary, address tokenReceived, uint256 amount);
     event Withdrawn(uint indexed timestamp, address indexed from, uint256 amount);    
 
-    /*************
-     * Modifiers *
-     *************/
-    modifier ethDepositIsAllowed {
-        require(ETHDepositIsAllowed, "Not allowed");
-        _;
-    }
-
-    modifier ethExchangeIsAllowed {
-        require(ETHExchangeIsAllowed && EthExchangeRate != 0, "Not allowed");
-        _;
-    }
-
-    modifier exchangeIsAllowedForToken(address token) {
-        require(_tokenIsApproved[token] && _exchangeIsAllowed[token] && _exchangeRates[token] != 0, "Not allowed");
-        _;
-    }
-
-    modifier tokenIsApproved(address token) {
-        require(_tokenIsApproved[token], "Not approved");
-        _;
-    }
-
     /**************
      * Properties *
      **************/
      // Public Properties
     string public Name;
 
-    // Public properties linked to IExchangeable
-    // The exchange rate represents a real number with 4 digits precision
-    bool public ETHExchangeIsAllowed;
-    bool public ETHDepositIsAllowed;
-    uint64 public EthExchangeRate;
-    uint16 private _precision = 10_000;
-
-    // Other public Properties
-    address[] public ApprovedTokens;
-    mapping(address => uint8) private _approvedTokenDecimals;
-
-    // Parameters to manage other token exchanges
-    mapping(address => bool) private _tokenIsApproved;
-    mapping(address => uint64) private _exchangeRates;
-    mapping(address => bool) private _exchangeIsAllowed;
-
     constructor(string memory symbol, string memory name, uint64 chainId, uint32 initialSupply, uint32 initialOwnerAllocation) 
-        Allocatable(symbol, initialSupply, uint8(18)) Bridgeable(chainId) payable {
+        Allocatable(symbol, initialSupply, uint8(18)) Exchangeable(chainId) payable {
 
         Name = name;
-        ETHDepositIsAllowed = false;
-        ETHExchangeIsAllowed = false;
         allocateToOwner(uint256(initialOwnerAllocation) * uint256(10 ** 18));
     }
 
@@ -79,84 +37,10 @@ contract Token is Allocatable, Bridgeable, IExchangeable {
     /// @param amount The amount to be allocated
     function burn(uint256 amount) external onlyOwner {
         require(amount <= AvailableTokens, "Burn failed");
-
         TotalSupply = SafeMath.sub(TotalSupply, amount);
         AvailableTokens = SafeMath.sub(AvailableTokens, amount);
         
         emit Burnt(block.timestamp, amount);
-    }
-
-    /// @notice Sets the change authorization status for ETH to false
-    function removeETHExchangeAuthorization() external onlyOwner {
-        ETHExchangeIsAllowed = false;
-    }
-
-    /// @notice Sets the change authorization status for a token to false
-    function removeExchangeAuthorizationForToken(address tokenToBeReceived) external onlyOwner tokenIsApproved(tokenToBeReceived) {
-        _exchangeIsAllowed[tokenToBeReceived] = false;
-    }
-
-    /// @notice Sets whether the deposit of ETH against token is allowed or not
-    //          The exchange rate is expressed in pips
-    function setETHDepositExchangeRate(uint64 exchangeRate) external onlyOwner {
-        EthExchangeRate = exchangeRate;
-        ETHDepositIsAllowed = true;
-    }
-
-    /// @notice Sets the ETH deposit authorization to false
-    function removeETHDepositAuthorization() external onlyOwner {
-        ETHDepositIsAllowed = false;
-    }
-
-    /// @notice Updates the exchange rate between ETH and the Token
-    //          The exchange rate is expressed in pips
-    function updateETHExchangeRate(uint64 exchangeRate) external onlyOwner {
-        EthExchangeRate = exchangeRate;
-        ETHExchangeIsAllowed = true;
-    }
-
-    /// @notice Updates the exchange rate between a token and our Token
-    /// @param  tokenToBeReceived The token to be received in exchange of our Token
-    /// @param  exchangeRate The exchange rate, with 4 digits precision (in pips)
-    function updateTokenExchangeRate(address tokenToBeReceived, uint64 exchangeRate) external onlyOwner tokenIsApproved(tokenToBeReceived) {
-        _exchangeRates[tokenToBeReceived] = exchangeRate;
-        _exchangeIsAllowed[tokenToBeReceived] = true;
-    }
-    
-    /// @notice Returns the quantity of ETH available for change against Token
-    function getAvailableQuantityOfETH() external view returns(uint256) {
-        return address(this).balance;
-    }
-
-    /// @notice Returns the latest exchange rate associated to the token to be received
-    /// @return Whether the exchange is authorized and the latest exchange rate
-    function getExchangeInfoForToken(address tokenToBeReceived) external view tokenIsApproved(tokenToBeReceived) returns(bool, uint64) {
-        return (_exchangeIsAllowed[tokenToBeReceived], _exchangeRates[tokenToBeReceived]);
-    }
-
-    /// @notice Returns the available quantity of a token to be exchanged
-    function getAvailableQuantityOfToken(address tokenToBeReceived) public tokenIsApproved(tokenToBeReceived) returns(uint256) {
-        (bool success , bytes memory res) = tokenToBeReceived.call(abi.encodeWithSelector(IERC20.balanceOf.selector, address(this)));
-
-        require(success, "Comm error");
-        return abi.decode(res, (uint256));
-    }
-
-    /// @notice Adds a token which can be traded against our Token
-    function addApprovedToken(address token, uint8 decimals) external onlyOwner {
-        require(decimals <= 18, "Decimal err");
-        if (_tokenIsApproved[token]) return;
-
-        _tokenIsApproved[token] = true;
-        _exchangeIsAllowed[token] = false;
-
-        ApprovedTokens.push(token);
-        _approvedTokenDecimals[token] = decimals;
-    }
-
-    /// @notice Gets approved tokens
-    function getApprovedTokens() external view returns(address[] memory) {
-        return ApprovedTokens;
     }
 
     /// @notice Enables a user to deposit ETH and receive Tokens in exchange
@@ -199,12 +83,14 @@ contract Token is Allocatable, Bridgeable, IExchangeable {
     }
 
     /// @notice Enables a user to sell back an amount of Tokens against ETH
-    /// if there is enough ETH available, and if the change is authorized
+    /// if there is enough ETH available, and if the change is authorized.
+    /// Sold-back tokens are automatically burnt.
     /// @param amountToken The amount of tokens to be exchanged
     function sellBack(uint128 amountToken) external ethExchangeIsAllowed {
         require(_balances[msg.sender] >= amountToken, "Insufficient balance");
 
-        uint256 amountETH = (uint256(amountToken) * uint256(_precision)) / uint256(EthExchangeRate);
+        uint256 amt256 = uint256(amountToken);
+        uint256 amountETH = (amt256 * uint256(_precision)) / uint256(EthExchangeRate);
         uint256 availableQuantityOfETH = address(this).balance;
 
         if (amountETH > availableQuantityOfETH) {
@@ -212,26 +98,30 @@ contract Token is Allocatable, Bridgeable, IExchangeable {
             amountToken = uint128((amountETH * uint256(EthExchangeRate)) / uint256(_precision));
         }
         
-        _balances[msg.sender] = SafeMath.sub(_balances[msg.sender], uint256(amountToken));
+        _balances[msg.sender] = SafeMath.sub(_balances[msg.sender], amt256);
         payable(msg.sender).transfer(amountETH);
         
-        AllocatedAmount = SafeMath.sub(AllocatedAmount, uint256(amountToken));
-        AvailableTokens = SafeMath.add(AvailableTokens, uint256(amountToken));
+        // Now we burn the tokens
+        AllocatedAmount = SafeMath.sub(AllocatedAmount, amt256);
+        TotalSupply = SafeMath.sub(TotalSupply, amt256);
 
         emit ChangedBack(block.timestamp, msg.sender, amountETH);
         emit Withdrawn(block.timestamp, msg.sender, amountToken);
+        emit Burnt(block.timestamp, amt256);
     }
 
     /// @notice Enables a user to sell back an amount of Tokens against a preferred token
-    /// if there is enough token available, and if the change is authorized
+    /// if there is enough token available, and if the change is authorized.
+    /// Sold-back tokens are automatically burnt.
     /// @param amountToken The amount of tokens to be exchanged
     /// @param tokenToBeReceived The address of the token to be exchanged for
     function sellBackAgainst(uint128 amountToken, address tokenToBeReceived) external exchangeIsAllowedForToken(tokenToBeReceived) {
         require(_balances[msg.sender] >= amountToken, "Insufficient balance");
 
         uint8 decimalAdjust = 18 - _approvedTokenDecimals[tokenToBeReceived];
+        uint256 amt256 = uint256(amountToken);
 
-        uint256 amountExpectedToken = (uint256(amountToken) * uint256(_precision)) / uint256(_exchangeRates[tokenToBeReceived]);
+        uint256 amountExpectedToken = (amt256 * uint256(_precision)) / uint256(_exchangeRates[tokenToBeReceived]);
         if (decimalAdjust != 0) amountExpectedToken /= (10 ** decimalAdjust);
         uint256 availableQuantity = getAvailableQuantityOfToken(tokenToBeReceived);
 
@@ -245,13 +135,15 @@ contract Token is Allocatable, Bridgeable, IExchangeable {
         // We transfer the expected to token to msg.sender
         // Then, we adjust msg.sender's balance
         IERC20(tokenToBeReceived).transfer(msg.sender, amountExpectedToken);
-        _balances[msg.sender] = SafeMath.sub(_balances[msg.sender], uint256(amountToken));
+        _balances[msg.sender] = SafeMath.sub(_balances[msg.sender], amt256);
         
-        AllocatedAmount = SafeMath.sub(AllocatedAmount, uint256(amountToken));
-        AvailableTokens = SafeMath.add(AvailableTokens, uint256(amountToken));
+        // Now we burn the tokens
+        AllocatedAmount = SafeMath.sub(AllocatedAmount, amt256);
+        TotalSupply = SafeMath.sub(TotalSupply, amt256);
 
         emit ChangedBackFor(block.timestamp, msg.sender, tokenToBeReceived, amountExpectedToken);
         emit Withdrawn(block.timestamp, msg.sender, amountToken);
+        emit Burnt(block.timestamp, amt256);
     }
 
     /// @notice Enables the Owner to buy back tokens from a user, in exchange of ETH
@@ -372,7 +264,6 @@ contract Token is Allocatable, Bridgeable, IExchangeable {
     /*******************
      * Private methods *
      *******************/
-
     /// @notice Allocates a number of token to the owner
     /// @param amount The amount
     function allocateToOwner(uint256 amount) private {

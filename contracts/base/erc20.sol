@@ -22,10 +22,10 @@ contract ERC20 is IERC20 {
 
     address public Owner;
     string public Symbol;
-    uint256 public TotalSupply;
     uint8 public Decimals;
 
     // Private Fields
+    uint256 internal TotalSupply;
     mapping(address => uint256) internal _balances;
     mapping(address => mapping(address => uint256)) private _allowances;
 

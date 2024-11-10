@@ -134,6 +134,7 @@ describe('Test base token functions', function () {
       await token.allocate(spender, 500n * BigInt(10 ** 18));
       const allocatedAmt = await token.AllocatedAmount();
       var availableTokens = await token.AvailableTokens();
+      const totalSupply = await token.totalSupply();
 
       // There is no exchange rate yet
       await expect(token.getExchangeInfoForToken(approvedTokenAddress)).to.be.revertedWith("Not approved");
@@ -164,7 +165,8 @@ describe('Test base token functions', function () {
       expect(balanceOfSpender).to.equal(1n * BigInt(10 ** 18));
       expect(await token.balanceOf(spender)).to.equal(350n * BigInt(10 ** 18));
       expect(await token.AllocatedAmount()).to.equal(allocatedAmt - 150n * BigInt(10 ** 18));
-      expect(await token.AvailableTokens()).to.equal(availableTokens + 150n * BigInt(10 ** 18));
+      expect(await token.AvailableTokens()).to.equal(availableTokens);
+      expect(await token.totalSupply()).to.equal(totalSupply - 150n * BigInt(10 ** 18));
 
       // We make sure that we can remove exchange auth.
       await token.removeExchangeAuthorizationForToken(approvedTokenAddress);
@@ -191,6 +193,7 @@ describe('Test base token functions', function () {
       await token.allocate(spender, 500n * BigInt(10 ** 18));
       const allocatedAmt = await token.AllocatedAmount();
       var availableTokens = await token.AvailableTokens();
+      const totalSupply = await token.totalSupply();
 
       // We add an approved token for exchange
       await token.addApprovedToken(approvedTokenAddress, decimals);
@@ -205,7 +208,8 @@ describe('Test base token functions', function () {
       expect(balanceOfSpender).to.equal(1n * BigInt(10 ** decimals));
       expect(await token.balanceOf(spender)).to.equal(350n * BigInt(10 ** 18));
       expect(await token.AllocatedAmount()).to.equal(allocatedAmt - 150n * BigInt(10 ** 18));
-      expect(await token.AvailableTokens()).to.equal(availableTokens + 150n * BigInt(10 ** 18));
+      expect(await token.totalSupply()).to.equal(totalSupply - 150n * BigInt(10 ** 18));
+      expect(await token.AvailableTokens()).to.equal(availableTokens);
     });
 
     it('Exchange functions work properly for ETH', async function() {
@@ -235,6 +239,7 @@ describe('Test base token functions', function () {
       expect(await token.balanceOf(spender)).to.equal(500n * BigInt(10 ** 18));
       const allocatedAmt = await token.AllocatedAmount();
       var availableTokens = await token.AvailableTokens();
+      const totalSupply = await token.totalSupply();
 
       // We test the sellBack function
       const tx = await token.connect(spender).sellBack(150n * BigInt(10 ** 18));
@@ -243,6 +248,7 @@ describe('Test base token functions', function () {
       expect(await ethers.provider.getBalance(spender.address)).to.equal(1000005n * BigInt(10 ** 16) - receipt.gasUsed * receipt.gasPrice);
       expect(await token.balanceOf(spender)).to.equal(350n * BigInt(10 ** 18));
       expect(await token.AllocatedAmount()).to.equal(allocatedAmt - 150n * BigInt(10 ** 18));
-      expect(await token.AvailableTokens()).to.equal(availableTokens + 150n * BigInt(10 ** 18));
+      expect(await token.totalSupply()).to.equal(totalSupply - 150n * BigInt(10 ** 18));
+      expect(await token.AvailableTokens()).to.equal(availableTokens);
     });
   });
