@@ -25,12 +25,6 @@ library SafeMath {
         }
     }
 
-    function sub128(uint128 a, uint128 b) internal pure returns(uint128 c) {
-        unchecked {
-            require((c = a - b) <= a, "Overflow");
-        }
-    }
-
     function subOr0(uint a, uint b) internal pure returns(uint) {
         unchecked {
             return a > b ? a - b : 0;

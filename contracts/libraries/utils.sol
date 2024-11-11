@@ -37,13 +37,6 @@ library Utils {
     uint internal constant THREE_HOURS_UPDATE_INTERVAL = 10_800;
     uint internal constant FOUR_HOURS_UPDATE_INTERVAL = 14_400;
 
-    int64 private constant ONE_TIME_LEV = 0x100000000;
-    int64 private constant TWO_TIME_LEV = 0x200000000;
-    int64 private constant THREE_TIME_LEV = 0x300000000;
-    int64 private constant FIVE_TIME_LEV = 0x500000000;
-    int64 private constant SEVEN_TIME_LEV = 0x700000000;
-    int64 private constant TEN_TIME_LEV = 0xA00000000;
-
     /// @notice Computes option expiry as a year fraction
     function getTermInformation(Terms term) internal pure returns(uint updateInterval, uint expiryInterval, uint64 expiryYF) {
         if (term == Terms.OneDay) return (TEN_MINUTES_UPDATE_INTERVAL, ONE_DAY_TIMESPAN_INTERVAL, ONE_DAY_YF);
@@ -76,13 +69,13 @@ library Utils {
 
     /// @notice Returns the leverage factor as int64
     function getLeverageFactor(uint8 lev) internal pure returns(int64) {
-        if (lev == 0) return ONE_TIME_LEV;
-        if (lev == 1) return TWO_TIME_LEV;
-        if (lev == 2) return THREE_TIME_LEV;
-        if (lev == 3) return FIVE_TIME_LEV;
-        if (lev == 4) return SEVEN_TIME_LEV;
+        if (lev == 0) return 0x100000000;
+        if (lev == 1) return 0x200000000;
+        if (lev == 2) return 0x300000000;
+        if (lev == 3) return 0x500000000;
+        if (lev == 4) return 0x700000000;
 
-        return TEN_TIME_LEV;
+        return 0xA00000000;
     }
     
     /// @notice Gets the position pro-rated holding time. If position has been hold for a longer period of time

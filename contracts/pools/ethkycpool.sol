@@ -35,7 +35,7 @@ contract ETHKYCPool is XMMPool, IKYC {
         uint128 minFee = getMinimumFee(msg.sender, timestamp, timestamp + _expiryInterval, amount);
         // The deposit can only be an increase in position
         // -> hence, we remove the minFee from the deposit
-        amount = SafeMath.sub128(amount, minFee);
+        amount = SafeMath.subOr0_128(amount, minFee);
 
         address payable receiver = payable(Owner);
         receiver.transfer(uint256(minFee));
@@ -67,7 +67,7 @@ contract ETHKYCPool is XMMPool, IKYC {
             // If position is offset before expected term, a penalty applies
             if (position.startDate > block.timestamp || block.timestamp < position.expiry) {
                 // This penalty is the for the pool and will remain in pool liquidity
-                penalty = applyPenalty(amount);
+                penalty = uint128((uint136(amount) * Penalty) / 1_000_000);
             }
 
             // Via checkPosition, we check the prorated rate if user offsets the position before the term.
@@ -83,7 +83,7 @@ contract ETHKYCPool is XMMPool, IKYC {
 
             // We remove the penalty
             // Fee is removed only if user has enough cash at offset
-            uint128 totalTransfer = SafeMath.sub128(amount, penalty);
+            uint128 totalTransfer = SafeMath.subOr0_128(amount, penalty);
 
             // We charge or we pay the interest
             if (rate < 0) totalTransfer = SafeMath.subOr0_128(totalTransfer, uint128(-interest));
@@ -98,7 +98,7 @@ contract ETHKYCPool is XMMPool, IKYC {
                     fee = totalTransfer;
                     totalTransfer = 0;
                 } else {
-                    totalTransfer = SafeMath.sub128(totalTransfer, fee);
+                    totalTransfer = SafeMath.subOr0_128(totalTransfer, fee);
                 }
             }
 

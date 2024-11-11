@@ -15,9 +15,6 @@ abstract contract XMMPool is FixingManager {
      **********/
     event Deposit(address indexed from, uint indexed timestamp, Position position);
     event PositionReduced(address indexed from, uint indexed timestamp, uint128 amount);
-     
-    event FeeChanged(uint indexed timestamp, uint8 oldFee, uint8 newFee);
-    event PenaltyChanged(uint indexed timestamp, uint8 oldPenalty, uint8 newPenalty);
 
     /*****************
      * The modifiers *
@@ -152,9 +149,7 @@ abstract contract XMMPool is FixingManager {
     
     /// @notice Closes all the positions held by a user.
     function closeAllPositions() external {
-        if (_positions[msg.sender].length > 0) {
-            for (uint32 i = 0; i < _positions[msg.sender].length; i++) closePosition(i);
-        }
+        for (uint32 i = 0; i < _positions[msg.sender].length; i++) closePosition(i);
     }
 
     /// @notice Closes a position
@@ -169,7 +164,7 @@ abstract contract XMMPool is FixingManager {
     /// @param amount   The amount of the position, inclusive of the fee -> if a client transfers 100 tokens, and the fee is 1 token
     //                  amount = 100 and fee = 1
     function createPositionForUser(LongShort longShort, Leverage leverage, uint128 amount, uint128 fee, address user) external onlyOwner {
-        amount = SafeMath.sub128(amount, fee);
+        amount = SafeMath.subOr0_128(amount, fee);
         uint timestamp = Utils.getTimeStamp(block.timestamp, _fixings[_fixings.length - 1].timestamp, _currentFixingUpdateInterval);
         
         writeDeposit(user, _fixings.length - 1, timestamp, longShort, amount, fee, leverage);
@@ -195,13 +190,11 @@ abstract contract XMMPool is FixingManager {
 
     /// @notice Sets the new Fee for the pool
     function setNewFee(uint8 newFee) external onlyOwner {
-        emit FeeChanged(block.timestamp, Fee, newFee);
         Fee = newFee;
     }
 
     /// @notice Sets the new Penalty for the pool
     function setNewPenalty(uint8 newPenalty) external onlyOwner {
-        emit PenaltyChanged(block.timestamp, Penalty, newPenalty);
         Penalty = newPenalty;
     }
 
@@ -298,18 +291,13 @@ abstract contract XMMPool is FixingManager {
         return getRebatedFee(user, fee);
     }
 
-    /// @notice Returns the penalty amount
-    function applyPenalty(uint128 amount) internal view returns(uint128) {
-        return uint128((uint136(amount) * Penalty) / 1_000_000);
-    }
-
     /****************************************
      * FixingManager Methods Implementation *
      ****************************************/
     function incorporateNextNotionals() internal override {
         for (uint8 i = 0; i < 6; i++) {
-            TotalLongPositions[i] = SafeMath.sub128(TotalLongPositions[i], _longAmountForNextFixing[i]);
-            TotalShortPositions[i] = SafeMath.sub128(TotalShortPositions[i], _shortAmountForNextFixing[i]);
+            TotalLongPositions[i] = SafeMath.subOr0_128(TotalLongPositions[i], _longAmountForNextFixing[i]);
+            TotalShortPositions[i] = SafeMath.subOr0_128(TotalShortPositions[i], _shortAmountForNextFixing[i]);
             _longAmountForNextFixing[i] = 0;
             _shortAmountForNextFixing[i] = 0;
         }
@@ -318,7 +306,7 @@ abstract contract XMMPool is FixingManager {
     function computeFactors(uint64 spotAtPeriodStart, uint64 spotAtPeriodEnd, uint64 premiumAtPeriodStart) internal view override
      returns(int64[] memory longRateFactors, int64[] memory shortRateFactors) {
         uint64 premiumPerf = Math.mult(premiumAtPeriodStart, _currentAccrualYF);
-        int64 spotPerf = Math.subToSigned(spotAtPeriodEnd, spotAtPeriodStart);
+        int64 spotPerf = Math.subSigned(int64(spotAtPeriodEnd), int64(spotAtPeriodStart));
 
         longRateFactors = new int64[](6);
         shortRateFactors = new int64[](6);
@@ -374,11 +362,6 @@ abstract contract XMMPool is FixingManager {
         return Math.subSigned(currentIndexValue, initialIndexValue);
     }
 
-    function setRatios() internal {
-        setLongRatios();
-        setShortRatios();
-    }
-
     /// @notice Adjusts the rate of the position, updates the amounts and returns the compensation amount, if any
     function checkPosition(Position storage position, uint128 amount, int64 rate) internal returns(int64 adjustedRate, uint128 compensationAmt) {
         compensationAmt = 0;
@@ -401,19 +384,40 @@ abstract contract XMMPool is FixingManager {
 
         if (position.longShort == LongShort.Long) {
             if (positionIsNextFixing) {
-                _longAmountForNextFixing[lev] = SafeMath.sub128(_longAmountForNextFixing[lev], amount);
+                _longAmountForNextFixing[lev] = SafeMath.subOr0_128(_longAmountForNextFixing[lev], amount);
             } else {
-                TotalLongPositions[lev] = SafeMath.sub128(TotalLongPositions[lev], amount);
+                TotalLongPositions[lev] = SafeMath.subOr0_128(TotalLongPositions[lev], amount);
             }
         } else {
             if (positionIsNextFixing) {
-                _shortAmountForNextFixing[lev] = SafeMath.sub128(_shortAmountForNextFixing[lev], amount);
+                _shortAmountForNextFixing[lev] = SafeMath.subOr0_128(_shortAmountForNextFixing[lev], amount);
             } else {
-                TotalShortPositions[lev] = SafeMath.sub128(TotalShortPositions[lev], amount);
+                TotalShortPositions[lev] = SafeMath.subOr0_128(TotalShortPositions[lev], amount);
             }
         }
 
         if (!positionIsNextFixing) setRatios();
+    }
+
+    function setRatios() internal {
+        for (uint8 i = 0; i < 6; i++) {
+            uint128 totalLong = TotalLongPositions[i];
+            uint128 totalShort = TotalShortPositions[i];
+
+            if (totalLong == 0) {
+                _longRatios[i] = 0;
+            } else {
+                uint160 short = uint160(totalShort) << 32;
+                _longRatios[i] = uint64(short / totalLong);
+            }
+
+            if (totalShort == 0) {
+                _shortRatios[i] = 0;
+            } else {
+                uint160 long = uint160(totalLong) << 32;
+                _shortRatios[i] = uint64(long / totalShort);
+            }
+        }
     }
 
     /*******************
@@ -426,7 +430,7 @@ abstract contract XMMPool is FixingManager {
         if (totalShort == 0 || TotalLongPositions[index] == 0) return;
 
         uint128 transferAmt = uint128((totalShort * netPerf) >> 32);
-        TotalShortPositions[index] = SafeMath.sub128(TotalShortPositions[index], transferAmt);
+        TotalShortPositions[index] = SafeMath.subOr0_128(TotalShortPositions[index], transferAmt);
         TotalLongPositions[index] = SafeMath.add128(TotalLongPositions[index], transferAmt);
 
         setRatios();
@@ -439,35 +443,9 @@ abstract contract XMMPool is FixingManager {
         if (totalLong == 0 || TotalShortPositions[index] == 0) return;
 
         uint128 transferAmt = uint128((totalLong * netPerf) >> 32);
-        TotalLongPositions[index] = SafeMath.sub128(TotalLongPositions[index], transferAmt);
+        TotalLongPositions[index] = SafeMath.subOr0_128(TotalLongPositions[index], transferAmt);
         TotalShortPositions[index] = SafeMath.add128(TotalShortPositions[index], transferAmt);
 
         setRatios();
-    }
-
-    function setLongRatios() private {
-        for (uint8 i = 0; i < 6; i++) {
-            uint128 totalLong = TotalLongPositions[i];
-
-            if (totalLong == 0) {
-                _longRatios[i] = 0;
-            } else {
-                uint160 short = uint160(TotalShortPositions[i]) << 32;
-                _longRatios[i] = uint64(short / totalLong);
-            }
-        }
-    }
-
-    function setShortRatios() private {
-        for (uint8 i = 0; i < 6; i++) {
-            uint128 totalShort = TotalShortPositions[i];
-
-            if (totalShort == 0) {
-                _shortRatios[i] = 0;
-            } else {
-                uint160 long = uint160(TotalLongPositions[i]) << 32;
-                _shortRatios[i] = uint64(long / totalShort);
-            }
-        }
     }
 }

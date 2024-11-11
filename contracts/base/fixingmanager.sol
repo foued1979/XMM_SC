@@ -252,11 +252,8 @@ abstract contract FixingManager is Compensable, IFixingManager {
      ********************/
     /// @notice Returns whether a position started at fixingIndex0 has reached 0 during position lifetime
     function isZeroPerf(uint fixingIndex0, LongShort longShort) internal view returns(bool) {
-        if (longShort == LongShort.Long) {
-            return _longZeros[fixingIndex0];
-        } else {
-            return _shortZeros[fixingIndex0];
-        }
+        if (longShort == LongShort.Long) { return _longZeros[fixingIndex0]; }
+        return _shortZeros[fixingIndex0];
     }
 
     /*******************

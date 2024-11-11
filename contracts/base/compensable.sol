@@ -113,7 +113,7 @@ abstract contract Compensable is Owned {
 
     /// @notice The compensation ratio as a percentage; e.g. 1 for 1%, 2 for 2%, etc. up to 100
     function setCompensationRatio(uint8 ratio) external onlyOwner {
-        if (ratio > 100) { ratio = 100; CompensationRatio = Math.One_32; }
+        if (ratio > 100) { CompensationRatio = Math.One_32; }
         else CompensationRatio = (ratio << 32) / 100;
     }
 
@@ -133,10 +133,9 @@ abstract contract Compensable is Owned {
             uint32 balance = uint32(abi.decode(res, (uint256)) / (10 ** _compensationTokenDecimals));
 
             uint32 mul = uint32(balance / FeeRebateThreshold);
-            
-            for (uint32 i = 14; i > 0; i--) {
-                if (mul >= i) return uint128(fee * uint128(1000 - (i * 25))) / 1000;
-            }
+            if (mul > 14) { mul = 14; }
+
+            return uint128(fee * uint128(1000 - (mul * 25))) / 1000;
         }
 
         return fee;

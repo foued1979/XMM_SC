@@ -30,6 +30,7 @@ describe('Test ERC20 methods', function () {
       const [ owner, token ] = await loadFixture(_deploy);
   
       await expect(token.transfer("0x1234567890123456789012345678901234567890", 100n * decimalAdjustment)).to.emit(token, 'Transfer');
+      expect(await token.balanceOf("0x1234567890123456789012345678901234567890")).to.equal(100n * decimalAdjustment);
       expect(await token.balanceOf(owner)).to.equal(249_900n * decimalAdjustment);
     });
   

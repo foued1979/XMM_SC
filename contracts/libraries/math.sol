@@ -15,18 +15,9 @@ library Math {
   */
   uint64 internal constant MAX_U32x32 = 0xFFFFFFFFFFFFFFFF;
   /*
-  * Maximum value unsigned 128-bit fixed point number may have. 
-  */
-  uint128 internal constant MAX_128 = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF;
-  /*
-  * Maximum value unsigned 128-bit fixed point number may have. 
-  */
-  uint224 internal constant MAX_224 = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF;
-  /*
   * One
   */
   uint64 internal constant One_32 = 0x100000000;
-  uint128 internal constant One_64 = 0x10000000000000000;
 
   function max(int8 x, int8 l) internal pure returns(uint8) {
     return x > l ? uint8(x) : uint8(l);
@@ -67,17 +58,6 @@ library Math {
     unchecked {
       require (x > y);
       return x - y;
-    }
-  }
-
-  /**
-  * @notice Calculates x - y.
-  */
-  function subToSigned(uint64 x, uint64 y) internal pure returns (int64) {
-    unchecked {
-      int128 res = int128(uint128(x)) - int128(uint128(y));
-      require (res >= MIN_32x32 && res <= MAX_32x32, "Overflow");
-      return int64(res);
     }
   }
 
@@ -167,29 +147,6 @@ library Math {
       else {
         return amt * uint128(10 ** uint8(decimalAdj));
       }
-    }
-  }
-
-  /**
-  * @notice Calculates 1 / x rounding towards zero.
-  */
-  function inverse(uint64 x) internal pure returns (uint64) {
-    unchecked {
-      require (x != 0);
-
-      uint128 res = One_64 / x;
-
-      require (res <= MAX_U32x32);
-      return uint64(res);
-    }
-  }
-
-  /**
-  * @notice Calculates the arithmetic average of x and y.
-  */
-  function avg (uint64 x, uint64 y) internal pure returns (uint64) {
-    unchecked {
-      return add(x, y) >> 1;
     }
   }
 }
