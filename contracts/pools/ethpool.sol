@@ -6,19 +6,20 @@ import "../enums.sol";
 
 contract ETHPool is XMMPool {
 
-    constructor(address owner, address compensationToken, uint8 poolTokenDecimals, uint8 compensationTokenDecimals, Terms term, uint8 fee, uint8 penalty, uint64 minDeposit, uint8 minWithdrawalRatio)
-    XMMPool(owner, compensationToken, poolTokenDecimals, compensationTokenDecimals, term, fee, penalty, minDeposit, minWithdrawalRatio) { }
+    constructor(address owner, uint8 poolTokenDecimals, address compensationToken, uint8 compensationTokenDecimals, uint currentFixingUpdateInterval, 
+    uint8 fee, uint8 penalty, uint64 minDeposit, uint8 minWithdrawalRatio)
+    XMMPool(owner, poolTokenDecimals, compensationToken, compensationTokenDecimals, currentFixingUpdateInterval, fee, penalty, minDeposit, minWithdrawalRatio) { }
     
     /// @notice Executes a deposit to the XMM from msg.sender
     /// @param longShort 0 if long 1 if short
-    /// @param leverage The level of leverage (x1, x2, x3, x5, x7 or x10), if leverage is authorized
-    function deposit(LongShort longShort, Leverage leverage) external payable isActive isLeveragePossible(leverage) hasMinDeposit(uint128(msg.value)) {
+    /// @param term The term of the deposit; cf. Terms for the possible values (e.g. 0 => 1D)
+    function deposit(LongShort longShort, Terms term) external payable isActive hasMinDeposit(uint128(msg.value)) {
         // Sanity check
         require(msg.value >> 128 == 0, "Deposit overflow");
         uint128 amount = uint128(msg.value);
 
-        uint timestamp = Utils.getTimeStamp(block.timestamp, _fixings[_fixings.length - 1].timestamp, _currentFixingUpdateInterval);
-        uint128 minFee = getMinimumFee(msg.sender, timestamp, timestamp + _expiryInterval, amount);
+        (uint timestamp, FixingTypes isNextFixing) = getPositionTimestamp();
+        uint128 minFee = getMinimumFee(msg.sender, timestamp, timestamp + _expiryIntervals[uint8(term)], amount);
         // The deposit can only be an increase in position
         // -> hence, we remove the minFee from the deposit
         amount = SafeMath.subOr0_128(amount, minFee);
@@ -26,38 +27,41 @@ contract ETHPool is XMMPool {
         address payable receiver = payable(Owner);
         receiver.transfer(uint256(minFee));
 
-        writeDeposit(msg.sender, _fixings.length - 1, timestamp, longShort, amount, minFee, leverage);
+        writeDeposit(msg.sender, timestamp, isNextFixing, longShort, term, amount, minFee);
     }
 
     /// @notice Reduces a position
     /// @param positionIndex The index of the position
     /// @param amount The reduction amount. If amount is bigger than position amount, the position is closed.
     // A position that is closed leads to re-organization of existing positions.
-    function reducePosition(uint32 positionIndex, uint128 amount) public override {
+    function reducePosition(uint32 positionIndex, uint128 amount) public override hasMinWithdrawal(amount) returns(bool hasBeenClosed) {
         if (_positions[msg.sender].length > positionIndex) {
             Position storage position = _positions[msg.sender][positionIndex];
 
             // If the position reached -100% perf during its lifetime
             // we just delete the position.
-            if (isZeroPerf(position.fixingIndex0, position.longShort)) {
+            if (isZeroPerf(position)) {
                 Utils.removePositionFromArray(positionIndex, _positions[msg.sender]);
-                return;
+                return true;
             }
 
             if (amount > position.amount) amount = position.amount;
             uint128 penalty;
-            uint128 fee = getPositionFee(msg.sender, block.timestamp, position.startDate, position.expiry, amount, position.minFeePaid);
+            uint128 fee = getPositionFee(msg.sender, block.timestamp, position.startDate, position.min_expiry, amount, position.minFeePaid);
 
             // If position is offset before expected term, a penalty applies
-            if (position.startDate > block.timestamp || block.timestamp < position.expiry) {
+            if (block.timestamp < position.min_expiry) {
                 // This penalty is the for the pool and will remain in pool liquidity
                 penalty = uint128((uint136(amount) * Penalty) / 1_000_000);
+
+                if (position.longShort == LongShort.Long) LongPot += penalty;
+                else ShortPot += penalty;
             }
 
             // Via checkPosition, we check the prorated rate if user offsets the position before the term.
             // We also check if the position was pending for the next fixing, to adjust the pending notionals
             // not the live positions.
-            (int64 rate, uint128 compensationAmt) = checkPosition(position, amount, getRate(position.longShort, position.leverage, position.fixingIndex0));
+            int64 rate = checkPosition(position, amount, getRate(position.longShort, position.term, position.startDate));
 
             // If amount equals the position amount, we remove the position from user's positions
             if (position.amount <= amount) Utils.removePositionFromArray(positionIndex, _positions[msg.sender]);
@@ -94,7 +98,6 @@ contract ETHPool is XMMPool {
                 owner.transfer(uint256(fee));
             }
             
-            if (compensationAmt != 0) CompensationToken.call(abi.encodeWithSelector(IERC20.transfer.selector, msg.sender, uint256(compensationAmt)));
             emit PositionReduced(msg.sender, block.timestamp, totalTransfer);
         }
     }

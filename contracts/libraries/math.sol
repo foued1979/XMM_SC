@@ -14,6 +14,10 @@ library Math {
   * Maximum value unsigned 32.32-bit. 
   */
   uint64 internal constant MAX_U32x32 = 0xFFFFFFFFFFFFFFFF;
+   /*
+  * Maximum value unsigned 128.32-bit. 
+  */
+  uint160 internal constant MAX_U128x32 = 1461501637330902918203684832716283019655932542975;
   /*
   * One
   */
@@ -99,6 +103,15 @@ library Math {
 
       require (res >= 0 && res <= MAX_U32x32, "Overflow");
       return uint64(res);
+    }
+  }
+
+  function multPerf(uint64 x, uint128 y) internal pure returns (uint160) {
+    unchecked {
+      uint160 res = uint160((uint256(x) * uint256(y)) >> 32);
+
+      require (res >= 0 && res <= MAX_U128x32, "Overflow");
+      return res;
     }
   }
 

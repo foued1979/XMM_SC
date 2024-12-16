@@ -34,11 +34,6 @@ abstract contract XMMPool is FixingManager {
         _;
     }
 
-    modifier isLeveragePossible(Leverage leverage) {
-        require(leverage == Leverage.One || LeverageIsActive, "No Leverage");
-        _;
-    }
-
     /***********************
      * Contract Properties *
      ***********************/
@@ -67,27 +62,38 @@ abstract contract XMMPool is FixingManager {
     /// @notice The minimum withdrawal size
     uint128 public MinWithdrawal;
 
-    /// @notice Gets the leverage status
-    bool public LeverageIsActive;
-
     /// @notice The daily fee charged on the position
     // The fee is expressed in percent of a basis point
     uint8 public Fee;
 
-    /// @notice The total amount of long positions, by leverage index
-    mapping(uint8 => uint128) internal TotalLongPositions;
+    /// @notice The sum of long positions by term
+    uint128 public TotalLongPositions;
+    uint64 private _totalLongRatio;
 
-    /// @notice The total amount of short positions, by leverage index
-    mapping(uint8 => uint128) internal  TotalShortPositions;
+    /// @notice The amount of long positions, by Term
+    // key => uint8(Terms)
+    uint128[] internal _longPositionsByTerm;
+
+    
+    // The sum of short positions by term
+    uint128 public TotalShortPositions;
+    uint64 private _totalShortRatio;
+
+    /// @notice The amount of short positions, by Term
+    // Key => uint8(Terms)
+    uint128[] internal _shortPositionsByTerm;
     
     /***************
      * Constructor *
      ***************/
     /// @param minDeposit The minimum deposit expressed in unit of poolToken; e.g. 10 for 10 poolToken minimum deposit
-    constructor(address owner, address compensationToken, uint8 poolTokenDecimals, uint8 compensationTokenDecimals, Terms term, uint8 fee, uint8 penalty,
-     uint64 minDeposit, uint8 minWithdrawalRatio) FixingManager(owner, compensationToken, compensationTokenDecimals, term) {
+    constructor(address owner, uint8 poolTokenDecimals, address compensationToken, uint8 compensationTokenDecimals, uint currentFixingUpdateInterval, uint8 fee, uint8 penalty,
+     uint64 minDeposit, uint8 minWithdrawalRatio) FixingManager(owner, compensationToken, compensationTokenDecimals, currentFixingUpdateInterval) {
         _poolTokenDecimals = poolTokenDecimals;
         MinDeposit = uint128(minDeposit) * uint128(10 ** poolTokenDecimals);
+
+        _longPositionsByTerm = new uint128[](7);
+        _shortPositionsByTerm = new uint128[](7);
         
         MinWithdrawal = (MinDeposit * minWithdrawalRatio) / 100;
         Penalty = penalty;
@@ -98,11 +104,6 @@ abstract contract XMMPool is FixingManager {
     /*************
      * Functions *
      *************/
-    /// @notice Changes the leverage status
-    function changeLeverageStatus(bool status) external onlyOwner {
-        LeverageIsActive = status;
-    }
-
     function changeMinimumDeposit(uint64 minDeposit) external onlyOwner {
         MinDeposit = uint128(minDeposit) * uint128(10 ** _poolTokenDecimals);
     }
@@ -118,12 +119,14 @@ abstract contract XMMPool is FixingManager {
         Position storage pos = _positions[msg.sender][positionIndex];
 
         // If position went through 0, returns 0 perf
-        if (isZeroPerf(pos.fixingIndex0, pos.longShort)) return 0;
-        uint8 lev = uint8(pos.leverage);
+        if (isZeroPerf(pos)) return 0;
+        uint lastFixingTimestamp = _fixingDates[_fixingDates.length - 1];
+        uint8 term = uint8(pos.term);
 
-        int64[] storage indices = pos.longShort == LongShort.Long ? _longRateIndices[lev] : _shortRateIndices[lev];
+        int64 startIndex = pos.longShort == LongShort.Long ? _longRateIndices[pos.startDate][term] : _shortRateIndices[pos.startDate][term];
+        int64 lastIndex = pos.longShort == LongShort.Long ? _longRateIndices[lastFixingTimestamp][term] : _shortRateIndices[lastFixingTimestamp][term];
 
-        return Math.subSigned(indices[indices.length - 1], indices[pos.fixingIndex0]); 
+        return Math.subSigned(lastIndex, startIndex); 
     }
 
     /// @notice Gets performance of all msg.sender's positions
@@ -135,16 +138,16 @@ abstract contract XMMPool is FixingManager {
         }
     }
     
-    /// @notice Gets the total long and short positions for a given leverage factor
-    function getPoolPendingPositions(Leverage leverage) external view returns(uint128 long, uint128 short) {
-        uint8 lev = uint8(leverage);
-        return (_longAmountForNextFixing[lev], _shortAmountForNextFixing[lev]);
+    /// @notice Gets the total long and short positions for a given Term
+    function getPoolPendingPositionsForTerm(Terms term) external view returns(uint128 long, uint128 short) {
+        uint8 T = uint8(term);
+        return (_longNotionalsForNextFixing[T], _shortNotionalsForNextFixing[T]);
     }
 
-    /// @notice Gets the total long and short positions for a given leverage factor
-    function getPoolPositions(Leverage leverage) external view returns(uint128 long, uint128 short) {
-        uint8 lev = uint8(leverage);
-        return (TotalLongPositions[lev], TotalShortPositions[lev]);
+    /// @notice Gets the total long and short positions for a given Term
+    function getPoolPositionsForTerm(Terms term) external view returns(uint128 long, uint128 short) {
+        uint8 T = uint8(term);
+        return (_longPositionsByTerm[T], _shortPositionsByTerm[T]);
     }
     
     /// @notice Closes all the positions held by a user.
@@ -163,11 +166,11 @@ abstract contract XMMPool is FixingManager {
     //          can write the position
     /// @param amount   The amount of the position, inclusive of the fee -> if a client transfers 100 tokens, and the fee is 1 token
     //                  amount = 100 and fee = 1
-    function createPositionForUser(LongShort longShort, Leverage leverage, uint128 amount, uint128 fee, address user) external onlyOwner {
+    function createPositionForUser(LongShort longShort, Terms term, uint128 amount, uint128 fee, address user) external onlyOwner {
         amount = SafeMath.subOr0_128(amount, fee);
-        uint timestamp = Utils.getTimeStamp(block.timestamp, _fixings[_fixings.length - 1].timestamp, _currentFixingUpdateInterval);
+        (uint timestamp, FixingTypes isNextFixing) = getPositionTimestamp();
         
-        writeDeposit(user, _fixings.length - 1, timestamp, longShort, amount, fee, leverage);
+        writeDeposit(user, timestamp, isNextFixing, longShort, term, amount, fee);
     }
 
     /// @notice Returns user's position at given index
@@ -186,7 +189,7 @@ abstract contract XMMPool is FixingManager {
     /// @param positionIndex The index of the position
     /// @param amount The reduction amount. If amount is bigger than position amount, the position is closed.
     // A position that is closed leads to re-organization of existing positions.
-    function reducePosition(uint32 positionIndex, uint128 amount) public virtual;
+    function reducePosition(uint32 positionIndex, uint128 amount) public virtual returns(bool hasBeenClosed);
 
     /// @notice Sets the new Fee for the pool
     function setNewFee(uint8 newFee) external onlyOwner {
@@ -206,66 +209,62 @@ abstract contract XMMPool is FixingManager {
     /********************
      * Internal Methods *
      ********************/
-    function getExistingPosition(address user, uint fixingIndex, LongShort longShort, Leverage leverage) internal view returns(bool, uint32) {
+    function getExistingPosition(address user, uint fixingDate, LongShort longShort, Terms term) internal returns(bool, Position storage) {
         Position[] storage positions = _positions[user];
 
         for (uint32 i = 0; i < positions.length; i++) {
             Position storage position = positions[i];
-            if (position.longShort == longShort && position.leverage == leverage && position.fixingIndex0 == fixingIndex) return (true, i);
+            if (position.longShort == longShort && position.term == term && position.startDate == fixingDate) return (true, position);
         }
 
-        return (false, uint32(positions.length));
+        Position memory tmpPos = Position(uint32(_positions[user].length), longShort, term, fixingDate, fixingDate + _expiryIntervals[uint8(term)], 0, 0);
+        positions.push(tmpPos);
+
+        return (false, positions[positions.length - 1]);
     }
 
-    function writeDeposit(address user, uint lastFixingIndex, uint timestamp, LongShort longShort, uint128 amount, uint128 minFeePaid, Leverage leverage) internal {
-        uint8 lev = uint8(leverage);
-        bool isNextFixing = false;
-
-        // If position is opened after mid update interval, the next fixing is used
-        if (block.timestamp > timestamp + _currentMidFixingInterval) {
-            timestamp += _currentFixingUpdateInterval;
-            lastFixingIndex++;
-            isNextFixing = true;
-        }
+    function writeDeposit(address user, uint timestamp, FixingTypes isNextFixing, LongShort longShort, Terms term, uint128 amount, uint128 minFeePaid) internal {
+        uint8 T = uint8(term);
 
         // We check if a user already has a position similar to this new order
         // Positions are equal when side, leverage and fixingIndex are the same
-        (bool hasPosition, uint32 positionIndex) = getExistingPosition(user, lastFixingIndex, longShort, leverage);
+        (bool hasPosition, Position storage position) = getExistingPosition(user, timestamp, longShort, term);
 
         // If user already has a position which is equivalent to the current order
         // we just update the existing position
         if (hasPosition) {
-            Position storage position = _positions[user][positionIndex];
             position.amount = SafeMath.add128(position.amount, amount);
             position.minFeePaid = SafeMath.add128(position.minFeePaid, minFeePaid);
-
-            emit Deposit(user, block.timestamp, position);
         } else {
-            Position memory position = Position(positionIndex, longShort, leverage, lastFixingIndex, timestamp, timestamp + _expiryInterval, amount, minFeePaid);
+            position.amount = amount;
+            position.minFeePaid = minFeePaid;
+            
             _positions[user].push(position);
-
-            emit Deposit(user, block.timestamp, position);
         }
+
+        emit Deposit(user, block.timestamp, position);
            
         if (longShort == LongShort.Long) {
             // If the next fixing is used, the amount cannot be added to the current positions
             // The amount is pending to be added; when we update the fixing, we will add the pending positions
-            if (isNextFixing) { 
-                _longAmountForNextFixing[lev] = SafeMath.add128(_longAmountForNextFixing[lev], amount); 
-            } else { 
-                TotalLongPositions[lev] = SafeMath.add128(TotalLongPositions[lev], amount); 
+            if (isNextFixing == FixingTypes.Next) { 
+                _longNotionalsForNextFixing[T] = SafeMath.add128(_longNotionalsForNextFixing[T], amount); 
+            } else {
+                _longPositionsByTerm[T] = SafeMath.add128(_longPositionsByTerm[T], amount); 
+                TotalLongPositions = SafeMath.add128(TotalLongPositions, amount); 
                 }
         } else {
             // If the next fixing is used, the amount cannot be added to the current positions
             // The amount is pending to be added; when we update the fixing, we will add the pending positions
-            if (isNextFixing) { 
-                _shortAmountForNextFixing[lev] = SafeMath.add128(_shortAmountForNextFixing[lev], amount);
+            if (isNextFixing == FixingTypes.Next) { 
+                _shortNotionalsForNextFixing[T] = SafeMath.add128(_shortNotionalsForNextFixing[T], amount);
             } else {
-                TotalShortPositions[lev] = SafeMath.add128(TotalShortPositions[lev], amount);
+                _shortPositionsByTerm[T] = SafeMath.add128(_shortPositionsByTerm[T], amount); 
+                TotalShortPositions = SafeMath.add128(TotalShortPositions, amount);
             }
         }
 
-        if (!isNextFixing) setRatios();
+        if (isNextFixing == FixingTypes.Previous) setRatios();
     }
 
     function getMinimumFee(address user, uint positionStartDate, uint positionEndDate, uint128 positionAmt) internal returns(uint128) {
@@ -295,104 +294,120 @@ abstract contract XMMPool is FixingManager {
      * FixingManager Methods Implementation *
      ****************************************/
     function incorporateNextNotionals() internal override {
-        for (uint8 i = 0; i < 6; i++) {
-            TotalLongPositions[i] = SafeMath.subOr0_128(TotalLongPositions[i], _longAmountForNextFixing[i]);
-            TotalShortPositions[i] = SafeMath.subOr0_128(TotalShortPositions[i], _shortAmountForNextFixing[i]);
-            _longAmountForNextFixing[i] = 0;
-            _shortAmountForNextFixing[i] = 0;
+        for (uint8 i = 0; i < _termsLength; i++) {
+            TotalLongPositions = SafeMath.subOr0_128(TotalLongPositions, _longNotionalsForNextFixing[i]);
+            TotalShortPositions = SafeMath.subOr0_128(TotalShortPositions, _shortNotionalsForNextFixing[i]);
+            _longNotionalsForNextFixing[i] = 0;
+            _shortNotionalsForNextFixing[i] = 0;
         }
     }
 
-    function computeFactors(uint64 spotAtPeriodStart, uint64 spotAtPeriodEnd, uint64 premiumAtPeriodStart) internal view override
-     returns(int64[] memory longRateFactors, int64[] memory shortRateFactors) {
-        uint64 premiumPerf = Math.mult(premiumAtPeriodStart, _currentAccrualYF);
-        int64 spotPerf = Math.subSigned(int64(spotAtPeriodEnd), int64(spotAtPeriodStart));
+    function computeAccruals(uint64 spotAtPeriodStart, Fixing storage lastFixing) internal override returns(int64[] memory longRateAccruals, int64[] memory shortRateAccruals) {
+        int64 spotPerf = Math.subSigned(int64(lastFixing.spot), int64(spotAtPeriodStart));
 
-        longRateFactors = new int64[](6);
-        shortRateFactors = new int64[](6);
+        // The factors by term
+        longRateAccruals = new int64[](_termsLength);
+        shortRateAccruals = new int64[](_termsLength);
+        if (spotPerf == 0) return (longRateAccruals, shortRateAccruals);
 
-        if (spotPerf == 0) return (longRateFactors, shortRateFactors);
+        (uint64 callPerf, uint64[] memory callRatiosByTerm) = Utils.getAccrualDetails(lastFixing.callPremia_t_1__t, _longPositionsByTerm, _totalLongRatio, TotalLongPositions);
+        (uint64 putPerf, uint64[] memory putRatiosByTerm) = Utils.getAccrualDetails(lastFixing.putPremia_t_1__t, _shortPositionsByTerm, _totalShortRatio, TotalShortPositions);
+        uint64 potPerf = 0;
 
         // If spot went up, the Short positions pay the Long positions
         if (spotPerf > 0) {
-            for (uint8 i = 0; i < 6; i++) {
-                longRateFactors[i] = Math.multSigned(Utils.getLeverageFactor(i), int64(Math.mult(_longRatios[i], premiumPerf)));
-                shortRateFactors[i] = Math.multSigned(Utils.getLeverageFactor(i), -int64(premiumPerf));
+            // We allocate the ShortPot to the call average perf
+            potPerf = uint64((ShortPot << 32) / TotalLongPositions);
+            callPerf = Math.add(callPerf, potPerf);
+            ShortPot = SafeMath.subOr0_128(ShortPot, uint128((potPerf * TotalLongPositions) >> 32));
+
+
+            for (uint8 i = 0; i < _termsLength; i++) {
+                // Term ratio is the ratio of perf for the given term
+                longRateAccruals[i] = int64(Math.mult(callRatiosByTerm[i], callPerf));
+                shortRateAccruals[i] = -int64(Math.mult(putRatiosByTerm[i], callPerf));
             }
-            
         // Else, Long positions pay Short positions
         } else {
-            for (uint8 i = 0; i < 6; i++) {
-                longRateFactors[i] = Math.multSigned(Utils.getLeverageFactor(i), -int64(premiumPerf));
-                shortRateFactors[i] = Math.multSigned(Utils.getLeverageFactor(i), int64(Math.mult(_shortRatios[i], premiumPerf)));
+            // We allocate the LongPot to the put average perf
+            potPerf = uint64((LongPot << 32) / TotalShortPositions);
+            putPerf = Math.add(putPerf, potPerf);
+            LongPot = SafeMath.subOr0_128(LongPot, uint128((potPerf * TotalShortPositions) >> 32));
+
+            for (uint8 i = 0; i < _termsLength; i++) {
+                longRateAccruals[i] = -int64(Math.mult(callRatiosByTerm[i], putPerf));
+                shortRateAccruals[i] = int64(Math.mult(putRatiosByTerm[i], putPerf));
             }
         }
 
-        return (longRateFactors, shortRateFactors);
+        return (longRateAccruals, shortRateAccruals);
     }
 
-    function executeMarginCall(uint64 prevSpot, Fixing memory prevFixing, Fixing memory lastFixing) internal override {
-        (int64[] memory longRateFactors, int64[] memory shortRateFactors) = computeFactors(prevSpot, lastFixing.spot, prevFixing.premium);
+    function executeMarginCall(uint64 prevSpot) internal override {
+        Fixing storage lastFixing = _fixings[_fixingDates[_fixingDates.length - 1]];
+        (int64[] memory longRateFactors, int64[] memory shortRateFactors) = computeAccruals(prevSpot, lastFixing);
 
         transfer(longRateFactors, shortRateFactors);
-
-        for (uint8 i = 0; i < 6; i++) {
-            _longRateIndices[i].push(Math.addSigned(_longRateIndices[i][_longRateIndices[i].length - 1], longRateFactors[i]));
-            _shortRateIndices[i].push(Math.addSigned(_shortRateIndices[i][_shortRateIndices[i].length - 1], shortRateFactors[i]));
+        uint prevFixingTimestamp = _fixingDates[_fixingDates.length - 2];
+        
+        for (uint8 i = 0; i < _termsLength; i++) {
+            _longRateIndices[lastFixing.timestamp].push(Math.addSigned(_longRateIndices[prevFixingTimestamp][i], longRateFactors[i]));
+            _shortRateIndices[lastFixing.timestamp].push(Math.addSigned(_shortRateIndices[prevFixingTimestamp][i], shortRateFactors[i]));
         }
     }
 
     function transfer(int64[] memory longRateFactors, int64[] memory shortRateFactors) internal override {
-        for (uint8 i = 0; i < 6; i++) {
+        for (uint8 i = 0; i < _termsLength; i++) {
             // If longRateFactor is negative, long pays short
             // longRateFactor is equal to the premium accrual
-            if (longRateFactors[i] < 0)  { transferLongToShort(i, uint64(-longRateFactors[i])); }
+            if (longRateFactors[i] < 0)  { transferLongToShort(i, uint64(-longRateFactors[i]), uint64(shortRateFactors[i])); }
             // else, shortRateFactor is negative and equal to the accrued premium
-            else { transferShortToLong(i, uint64(-shortRateFactors[i])); }
+            else { transferShortToLong(i, uint64(-shortRateFactors[i]), uint64(longRateFactors[i])); }
         }
     }
 
     /********************
      * Internal Methods *
      ********************/
-    function getRate(LongShort longShort, Leverage leverage, uint fixingIndex0) internal view returns(int64) {
-        uint8 index = uint8(leverage);
-        int64 currentIndexValue = longShort == LongShort.Long ? _longRateIndices[index][_fixings.length - 1] : _shortRateIndices[index][_fixings.length - 1];
-        int64 initialIndexValue = longShort == LongShort.Long ? _longRateIndices[index][fixingIndex0] : _shortRateIndices[index][fixingIndex0];
+    function getRate(LongShort longShort, Terms term, uint positionStartDate) internal view returns(int64) {
+        uint8 T = uint8(term);
+
+        uint lastFixingDate = _fixingDates[_fixingDates.length - 1];
+        int64 currentIndexValue = longShort == LongShort.Long ? _longRateIndices[lastFixingDate][T] : _shortRateIndices[lastFixingDate][T];
+        int64 initialIndexValue = longShort == LongShort.Long ? _longRateIndices[positionStartDate][T] : _shortRateIndices[positionStartDate][T];
+
         return Math.subSigned(currentIndexValue, initialIndexValue);
     }
 
     /// @notice Adjusts the rate of the position, updates the amounts and returns the compensation amount, if any
-    function checkPosition(Position storage position, uint128 amount, int64 rate) internal returns(int64 adjustedRate, uint128 compensationAmt) {
-        compensationAmt = 0;
+    function checkPosition(Position storage position, uint128 amount, int64 rate) internal returns(int64 adjustedRate) {
         adjustedRate = rate;
-        uint8 lev = uint8(position.leverage);
+        uint8 T = uint8(position.term);
 
         // If rate is positive, only a pro-rata interest is paid
             // If rate is negative, msg.sender shall pay the full amount due
         if (rate > 0) {
-            uint64 proRata = Utils.getProRata(Utils.getTimeStamp(block.timestamp, StartDate, _currentFixingUpdateInterval), position, _expiryInterval);
+            uint64 proRata = Utils.getProRata(getLastFixingTimestamp(), position, _expiryIntervals[T]);
             adjustedRate = Math.multSigned(int64(proRata), rate);
-        }
-        else if (isCompensable(position.longShort)) {
-            compensationAmt = getCompensationAmount(position.amount, rate, _poolTokenDecimals);
         }
 
         // If the position was pending to be accounted, the fixingIndex0 should be equal 
         // to _fixings last index + 1 <=> _fixings.length
-        bool positionIsNextFixing = position.fixingIndex0 == _fixings.length;
+        bool positionIsNextFixing = position.startDate > _fixingDates[_fixingDates.length - 1];
 
         if (position.longShort == LongShort.Long) {
             if (positionIsNextFixing) {
-                _longAmountForNextFixing[lev] = SafeMath.subOr0_128(_longAmountForNextFixing[lev], amount);
+                _longNotionalsForNextFixing[T] = SafeMath.subOr0_128(_longNotionalsForNextFixing[T], amount);
             } else {
-                TotalLongPositions[lev] = SafeMath.subOr0_128(TotalLongPositions[lev], amount);
+                _longPositionsByTerm[T] = SafeMath.subOr0_128(_longPositionsByTerm[T], amount);
+                TotalLongPositions = SafeMath.subOr0_128(TotalLongPositions, amount);
             }
         } else {
             if (positionIsNextFixing) {
-                _shortAmountForNextFixing[lev] = SafeMath.subOr0_128(_shortAmountForNextFixing[lev], amount);
+                _shortNotionalsForNextFixing[T] = SafeMath.subOr0_128(_shortNotionalsForNextFixing[T], amount);
             } else {
-                TotalShortPositions[lev] = SafeMath.subOr0_128(TotalShortPositions[lev], amount);
+                _shortPositionsByTerm[T] = SafeMath.subOr0_128(_shortPositionsByTerm[T], amount);
+                TotalShortPositions = SafeMath.subOr0_128(TotalShortPositions, amount);
             }
         }
 
@@ -400,51 +415,56 @@ abstract contract XMMPool is FixingManager {
     }
 
     function setRatios() internal {
-        for (uint8 i = 0; i < 6; i++) {
-            uint128 totalLong = TotalLongPositions[i];
-            uint128 totalShort = TotalShortPositions[i];
+        _totalLongRatio = 0;
+        _totalShortRatio = 0;
 
-            if (totalLong == 0) {
-                _longRatios[i] = 0;
-            } else {
-                uint160 short = uint160(totalShort) << 32;
-                _longRatios[i] = uint64(short / totalLong);
-            }
+        uint160 totalLong = uint160(TotalLongPositions);
+        uint160 totalShort = uint160(TotalShortPositions);
 
-            if (totalShort == 0) {
-                _shortRatios[i] = 0;
-            } else {
-                uint160 long = uint160(totalLong) << 32;
-                _shortRatios[i] = uint64(long / totalShort);
-            }
+        if (TotalLongPositions != 0) {
+            _totalLongRatio = uint64((totalShort << 32) / totalLong);
+        }
+
+        if (TotalShortPositions != 0) {
+            _totalShortRatio = uint64((totalLong << 32) / totalShort);
         }
     }
 
     /*******************
      * Private Methods *
      *******************/
-    function transferShortToLong(uint8 index, uint64 netPerf) private {
-        if (netPerf == 0) return;
+    function transferShortToLong(uint8 index, uint64 transferFromShortRatio, uint64 transferToLongRatio) private {
+        uint192 totalLong = uint192(_longPositionsByTerm[index]);
+        uint192 totalShort = uint192(_shortPositionsByTerm[index]);
 
-        uint256 totalShort = uint256(TotalShortPositions[index]);
-        if (totalShort == 0 || TotalLongPositions[index] == 0) return;
+        uint128 shortTransferAmt = uint128((totalShort * transferFromShortRatio) >> 32);
+        uint128 longTransferAmt = uint128((totalLong * transferToLongRatio) >> 32);
 
-        uint128 transferAmt = uint128((totalShort * netPerf) >> 32);
-        TotalShortPositions[index] = SafeMath.subOr0_128(TotalShortPositions[index], transferAmt);
-        TotalLongPositions[index] = SafeMath.add128(TotalLongPositions[index], transferAmt);
+        // We remove amount from the short side
+        _shortPositionsByTerm[index] = SafeMath.subOr0_128(_shortPositionsByTerm[index], shortTransferAmt);
+        TotalShortPositions = SafeMath.subOr0_128(TotalShortPositions, shortTransferAmt);
+
+        // We transfer amount to the long side
+        _longPositionsByTerm[index] = SafeMath.add128(_longPositionsByTerm[index], longTransferAmt);
+        TotalLongPositions = SafeMath.add128(TotalLongPositions, longTransferAmt);
 
         setRatios();
     }
 
-    function transferLongToShort(uint8 index, uint64 netPerf) private {
-        if (netPerf == 0) return;
+    function transferLongToShort(uint8 index, uint64 transferFromLongRatio, uint64 transferToShortRatio) private {
+        uint192 totalLong = uint192(_longPositionsByTerm[index]);
+        uint192 totalShort = uint192(_shortPositionsByTerm[index]);
 
-        uint256 totalLong = uint256(TotalLongPositions[index]);
-        if (totalLong == 0 || TotalShortPositions[index] == 0) return;
+        uint128 longTransferAmt = uint128((totalLong * transferFromLongRatio) >> 32);
+        uint128 shortTransferAmt = uint128((totalShort * transferToShortRatio) >> 32);
 
-        uint128 transferAmt = uint128((totalLong * netPerf) >> 32);
-        TotalLongPositions[index] = SafeMath.subOr0_128(TotalLongPositions[index], transferAmt);
-        TotalShortPositions[index] = SafeMath.add128(TotalShortPositions[index], transferAmt);
+        // We remove amount from the long side
+        _longPositionsByTerm[index] = SafeMath.subOr0_128(_longPositionsByTerm[index], longTransferAmt);
+        TotalLongPositions = SafeMath.subOr0_128(TotalLongPositions, longTransferAmt);
+
+        // We transfer amount to the short side
+        _shortPositionsByTerm[index] = SafeMath.add128(_shortPositionsByTerm[index], shortTransferAmt);
+        TotalShortPositions = SafeMath.add128(TotalShortPositions, shortTransferAmt);
 
         setRatios();
     }

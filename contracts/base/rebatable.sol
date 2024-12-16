@@ -6,23 +6,15 @@ import "../enums.sol";
 import "../interfaces/ierc20.sol";
 import "../libraries/math.sol";
 
-abstract contract Compensable is Owned {
+abstract contract Rebatable is Owned {
     /**********
      * Events *
      **********/
     event CompensationTokenChanged(uint indexed timestamp, address previousToken, address newToken);
-    event CompensationStatusChanged(uint indexed timestamp, bool status);
-    event CompensationSideChanged(uint indexed timestamp, CompensatedSides compensationSide);
 
     // Public Properties
     /// @notice The compensation token
     address public CompensationToken;
-
-    /// @notice Indicates whether the compensation is active
-    bool public CompensationIsActive;
-
-    /// @notice The compensated side; 0-None, 1-Long, 2-Short, 3-All
-    CompensatedSides public CompensatedSide;
 
     /// @notice The fee rebate threshold
     // User gts 2.5% rebate on the reminaing fee for each FeeRebateThreshold level that
@@ -39,12 +31,6 @@ abstract contract Compensable is Owned {
     uint32 private _2threshold;
     uint32 private _4threshold;
 
-    /// @notice The compensation ratio to the loss
-    uint64 public CompensationRatio;
-
-    /// @notice The conversion rate: Pool_Token -> CompensationToken
-    uint64 public ConversionRate;
-
     // Private Fields
     uint8 private _compensationTokenDecimals;
 
@@ -60,11 +46,6 @@ abstract contract Compensable is Owned {
         FeeRebateThreshold = 50;
 
         CompensationToken = compensationToken;
-        CompensationIsActive = false;
-        CompensatedSide = CompensatedSides.Long;
-
-        CompensationRatio = 0;
-        ConversionRate = Math.One_32;
     }
 
     /*************
@@ -77,18 +58,6 @@ abstract contract Compensable is Owned {
         _compensationTokenDecimals = newTokenDecimals;
     }
 
-    /// @notice Activates or deactivates the compensation
-    function changeCompensationActivation(bool status) external onlyOwner {
-        CompensationIsActive = status;
-        emit CompensationStatusChanged(block.timestamp, status);
-    }
-
-    /// @notice Activates or deactivates the compensation
-    function changeCompensationSide(CompensatedSides newCompensationSide) external onlyOwner {
-        CompensatedSide = newCompensationSide;
-        emit CompensationSideChanged(block.timestamp, newCompensationSide);
-    }
-
     /// @notice Updates the thresholds for minimum fee rebate
     function changeFeeRebateThreshold(uint32 newThreshold) external onlyOwner {
         FeeRebateThreshold = newThreshold;
@@ -99,28 +68,6 @@ abstract contract Compensable is Owned {
         MinFeeRebateThreshold = newThreshold;
         _2threshold = 2 * newThreshold;
         _4threshold = 4 * newThreshold;
-    }
-
-    /// @notice Gets the amount of CompensationToken held by the Pool
-    function getCompensationTokenBalance() external returns(uint128) {
-        (bool success, bytes memory res) = CompensationToken.call(abi.encodeWithSelector(IERC20.balanceOf.selector, address(this)));
-        if (success) {
-            return uint128(abi.decode(res, (uint256)));
-        }
-
-        return 0;
-    }
-
-    /// @notice The compensation ratio as a percentage; e.g. 1 for 1%, 2 for 2%, etc. up to 100
-    function setCompensationRatio(uint8 ratio) external onlyOwner {
-        if (ratio > 100) { CompensationRatio = Math.One_32; }
-        else CompensationRatio = (ratio << 32) / 100;
-    }
-
-    /// @notice Sets the conversion rate Pool_Token -> CompensationToken
-    //          The conversion rate is expressed in pips <=> 10_000 for 1 unit
-    function setConversionRate(uint32 conversionRate) external onlyOwner {
-        ConversionRate = (conversionRate << 32) / 10_000;
     }
 
     /********************
@@ -153,28 +100,5 @@ abstract contract Compensable is Owned {
         }
 
         return minFee;
-    }
-
-    function isCompensable(LongShort position) internal view returns(bool) {
-        if (CompensatedSide == CompensatedSides.None) return false;
-        if (CompensatedSide == CompensatedSides.All) return true;
-
-        if (position == LongShort.Long) return CompensatedSide == CompensatedSides.Long;
-        return CompensatedSide == CompensatedSides.Short;
-    }
-
-    function getCompensationAmount(uint128 positionSize, int64 loss, uint8 poolTokenDecimals) internal returns(uint128) {
-        if (!CompensationIsActive || loss > 0) return 0;
-
-        int8 decimalDiff = int8(poolTokenDecimals) - int8(_compensationTokenDecimals);
-
-        uint64 absLoss = uint64(-loss);
-        uint64 ratio = Math.mult(ConversionRate, Math.mult(absLoss, CompensationRatio));
-        uint128 amt = uint128((positionSize * ratio) >> 32);
-        amt = Math.adjustAmountDecimals(amt, decimalDiff);
-
-        uint128 compensationTokenBalance = this.getCompensationTokenBalance();
-        if (amt >= compensationTokenBalance) amt = compensationTokenBalance;
-        return amt;
     }
 }

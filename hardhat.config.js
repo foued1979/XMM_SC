@@ -8,8 +8,9 @@ module.exports = {
     settings: {
       optimizer: {
         enabled: true,
-        runs: 15
+        runs: 100
       },
+      viaIR: true,
     },
   },
 };

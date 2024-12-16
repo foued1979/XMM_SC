@@ -22,7 +22,7 @@ async function _deploy1DPool() {
   const onexmm = await loadFixture(_deploy1XMM);
   
   const contractFactory = await ethers.getContractFactory("CoinPool");
-  const pool = await contractFactory.deploy(await token.getAddress(), owner.address, await onexmm.getAddress(), 18, 18, 0, 25, 10, 500, 50);
+  const pool = await contractFactory.deploy(await token.getAddress(), owner.address, 18, await onexmm.getAddress(), 18, 600, 25, 10, 500, 50);
 
   return [pool, token, onexmm];
 }

@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity >= 0.8.0;
 
-enum LongShort {Long, Short}
+enum LongShort { Long, Short }
+enum FixingTypes { Previous, Next }
 enum Terms { OneDay, OneWeek, TwoWeeks, ThreeWeeks, OneMonth, TwoMonths, ThreeMonths }
-enum Leverage { One, Two, Three, Five, Seven, Ten }
 enum UpdateIntervals { OneMin, TwoMin, ThreeMin, FiveMin, TenMin, FifteenMin, TwentyMin, ThirtyMin, OneH, TwoH, ThreeH, FourH }
 enum CompensatedSides {None, Long, Short, All}

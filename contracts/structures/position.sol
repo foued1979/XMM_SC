@@ -6,10 +6,9 @@ import "../enums.sol";
 struct Position {
     uint32 positionIndex;
     LongShort longShort;
-    Leverage leverage;
-    uint fixingIndex0;
+    Terms term;
     uint startDate;
-    uint expiry;
+    uint min_expiry;
     uint128 amount;
     uint128 minFeePaid;
 }

@@ -4,8 +4,6 @@ pragma solidity >= 0.8.0;
 import "../interfaces/ierc20.sol";
 import "../libraries/safemath.sol";
 
-import "hardhat/console.sol";
-
 contract ERC20 is IERC20 {
     /*************
      * Modifiers *
