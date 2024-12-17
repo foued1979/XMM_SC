@@ -110,7 +110,7 @@ abstract contract FixingManager is FixingStore, Rebatable, IFixingManager {
     
     /// @notice Gets the long and short index values
     function getLastRateIndices() external view returns(int64[] memory long, int64[] memory short) {
-        uint lastFixingTimestamp = getLastFixingTimestamp();
+        uint lastFixingTimestamp = _fixingDates[_fixingDates.length - 1];
         return (_longRateIndices[lastFixingTimestamp], _shortRateIndices[lastFixingTimestamp]);
     }
 
@@ -122,9 +122,9 @@ abstract contract FixingManager is FixingStore, Rebatable, IFixingManager {
 
     /// @notice Sets the first fixing and activates the pool
     // From IXMMPool
-    function setFirstFixing(uint64 spot, uint64[] memory callPremia_t_1__t, uint64[] memory putPremia_t_1__t) external onlyOwner haveNoFixing {
-        uint tentativeStart = getLastFixingTimestamp();
-        uint delay = block.timestamp > tentativeStart ? block.timestamp - tentativeStart : tentativeStart - block.timestamp;
+    function setFirstFixing(uint64 spot, uint timestamp, uint64[] memory callPremia_t_1__t, uint64[] memory putPremia_t_1__t) external onlyOwner haveNoFixing {
+        uint tentativeStart = uint(block.timestamp / _currentFixingUpdateInterval) * _currentFixingUpdateInterval;
+        uint delay = timestamp > tentativeStart ? timestamp - tentativeStart : tentativeStart - timestamp;
         
         // We can update only from 1 minute around the first fixing time
         require(delay <= 60, "Not sync");
@@ -143,37 +143,53 @@ abstract contract FixingManager is FixingStore, Rebatable, IFixingManager {
 
     /// @notice Sets the latest fixing for the XMM
     // From IXMMPool
-    function setFixing(uint64 spot, uint64[] memory callPremia_t_1__t, uint64[] memory putPremia_t_1__t)
-     external onlyOwner returns(bool) {
+    function setFixing(uint64 spot, uint timestamp, uint64[] memory callPremia_t_1__t, uint64[] memory putPremia_t_1__t) external onlyOwner returns(bool) {
         Fixing storage lastFixing = _fixings[_fixingDates[_fixingDates.length - 1]];
-        uint nextFixingTimestamp = getNextFixingTimestamp();
+        //uint nextFixingTimestamp = (uint(block.timestamp / _currentFixingUpdateInterval) + 1) * _currentFixingUpdateInterval;
+        uint nextFixingTimestamp = lastFixing.timestamp + _currentFixingUpdateInterval;
 
-        if (nextFixingTimestamp == lastFixing.timestamp) {
-            // If the update is done within the threshold, we update the fixing
-            if (Math.sub(nextFixingTimestamp + _currentFixingUpdateInterval, block.timestamp) <= _fixingThreshold) {
+        if (Math.absSub(timestamp, nextFixingTimestamp) > _fixingThreshold) {
+            bool nextFixingFound = false;
+
+            do {
                 nextFixingTimestamp += _currentFixingUpdateInterval;
-            // Otherwise, we are too early to update the fixing
-            } else return false;
-        }
-        else if (nextFixingTimestamp == lastFixing.timestamp + _currentFixingUpdateInterval) {
-            // If the update is done after the threshold, the fixing is missed
-            if (Math.sub(block.timestamp, nextFixingTimestamp) > _fixingThreshold) {
-                addTemporaryMissingFixings(lastFixing, nextFixingTimestamp + _currentFixingUpdateInterval);
+                nextFixingFound = Math.absSub(timestamp, nextFixingTimestamp) < _fixingThreshold;
+            } while (nextFixingFound && timestamp < nextFixingTimestamp);
+
+            if (!nextFixingFound) {
+                addTemporaryMissingFixings(lastFixing, nextFixingTimestamp - _currentFixingUpdateInterval);
                 return false;
             }
+
+            addTemporaryMissingFixings(lastFixing, nextFixingTimestamp);
         }
+
+        //if (nextFixingTimestamp == lastFixing.timestamp) {
+            // If the update is done within the threshold, we update the fixing
+        //    if (Math.sub(nextFixingTimestamp + _currentFixingUpdateInterval, timestamp) <= _fixingThreshold) {
+        //        nextFixingTimestamp += _currentFixingUpdateInterval;
+            // Otherwise, we are too early to update the fixing
+        //    } else return false;
+        //}
+        //else if (nextFixingTimestamp == lastFixing.timestamp + _currentFixingUpdateInterval) {
+            // If the update is done after the threshold, the fixing is missed
+        //    if (Math.sub(timestamp, nextFixingTimestamp) > _fixingThreshold) {
+        //        addTemporaryMissingFixings(lastFixing, nextFixingTimestamp + _currentFixingUpdateInterval);
+        //        return false;
+        //    }
+        //}
         // The last case is when at least 1 fixing have been missed (e.g. due to a technical error)
         // We fill in missing fixings with last know spot value, and we will update the missing fixings later.
-        else {
+        //else {
             // If we are threshold minutes before the next update, we adjust the next fixing timestamp
-            if (Math.absSub(nextFixingTimestamp + _currentFixingUpdateInterval, block.timestamp) <= _fixingThreshold) nextFixingTimestamp += _currentFixingUpdateInterval;
+        //    if (Math.absSub(nextFixingTimestamp + _currentFixingUpdateInterval, timestamp) <= _fixingThreshold) nextFixingTimestamp += _currentFixingUpdateInterval;
             // However if we are outside the threshold, above or below the next fixing timestamp, then the fixing is missed
-            else if (Math.absSub(block.timestamp, nextFixingTimestamp) > _fixingThreshold) return false;
+        //    else if (Math.absSub(timestamp, nextFixingTimestamp) > _fixingThreshold) return false;
 
             // We add temporary fixings for the missed fixings, excluding the last fixing
             // The missed fixings can be manually updated later
-            addTemporaryMissingFixings(lastFixing, nextFixingTimestamp);
-        }
+        //    addTemporaryMissingFixings(lastFixing, nextFixingTimestamp);
+        //}
 
         Fixing memory fixing = Fixing(nextFixingTimestamp, spot, callPremia_t_1__t, putPremia_t_1__t);
         _addFixing(fixing);
@@ -259,21 +275,11 @@ abstract contract FixingManager is FixingStore, Rebatable, IFixingManager {
         return _shortZeros[pos.startDate][T];
     }
 
-    /// @notice Gets the last fixing timestamp
-    function getLastFixingTimestamp() internal view returns(uint) {
-        return StartDate + uint((block.timestamp - StartDate) / _currentFixingUpdateInterval) * _currentFixingUpdateInterval;
-    }
-
-    /// @notice Gets the next fixing timestamp
-    function getNextFixingTimestamp() internal view returns(uint) {
-        return StartDate + (uint((block.timestamp - StartDate) / _currentFixingUpdateInterval) + 1) * _currentFixingUpdateInterval;
-    }
-
     /// @notice Gets the Position fixing timestamp
     // If user opens a position first half of fixing interval, the position is opened on previous timestamp
     // Otherwise, position is opened on next timestamp
     function getPositionTimestamp() internal view returns(uint, FixingTypes) {
-        uint lastFixing = getLastFixingTimestamp();
+        uint lastFixing = StartDate + uint((block.timestamp - StartDate) / _currentFixingUpdateInterval) * _currentFixingUpdateInterval;
         if (block.timestamp > lastFixing + _currentMidFixingInterval) return (lastFixing + _currentFixingUpdateInterval, FixingTypes.Next);
         return (lastFixing, FixingTypes.Previous);
     }

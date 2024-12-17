@@ -30,6 +30,11 @@ async function _deploy1DPool() {
 describe('Pool deployment works as expected', function() {
     it('Public Properties are as expected at inception', async function() {
         const [pool, token, onexmm] = await loadFixture(_deploy1DPool);
+        const [ owner, spender ] = await ethers.getSigners();
+
+        await token.allocate(spender, 120 * 10 **18);
+
+        await pool.connect(spender).deposit();
     });
 });
 

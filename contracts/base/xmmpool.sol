@@ -34,6 +34,18 @@ abstract contract XMMPool is FixingManager {
         _;
     }
 
+    modifier positionIsValid(uint32 positionIndex) {
+        require(_positions[msg.sender].length > positionIndex, 'pos index err');
+        _;
+    }
+
+    modifier fixingsAreUpToDate(uint32 positionIndex) {
+        uint lastFixingDate = _fixingDates[_fixingDates.length - 1];
+        (uint nextFixingTimestamp, ) = getPositionTimestamp();
+        require(IsActivated && _positions[msg.sender][positionIndex].startDate < lastFixingDate && nextFixingTimestamp < lastFixingDate, 'no fixing');
+        _;
+    }
+
     /***********************
      * Contract Properties *
      ***********************/
@@ -317,7 +329,7 @@ abstract contract XMMPool is FixingManager {
         // If spot went up, the Short positions pay the Long positions
         if (spotPerf > 0) {
             // We allocate the ShortPot to the call average perf
-            potPerf = uint64((ShortPot << 32) / TotalLongPositions);
+            potPerf = TotalLongPositions == 0 ? 0 : uint64((ShortPot << 32) / TotalLongPositions);
             callPerf = Math.add(callPerf, potPerf);
             ShortPot = SafeMath.subOr0_128(ShortPot, uint128((potPerf * TotalLongPositions) >> 32));
 
@@ -330,7 +342,7 @@ abstract contract XMMPool is FixingManager {
         // Else, Long positions pay Short positions
         } else {
             // We allocate the LongPot to the put average perf
-            potPerf = uint64((LongPot << 32) / TotalShortPositions);
+            potPerf = TotalShortPositions == 0 ? 0 : uint64((LongPot << 32) / TotalShortPositions);
             putPerf = Math.add(putPerf, potPerf);
             LongPot = SafeMath.subOr0_128(LongPot, uint128((potPerf * TotalShortPositions) >> 32));
 
@@ -387,7 +399,7 @@ abstract contract XMMPool is FixingManager {
         // If rate is positive, only a pro-rata interest is paid
             // If rate is negative, msg.sender shall pay the full amount due
         if (rate > 0) {
-            uint64 proRata = Utils.getProRata(getLastFixingTimestamp(), position, _expiryIntervals[T]);
+            uint64 proRata = Utils.getProRata(_fixingDates[_fixingDates.length - 1], position, _expiryIntervals[T]);
             adjustedRate = Math.multSigned(int64(proRata), rate);
         }
 

@@ -2,7 +2,10 @@
 pragma solidity >= 0.8.0;
 
 import "../base/xmmpool.sol";
+import "../libraries/safemath.sol";
+import "../libraries/utils.sol";
 import "../interfaces/ikyc.sol";
+import "../structures/position.sol";
 import "../enums.sol";
 
 contract CoinKYCPool is XMMPool, IKYC {
@@ -68,68 +71,67 @@ contract CoinKYCPool is XMMPool, IKYC {
     /// @param positionIndex The index of the position
     /// @param amount The reduction amount. If amount is bigger than position amount, the position is closed.
     // A position that is closed leads to re-organization of existing positions.
-    function reducePosition(uint32 positionIndex, uint128 amount) public override hasMinWithdrawal(amount) returns(bool hasBeenClosed) {
-        if (_positions[msg.sender].length > positionIndex) {
-            Position storage position = _positions[msg.sender][positionIndex];
+    function reducePosition(uint32 positionIndex, uint128 amount) public override positionIsValid(positionIndex)
+     fixingsAreUpToDate(positionIndex) hasMinWithdrawal(amount) returns(bool hasBeenClosed) {
+        Position storage position = _positions[msg.sender][positionIndex];
 
-            // If the position reached -100% perf during its lifetime
-            // we just delete the position.
-            if (isZeroPerf(position)) {
-                Utils.removePositionFromArray(positionIndex, _positions[msg.sender]);
-                return true;
-            }
+        // If the position reached -100% perf during its lifetime
+        // we just delete the position.
+        if (isZeroPerf(position)) {
+            Utils.removePositionFromArray(positionIndex, _positions[msg.sender]);
+            return true;
+        }
 
-            if (amount > position.amount) amount = position.amount;
-            uint128 penalty;
-            uint128 fee = getPositionFee(msg.sender, block.timestamp, position.startDate, position.min_expiry, amount, position.minFeePaid);
+        if (amount > position.amount) amount = position.amount;
+        uint128 penalty;
+        uint128 fee = getPositionFee(msg.sender, block.timestamp, position.startDate, position.min_expiry, amount, position.minFeePaid);
 
-            // If position is offset before expected term, a penalty applies
-            if (block.timestamp < position.min_expiry) {
-                // This penalty is the for the pool and will remain in pool liquidity
-                penalty = uint128((uint136(amount) * Penalty) / 1_000_000);
+        // If position is offset before expected term, a penalty applies
+        if (block.timestamp < position.min_expiry) {
+            // This penalty is the for the pool and will remain in pool liquidity
+            penalty = uint128((uint136(amount) * Penalty) / 1_000_000);
                 
-                if (position.longShort == LongShort.Long) LongPot += penalty;
-                else ShortPot += penalty;
+            if (position.longShort == LongShort.Long) LongPot += penalty;
+            else ShortPot += penalty;
+        }
+
+        // Via checkPosition, we check the prorated rate if user offsets the position before the term.
+        // We also check if the position was pending for the next fixing, to adjust the pending notionals
+        // not the live positions.
+        int64 rate = checkPosition(position, amount, getRate(position.longShort, position.term, position.startDate));
+
+        // If amount equals the position amount, we remove the position from user's positions
+        if (position.amount <= amount) Utils.removePositionFromArray(positionIndex, _positions[msg.sender]);
+
+        // Interest is computed on the whole amount
+        int128 interest = int128((int160(uint160(amount)) * rate) >> 32);
+
+        // We remove the penalty
+        // Fee is removed only if user has enough cash at offset
+        uint128 totalTransfer = SafeMath.subOr0_128(amount, penalty);
+
+        // We charge or we pay the interest
+        if (rate < 0) totalTransfer = SafeMath.subOr0_128(totalTransfer, uint128(-interest));
+        else totalTransfer = SafeMath.add128(totalTransfer, uint128(interest));
+
+        // If a user has lost all is money, we cannot charge a fee
+        if (totalTransfer == 0) {
+            fee = 0;
+        }
+        else {
+            if (totalTransfer <= fee) {
+                fee = totalTransfer;
+                totalTransfer = 0;
+            } else {
+                totalTransfer = SafeMath.subOr0_128(totalTransfer, fee);
             }
+        }
 
-            // Via checkPosition, we check the prorated rate if user offsets the position before the term.
-            // We also check if the position was pending for the next fixing, to adjust the pending notionals
-            // not the live positions.
-            int64 rate = checkPosition(position, amount, getRate(position.longShort, position.term, position.startDate));
+        (bool success, ) = Token.call(abi.encodeWithSelector(IERC20.transfer.selector, msg.sender, uint256(totalTransfer)));
 
-            // If amount equals the position amount, we remove the position from user's positions
-            if (position.amount <= amount) Utils.removePositionFromArray(positionIndex, _positions[msg.sender]);
-
-            // Interest is computed on the whole amount
-            int128 interest = int128((int160(uint160(amount)) * rate) >> 32);
-
-            // We remove the penalty
-            // Fee is removed only if user has enough cash at offset
-            uint128 totalTransfer = SafeMath.subOr0_128(amount, penalty);
-
-            // We charge or we pay the interest
-            if (rate < 0) totalTransfer = SafeMath.subOr0_128(totalTransfer, uint128(-interest));
-            else totalTransfer = SafeMath.add128(totalTransfer, uint128(interest));
-
-            // If a user has lost all is money, we cannot charge a fee
-            if (totalTransfer == 0) {
-                fee = 0;
-            }
-            else {
-                if (totalTransfer <= fee) {
-                    fee = totalTransfer;
-                    totalTransfer = 0;
-                } else {
-                    totalTransfer = SafeMath.subOr0_128(totalTransfer, fee);
-                }
-            }
-
-            (bool success, ) = Token.call(abi.encodeWithSelector(IERC20.transfer.selector, msg.sender, uint256(totalTransfer)));
-
-            if (success) {
-                if (fee > 0) Token.call(abi.encodeWithSelector(IERC20.transfer.selector, Owner, uint256(fee)));
-                emit PositionReduced(msg.sender, block.timestamp, totalTransfer);
-            }
+        if (success) {
+            if (fee > 0) Token.call(abi.encodeWithSelector(IERC20.transfer.selector, Owner, uint256(fee)));
+            emit PositionReduced(msg.sender, block.timestamp, totalTransfer);
         }
     }
 }
