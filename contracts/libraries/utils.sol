@@ -89,32 +89,31 @@ library Utils {
         positions.pop();
     }
 
-    function getAccrualDetails(uint64[] storage premiaReceiver, uint128[] storage payerPositions, uint128[] storage receiverPositions, uint128 totalPositionPayer, uint128 totalPositionReceiver, uint128 pot) internal view
-     returns(uint192 pnl, uint64[] memory distPayerByTerm, uint64[] memory distReceiverByTerm) {
-        distPayerByTerm = new uint64[](7);
-        distReceiverByTerm = new uint64[](7);
+    function getAccrualDetails(uint64[] storage premiaReceiver, uint64[7] storage currentAccrualYFs, uint128[7] storage payerPositions, uint128[7] storage receiverPositions,
+     uint128 totalPositionPayer, uint128 totalPositionReceiver, uint128 pot) internal view returns(uint128[] memory amtPayerByTerm, uint128[] memory amtReceiverByTerm) {
+        amtPayerByTerm = new uint128[](7);
+        amtReceiverByTerm = new uint128[](7);
         
-        if (totalPositionPayer == 0 || totalPositionReceiver == 0) return (0, distPayerByTerm, distReceiverByTerm);
+        if (totalPositionPayer == 0 || totalPositionReceiver == 0) return (amtPayerByTerm, amtReceiverByTerm);
 
         uint8 i;
-        uint160 sumPayer = 0;
+        uint128 totalPaid = 0;
         uint160 sumReceiver = 0;
-        uint160[] memory tmpPayer = new uint160[](7);
         uint160[] memory tmpReceiver = new uint160[](7);
 
         for (i = 0; i < 7; i++) {
-            tmpPayer[i] = Math.multPerf(premiaReceiver[i], payerPositions[i]);
-            tmpReceiver[i] = Math.multPerf(premiaReceiver[i], receiverPositions[i]);
+            uint64 accrualFactor = Math.mult(premiaReceiver[i], currentAccrualYFs[i]);
+            amtPayerByTerm[i] = uint128(Math.multPerf(accrualFactor, payerPositions[i]) >> 32);
+            tmpReceiver[i] = Math.multPerf(accrualFactor, receiverPositions[i]);
 
-            sumPayer += tmpPayer[i];
+            totalPaid += amtPayerByTerm[i];
             sumReceiver += tmpReceiver[i];
         }
 
-        for (i = 0; i < 7; i++) {
-            distPayerByTerm[i] = uint64(tmpPayer[i] / sumPayer);
-            distReceiverByTerm[i] = uint64(tmpReceiver[i] / sumReceiver);
-        }
+        totalPaid += pot;
 
-        pnl = Math.multPerf(uint64(sumReceiver / totalPositionReceiver), totalPositionPayer) + (pot << 32);
+        for (i = 0; i < 7; i++) {
+            amtReceiverByTerm[i] = uint128(Math.multPerf(uint64(tmpReceiver[i] / sumReceiver), totalPaid) >> 32);
+        }
     }
 }

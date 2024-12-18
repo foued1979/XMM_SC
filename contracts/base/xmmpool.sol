@@ -83,14 +83,14 @@ abstract contract XMMPool is FixingManager {
 
     /// @notice The amount of long positions, by Term
     // key => uint8(Terms)
-    uint128[] internal _longPositionsByTerm;
+    uint128[7] internal _longPositionsByTerm;
 
     // The sum of short positions by term
     uint128 public TotalShortPositions;
 
     /// @notice The amount of short positions, by Term
     // Key => uint8(Terms)
-    uint128[] internal _shortPositionsByTerm;
+    uint128[7] internal _shortPositionsByTerm;
     
     /***************
      * Constructor *
@@ -100,10 +100,6 @@ abstract contract XMMPool is FixingManager {
      uint64 minDeposit, uint8 minWithdrawalRatio) FixingManager(owner, compensationToken, compensationTokenDecimals, currentFixingUpdateInterval) {
         _poolTokenDecimals = poolTokenDecimals;
         MinDeposit = uint128(minDeposit) * uint128(10 ** poolTokenDecimals);
-
-        _longPositionsByTerm = new uint128[](7);
-        _shortPositionsByTerm = new uint128[](7);
-        
         MinWithdrawal = (MinDeposit * minWithdrawalRatio) / 100;
         Penalty = penalty;
         ApplyPenaltyFee = false;
@@ -318,38 +314,30 @@ abstract contract XMMPool is FixingManager {
         shortRateAccruals = new int64[](_termsLength);
         if (spotPerf == 0) return (longRateAccruals, shortRateAccruals);
 
-        uint192 pnl;
-        uint64[] memory distPayerByTerm;
-        uint64[] memory distReceiverByTerm;
-        uint128 accruedPnL = 0;
+        uint128[] memory amtPayerByTerm;
+        uint128[] memory amtReceiverByTerm;
 
         // If spot went up, the Short positions pay the Long positions
         if (spotPerf > 0) {
-            (pnl, distPayerByTerm, distReceiverByTerm) = Utils.getAccrualDetails(lastFixing.callPremia_t_1__t, _shortPositionsByTerm, _longPositionsByTerm, TotalShortPositions, TotalLongPositions, ShortPot);
+            (amtPayerByTerm, amtReceiverByTerm) = Utils.getAccrualDetails(lastFixing.callPremia_t_1__t, _currentAccrualYFs, _shortPositionsByTerm, 
+            _longPositionsByTerm, TotalShortPositions, TotalLongPositions, ShortPot);
 
             for (uint8 i = 0; i < _termsLength; i++) {
                 // Term ratio is the ratio of perf for the given term
-                // The accrued PnL is rounded to the unit
-                accruedPnL = uint128((Math.mult(distReceiverByTerm[i], _currentAccrualYFs[i]) * pnl) >> 32);
-                longRateAccruals[i] = int64(Math.div128(accruedPnL, _longPositionsByTerm[i]));
-
-                accruedPnL = uint128((Math.mult(distPayerByTerm[i], _currentAccrualYFs[i]) * pnl) >> 32);
-                shortRateAccruals[i] = -int64(Math.div128(accruedPnL, _shortPositionsByTerm[i]));
+                longRateAccruals[i] = int64(Math.div128(amtReceiverByTerm[i], _longPositionsByTerm[i]));
+                shortRateAccruals[i] = -int64(Math.div128(amtPayerByTerm[i], _shortPositionsByTerm[i]));
             }
 
             ShortPot = 0;
         // Else, Long positions pay Short positions
         } else {
-            (pnl, distPayerByTerm, distReceiverByTerm) = Utils.getAccrualDetails(lastFixing.putPremia_t_1__t, _longPositionsByTerm, _shortPositionsByTerm, TotalLongPositions, TotalShortPositions, LongPot);
+            (amtPayerByTerm, amtReceiverByTerm) = Utils.getAccrualDetails(lastFixing.putPremia_t_1__t, _currentAccrualYFs, _longPositionsByTerm,
+             _shortPositionsByTerm, TotalLongPositions, TotalShortPositions, LongPot);
 
             for (uint8 i = 0; i < _termsLength; i++) {
                 // Term ratio is the ratio of perf for the given term
-                // The accrued PnL is rounded to the unit
-                accruedPnL = uint128((Math.mult(distReceiverByTerm[i], _currentAccrualYFs[i]) * pnl) >> 32);
-                shortRateAccruals[i] = int64(Math.div128(accruedPnL, _shortPositionsByTerm[i]));
-
-                accruedPnL = uint128((Math.mult(distPayerByTerm[i], _currentAccrualYFs[i]) * pnl) >> 32);
-                longRateAccruals[i] = -int64(Math.div128(accruedPnL, _longPositionsByTerm[i]));
+                shortRateAccruals[i] = int64(Math.div128(amtReceiverByTerm[i], _shortPositionsByTerm[i]));
+                longRateAccruals[i] = -int64(Math.div128(amtPayerByTerm[i], _longPositionsByTerm[i]));
             }
 
             LongPot = 0;
