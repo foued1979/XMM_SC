@@ -138,6 +138,17 @@ library Math {
     }
   }
 
+  function div128(uint128 x, uint128 y) internal pure returns (uint64) {
+    unchecked {
+      require (y != 0);
+
+      uint160 res = (uint160(x) << 32) / y;
+
+      require (res <= MAX_U32x32);
+      return uint64(res);
+    }
+  }
+
   function divSigned(int64 x, int64 y) internal pure returns (int64) {
     unchecked {
       require (y != 0);

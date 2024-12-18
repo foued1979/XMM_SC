@@ -80,16 +80,13 @@ abstract contract XMMPool is FixingManager {
 
     /// @notice The sum of long positions by term
     uint128 public TotalLongPositions;
-    uint64 private _totalLongRatio;
 
     /// @notice The amount of long positions, by Term
     // key => uint8(Terms)
     uint128[] internal _longPositionsByTerm;
 
-    
     // The sum of short positions by term
     uint128 public TotalShortPositions;
-    uint64 private _totalShortRatio;
 
     /// @notice The amount of short positions, by Term
     // Key => uint8(Terms)
@@ -275,8 +272,6 @@ abstract contract XMMPool is FixingManager {
                 TotalShortPositions = SafeMath.add128(TotalShortPositions, amount);
             }
         }
-
-        if (isNextFixing == FixingTypes.Previous) setRatios();
     }
 
     function getMinimumFee(address user, uint positionStartDate, uint positionEndDate, uint128 positionAmt) internal returns(uint128) {
@@ -314,7 +309,8 @@ abstract contract XMMPool is FixingManager {
         }
     }
 
-    function computeAccruals(uint64 spotAtPeriodStart, Fixing storage lastFixing) internal override returns(int64[] memory longRateAccruals, int64[] memory shortRateAccruals) {
+    function computeAccruals(uint64 spotAtPeriodStart, Fixing storage lastFixing) internal override
+     returns(int64[] memory longRateAccruals, int64[] memory shortRateAccruals) {
         int64 spotPerf = Math.subSigned(int64(lastFixing.spot), int64(spotAtPeriodStart));
 
         // The factors by term
@@ -322,34 +318,41 @@ abstract contract XMMPool is FixingManager {
         shortRateAccruals = new int64[](_termsLength);
         if (spotPerf == 0) return (longRateAccruals, shortRateAccruals);
 
-        (uint64 callPerf, uint64[] memory callRatiosByTerm) = Utils.getAccrualDetails(lastFixing.callPremia_t_1__t, _longPositionsByTerm, _totalLongRatio, TotalLongPositions);
-        (uint64 putPerf, uint64[] memory putRatiosByTerm) = Utils.getAccrualDetails(lastFixing.putPremia_t_1__t, _shortPositionsByTerm, _totalShortRatio, TotalShortPositions);
-        uint64 potPerf = 0;
+        uint192 pnl;
+        uint64[] memory distPayerByTerm;
+        uint64[] memory distReceiverByTerm;
+        uint128 accruedPnL = 0;
 
         // If spot went up, the Short positions pay the Long positions
         if (spotPerf > 0) {
-            // We allocate the ShortPot to the call average perf
-            potPerf = TotalLongPositions == 0 ? 0 : uint64((ShortPot << 32) / TotalLongPositions);
-            callPerf = Math.add(callPerf, potPerf);
-            ShortPot = SafeMath.subOr0_128(ShortPot, uint128((potPerf * TotalLongPositions) >> 32));
-
+            (pnl, distPayerByTerm, distReceiverByTerm) = Utils.getAccrualDetails(lastFixing.callPremia_t_1__t, _shortPositionsByTerm, _longPositionsByTerm, TotalShortPositions, TotalLongPositions, ShortPot);
 
             for (uint8 i = 0; i < _termsLength; i++) {
                 // Term ratio is the ratio of perf for the given term
-                longRateAccruals[i] = int64(Math.mult(callRatiosByTerm[i], callPerf));
-                shortRateAccruals[i] = -int64(Math.mult(putRatiosByTerm[i], callPerf));
+                // The accrued PnL is rounded to the unit
+                accruedPnL = uint128((Math.mult(distReceiverByTerm[i], _currentAccrualYFs[i]) * pnl) >> 32);
+                longRateAccruals[i] = int64(Math.div128(accruedPnL, _longPositionsByTerm[i]));
+
+                accruedPnL = uint128((Math.mult(distPayerByTerm[i], _currentAccrualYFs[i]) * pnl) >> 32);
+                shortRateAccruals[i] = -int64(Math.div128(accruedPnL, _shortPositionsByTerm[i]));
             }
+
+            ShortPot = 0;
         // Else, Long positions pay Short positions
         } else {
-            // We allocate the LongPot to the put average perf
-            potPerf = TotalShortPositions == 0 ? 0 : uint64((LongPot << 32) / TotalShortPositions);
-            putPerf = Math.add(putPerf, potPerf);
-            LongPot = SafeMath.subOr0_128(LongPot, uint128((potPerf * TotalShortPositions) >> 32));
+            (pnl, distPayerByTerm, distReceiverByTerm) = Utils.getAccrualDetails(lastFixing.putPremia_t_1__t, _longPositionsByTerm, _shortPositionsByTerm, TotalLongPositions, TotalShortPositions, LongPot);
 
             for (uint8 i = 0; i < _termsLength; i++) {
-                longRateAccruals[i] = -int64(Math.mult(callRatiosByTerm[i], putPerf));
-                shortRateAccruals[i] = int64(Math.mult(putRatiosByTerm[i], putPerf));
+                // Term ratio is the ratio of perf for the given term
+                // The accrued PnL is rounded to the unit
+                accruedPnL = uint128((Math.mult(distReceiverByTerm[i], _currentAccrualYFs[i]) * pnl) >> 32);
+                shortRateAccruals[i] = int64(Math.div128(accruedPnL, _shortPositionsByTerm[i]));
+
+                accruedPnL = uint128((Math.mult(distPayerByTerm[i], _currentAccrualYFs[i]) * pnl) >> 32);
+                longRateAccruals[i] = -int64(Math.div128(accruedPnL, _longPositionsByTerm[i]));
             }
+
+            LongPot = 0;
         }
 
         return (longRateAccruals, shortRateAccruals);
@@ -422,24 +425,6 @@ abstract contract XMMPool is FixingManager {
                 TotalShortPositions = SafeMath.subOr0_128(TotalShortPositions, amount);
             }
         }
-
-        if (!positionIsNextFixing) setRatios();
-    }
-
-    function setRatios() internal {
-        _totalLongRatio = 0;
-        _totalShortRatio = 0;
-
-        uint160 totalLong = uint160(TotalLongPositions);
-        uint160 totalShort = uint160(TotalShortPositions);
-
-        if (TotalLongPositions != 0) {
-            _totalLongRatio = uint64((totalShort << 32) / totalLong);
-        }
-
-        if (TotalShortPositions != 0) {
-            _totalShortRatio = uint64((totalLong << 32) / totalShort);
-        }
     }
 
     /*******************
@@ -459,8 +444,6 @@ abstract contract XMMPool is FixingManager {
         // We transfer amount to the long side
         _longPositionsByTerm[index] = SafeMath.add128(_longPositionsByTerm[index], longTransferAmt);
         TotalLongPositions = SafeMath.add128(TotalLongPositions, longTransferAmt);
-
-        setRatios();
     }
 
     function transferLongToShort(uint8 index, uint64 transferFromLongRatio, uint64 transferToShortRatio) private {
@@ -477,7 +460,5 @@ abstract contract XMMPool is FixingManager {
         // We transfer amount to the short side
         _shortPositionsByTerm[index] = SafeMath.add128(_shortPositionsByTerm[index], shortTransferAmt);
         TotalShortPositions = SafeMath.add128(TotalShortPositions, shortTransferAmt);
-
-        setRatios();
     }
 }

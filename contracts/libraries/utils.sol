@@ -89,23 +89,32 @@ library Utils {
         positions.pop();
     }
 
-    function getAccrualDetails(uint64[] storage premia, uint128[] storage positions, uint64 ratio, uint128 totalPosition) internal view
-     returns(uint64 perf, uint64[] memory perfRatiosByTerm) {
-        perfRatiosByTerm = new uint64[](7);
-        if (totalPosition == 0) return (0, perfRatiosByTerm);
+    function getAccrualDetails(uint64[] storage premiaReceiver, uint128[] storage payerPositions, uint128[] storage receiverPositions, uint128 totalPositionPayer, uint128 totalPositionReceiver, uint128 pot) internal view
+     returns(uint192 pnl, uint64[] memory distPayerByTerm, uint64[] memory distReceiverByTerm) {
+        distPayerByTerm = new uint64[](7);
+        distReceiverByTerm = new uint64[](7);
+        
+        if (totalPositionPayer == 0 || totalPositionReceiver == 0) return (0, distPayerByTerm, distReceiverByTerm);
 
-        uint160 sum = 0;
-        uint160[] memory tmp = new uint160[](7);
+        uint8 i;
+        uint160 sumPayer = 0;
+        uint160 sumReceiver = 0;
+        uint160[] memory tmpPayer = new uint160[](7);
+        uint160[] memory tmpReceiver = new uint160[](7);
 
-        for (uint8 i = 0; i < 7; i++) {
-            tmp[i] = Math.multPerf(premia[i], positions[i]);
-            sum += tmp[i];
+        for (i = 0; i < 7; i++) {
+            tmpPayer[i] = Math.multPerf(premiaReceiver[i], payerPositions[i]);
+            tmpReceiver[i] = Math.multPerf(premiaReceiver[i], receiverPositions[i]);
+
+            sumPayer += tmpPayer[i];
+            sumReceiver += tmpReceiver[i];
         }
 
-        for (uint8 i = 0; i < 7; i++) {
-            perfRatiosByTerm[i] = uint64(tmp[i] / sum);
+        for (i = 0; i < 7; i++) {
+            distPayerByTerm[i] = uint64(tmpPayer[i] / sumPayer);
+            distReceiverByTerm[i] = uint64(tmpReceiver[i] / sumReceiver);
         }
 
-        perf = Math.mult(ratio, uint64(sum / totalPosition));
+        pnl = Math.multPerf(uint64(sumReceiver / totalPositionReceiver), totalPositionPayer) + (pot << 32);
     }
 }
