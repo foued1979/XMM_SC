@@ -55,7 +55,7 @@ contract ETHPool is XMMPool {
         // If position is offset before expected term, a penalty applies
         if (block.timestamp < position.min_expiry) {
             // This penalty is the for the pool and will remain in pool liquidity
-            penalty = uint128((uint136(amount) * Penalty) / 1_000_000);
+            penalty = getRebatePenalty(msg.sender, uint128((uint136(amount) * Penalty) / 1_000_000));
 
             if (position.longShort == LongShort.Long) LongPot += penalty;
             else ShortPot += penalty;

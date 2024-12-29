@@ -30,6 +30,7 @@ abstract contract Rebatable is Owned {
     uint32 public MinFeeRebateThreshold;
     uint32 private _2threshold;
     uint32 private _4threshold;
+    uint32 private _8threshold;
 
     // Private Fields
     uint8 private _compensationTokenDecimals;
@@ -43,6 +44,7 @@ abstract contract Rebatable is Owned {
         MinFeeRebateThreshold = 50;
         _2threshold = 100;
         _4threshold = 200;
+        _8threshold = 400;
         FeeRebateThreshold = 50;
 
         CompensationToken = compensationToken;
@@ -68,6 +70,7 @@ abstract contract Rebatable is Owned {
         MinFeeRebateThreshold = newThreshold;
         _2threshold = 2 * newThreshold;
         _4threshold = 4 * newThreshold;
+        _8threshold = 8 * newThreshold;
     }
 
     /********************
@@ -94,11 +97,25 @@ abstract contract Rebatable is Owned {
         if (success) {
             uint32 balance = uint32(abi.decode(res, (uint256)) / (10 ** _compensationTokenDecimals));
 
-            if (balance >= _4threshold) return minFee * 60 / 100;
-            if (balance >= _2threshold) return minFee * 70 / 100;
-            if (balance >= MinFeeRebateThreshold) return minFee * 85 / 100;
+            if (balance >= _8threshold) return minFee * 70 / 100;
+            if (balance >= _4threshold) return minFee * 80 / 100;
+            if (balance >= _2threshold) return minFee * 90 / 100;
         }
 
         return minFee;
+    }
+
+    function getRebatePenalty(address user, uint128 penalty) internal returns(uint128) {
+        (bool success, bytes memory res) = CompensationToken.call(abi.encodeWithSelector(IERC20.balanceOf.selector, user));
+
+        if (success) {
+            uint32 balance = uint32(abi.decode(res, (uint256)) / (10 ** _compensationTokenDecimals));
+
+            if (balance >= _4threshold) return penalty * 60 / 100;
+            if (balance >= _2threshold) return penalty * 70 / 100;
+            if (balance >= MinFeeRebateThreshold) return penalty * 85 / 100;
+        }
+
+        return penalty;
     }
 }
