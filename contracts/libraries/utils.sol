@@ -116,4 +116,13 @@ library Utils {
             amtReceiverByTerm[i] = uint128(Math.multPerf(uint64(tmpReceiver[i] / sumReceiver), totalPaid) >> 32);
         }
     }
+
+    /// @notice Adds a new strike to the list of strikes which have been dealt
+    function addStrikeToList(uint40[] storage existingStrikes, uint40 newStrike) internal {
+        for (uint32 i = 0; i < existingStrikes.length; i++) {
+            if (existingStrikes[i] == newStrike) return;
+        }
+
+        existingStrikes.push(newStrike);
+    }
 }

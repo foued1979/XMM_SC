@@ -84,6 +84,7 @@ contract CoinPool is XMMPool {
         // Via checkPosition, we check the prorated rate if user offsets the position before the term.
         // We also check if the position was pending for the next fixing, to adjust the pending notionals
         // not the live positions.
+        Need to get pro-rata given back to users
         int64 rate = checkPosition(position, amount, getRate(position.longShort, position.term, position.startDate));
 
         // If amount equals the position amount, we remove the position from user's positions
