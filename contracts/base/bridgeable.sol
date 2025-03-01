@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity >= 0.8.0;
 
-import "../libraries/safemath.sol";
 import "../structures/bridge.sol";
 
 abstract contract Bridgeable {
@@ -25,21 +24,16 @@ abstract contract Bridgeable {
         _;
     }
 
-    //modifier onlyIfHavePendingRequest(uint64 onChainId) {
-    //    require(pendingBridgeOutAmountByChain[msg.sender][onChainId] > 0);
-    //    _;
-    //}
-
     // Properties
     address private _owner;
     uint64 internal _chainId;
     uint64[] private _validChainIds;
 
-    mapping(address => mapping(uint64 => uint128)) internal pendingBridgeInAmountByChain;
-    mapping(address => uint64[]) internal pendingChainIdBridgesInForUser;
+    mapping(address from => mapping(uint64 => uint128)) internal pendingBridgeInAmountByChain;
+    mapping(address from => uint64[]) internal pendingChainIdBridgesInForUser;
 
-    mapping(address => mapping(uint64 => uint128)) internal pendingBridgeOutAmountByChain;
-    mapping(address => uint64[]) internal pendingChainIdBridgesOutForUser;
+    mapping(address from => mapping(uint64 => uint128)) internal pendingBridgeOutAmountByChain;
+    mapping(address from => uint64[]) internal pendingChainIdBridgesOutForUser;
 
     address[] internal pendingBridgesOut;
     address[] internal pendingBridgesIn;

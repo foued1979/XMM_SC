@@ -1,15 +1,18 @@
 // SPDX-License-Identifier: MIT
 pragma solidity >= 0.8.0;
 
-import "../libraries/safemath.sol";
-import "../interfaces/ierc20.sol";
-import "../interfaces/iexchangeable.sol";
-import "./bridgeable.sol";
+import { IERC20 } from "../interfaces/ierc20.sol";
+import { IExchangeable } from "../interfaces/iexchangeable.sol";
 
-abstract contract Exchangeable is Bridgeable, IExchangeable {
+abstract contract ERC20Exchangeable is IExchangeable {
     /*************
      * Modifiers *
      *************/
+     modifier _onlyOwner {
+        require(msg.sender == _owner, "Not allowed");
+        _;
+    }
+
     modifier ethDepositIsAllowed {
         require(ETHDepositIsAllowed, "Not allowed");
         _;
@@ -33,6 +36,9 @@ abstract contract Exchangeable is Bridgeable, IExchangeable {
      /**************
      * Properties *
      **************/
+     // Private Properties
+     address private _owner;
+
     // Public properties linked to IExchangeable
     // The exchange rate represents a real number with 4 digits precision
     bool public ETHExchangeIsAllowed;
@@ -41,15 +47,19 @@ abstract contract Exchangeable is Bridgeable, IExchangeable {
     uint16 internal _precision = 10_000;
 
     // Parameters to manage other token exchanges
-    mapping(address => bool) internal _tokenIsApproved;
-    mapping(address => uint64) internal _exchangeRates;
-    mapping(address => bool) internal _exchangeIsAllowed;
+    mapping(address tokenAddress => bool) internal _tokenIsApproved;
+    mapping(address tokenAddress => uint64) internal _exchangeRates;
+    mapping(address tokenAddress => bool) internal _exchangeIsAllowed;
 
     // Other public Properties
     address[] public ApprovedTokens;
-    mapping(address => uint8) internal _approvedTokenDecimals;
+    mapping(address tokenAddress => uint8) internal _approvedTokenDecimals;
 
-    constructor(uint64 chainId) Bridgeable(chainId) {
+    /***************
+     * Constructor *
+     ***************/
+    constructor(address owner_) {
+        _owner = owner_;
         ETHDepositIsAllowed = false;
         ETHExchangeIsAllowed = false;
     }

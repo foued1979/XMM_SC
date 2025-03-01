@@ -2,7 +2,6 @@
 pragma solidity >= 0.8.0;
 
 import "../base/xmmpool.sol";
-import "../libraries/safemath.sol";
 import "../libraries/utils.sol";
 import "../interfaces/ikyc.sol";
 import "../structures/position.sol";
@@ -56,7 +55,7 @@ contract CoinKYCPool is XMMPool, IKYC {
                 uint128 minFee = getMinimumFee(msg.sender, timestamp, timestamp + _expiryIntervals[uint8(term)], amount);
                 // The deposit can only be an increase in position
                 // -> hence, we remove the minFee from the deposit
-                amount = SafeMath.subOr0_128(amount, minFee);
+                amount -= minFee;
 
                 Token.call(abi.encodeWithSelector(IERC20.transfer.selector, Owner, minFee));
 
@@ -108,11 +107,11 @@ contract CoinKYCPool is XMMPool, IKYC {
 
         // We remove the penalty
         // Fee is removed only if user has enough cash at offset
-        uint128 totalTransfer = SafeMath.subOr0_128(amount, penalty);
+        uint128 totalTransfer = amount - penalty;
 
         // We charge or we pay the interest
-        if (rate < 0) totalTransfer = SafeMath.subOr0_128(totalTransfer, uint128(-interest));
-        else totalTransfer = SafeMath.add128(totalTransfer, uint128(interest));
+        if (rate < 0) totalTransfer -= uint128(-interest);
+        else totalTransfer += uint128(interest);
 
         // If a user has lost all is money, we cannot charge a fee
         if (totalTransfer == 0) {
@@ -123,7 +122,7 @@ contract CoinKYCPool is XMMPool, IKYC {
                 fee = totalTransfer;
                 totalTransfer = 0;
             } else {
-                totalTransfer = SafeMath.subOr0_128(totalTransfer, fee);
+                totalTransfer -= fee;
             }
         }
 

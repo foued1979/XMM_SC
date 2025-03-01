@@ -5,7 +5,6 @@ import "./fixingmanager.sol";
 import "../enums.sol";
 import "../interfaces/ierc20.sol";
 import "../libraries/math.sol";
-import "../libraries/safemath.sol";
 import "../libraries/utils.sol";
 import "../structures/position.sol";
 
@@ -172,7 +171,7 @@ abstract contract XMMPool is FixingManager {
     /// @param amount   The amount of the position, inclusive of the fee -> if a client transfers 100 tokens, and the fee is 1 token
     //                  amount = 100 and fee = 1
     function createPositionForUser(LongShort longShort, Terms term, uint128 amount, uint128 fee, address user) external onlyOwner {
-        amount = SafeMath.subOr0_128(amount, fee);
+        amount -= fee;
         (uint timestamp, FixingTypes isNextFixing) = getPositionTimestamp();
         
         writeDeposit(user, timestamp, isNextFixing, longShort, term, amount, fee);
@@ -238,8 +237,8 @@ abstract contract XMMPool is FixingManager {
         // If user already has a position which is equivalent to the current order
         // we just update the existing position
         if (hasPosition) {
-            position.amount = SafeMath.add128(position.amount, amount);
-            position.minFeePaid = SafeMath.add128(position.minFeePaid, minFeePaid);
+            position.amount += amount;
+            position.minFeePaid += minFeePaid;
         } else {
             position.amount = amount;
             position.minFeePaid = minFeePaid;
@@ -253,19 +252,19 @@ abstract contract XMMPool is FixingManager {
             // If the next fixing is used, the amount cannot be added to the current positions
             // The amount is pending to be added; when we update the fixing, we will add the pending positions
             if (isNextFixing == FixingTypes.Next) { 
-                _longNotionalsForNextFixing[T] = SafeMath.add128(_longNotionalsForNextFixing[T], amount); 
+                _longNotionalsForNextFixing[T] += amount; 
             } else {
-                _longPositionsByTerm[T] = SafeMath.add128(_longPositionsByTerm[T], amount); 
-                TotalLongPositions = SafeMath.add128(TotalLongPositions, amount); 
+                _longPositionsByTerm[T] += amount; 
+                TotalLongPositions += amount; 
                 }
         } else {
             // If the next fixing is used, the amount cannot be added to the current positions
             // The amount is pending to be added; when we update the fixing, we will add the pending positions
             if (isNextFixing == FixingTypes.Next) { 
-                _shortNotionalsForNextFixing[T] = SafeMath.add128(_shortNotionalsForNextFixing[T], amount);
+                _shortNotionalsForNextFixing[T] += amount;
             } else {
-                _shortPositionsByTerm[T] = SafeMath.add128(_shortPositionsByTerm[T], amount); 
-                TotalShortPositions = SafeMath.add128(TotalShortPositions, amount);
+                _shortPositionsByTerm[T] += amount; 
+                TotalShortPositions += amount;
             }
         }
     }
@@ -298,8 +297,8 @@ abstract contract XMMPool is FixingManager {
      ****************************************/
     function incorporateNextNotionals() internal override {
         for (uint8 i = 0; i < _termsLength; i++) {
-            TotalLongPositions = SafeMath.subOr0_128(TotalLongPositions, _longNotionalsForNextFixing[i]);
-            TotalShortPositions = SafeMath.subOr0_128(TotalShortPositions, _shortNotionalsForNextFixing[i]);
+            TotalLongPositions += _longNotionalsForNextFixing[i];
+            TotalShortPositions += _shortNotionalsForNextFixing[i];
             _longNotionalsForNextFixing[i] = 0;
             _shortNotionalsForNextFixing[i] = 0;
         }
@@ -400,17 +399,17 @@ abstract contract XMMPool is FixingManager {
 
         if (position.longShort == LongShort.Long) {
             if (positionIsNextFixing) {
-                _longNotionalsForNextFixing[T] = SafeMath.subOr0_128(_longNotionalsForNextFixing[T], amount);
+                _longNotionalsForNextFixing[T] -= amount;
             } else {
-                _longPositionsByTerm[T] = SafeMath.subOr0_128(_longPositionsByTerm[T], amount);
-                TotalLongPositions = SafeMath.subOr0_128(TotalLongPositions, amount);
+                _longPositionsByTerm[T] -= amount;
+                TotalLongPositions -= amount;
             }
         } else {
             if (positionIsNextFixing) {
-                _shortNotionalsForNextFixing[T] = SafeMath.subOr0_128(_shortNotionalsForNextFixing[T], amount);
+                _shortNotionalsForNextFixing[T] -= amount;
             } else {
-                _shortPositionsByTerm[T] = SafeMath.subOr0_128(_shortPositionsByTerm[T], amount);
-                TotalShortPositions = SafeMath.subOr0_128(TotalShortPositions, amount);
+                _shortPositionsByTerm[T] -= amount;
+                TotalShortPositions -= amount;
             }
         }
     }
@@ -426,12 +425,12 @@ abstract contract XMMPool is FixingManager {
         uint128 longTransferAmt = uint128((totalLong * transferToLongRatio) >> 32);
 
         // We remove amount from the short side
-        _shortPositionsByTerm[index] = SafeMath.subOr0_128(_shortPositionsByTerm[index], shortTransferAmt);
-        TotalShortPositions = SafeMath.subOr0_128(TotalShortPositions, shortTransferAmt);
+        _shortPositionsByTerm[index] -= shortTransferAmt;
+        TotalShortPositions -= shortTransferAmt;
 
         // We transfer amount to the long side
-        _longPositionsByTerm[index] = SafeMath.add128(_longPositionsByTerm[index], longTransferAmt);
-        TotalLongPositions = SafeMath.add128(TotalLongPositions, longTransferAmt);
+        _longPositionsByTerm[index] += longTransferAmt;
+        TotalLongPositions += longTransferAmt;
     }
 
     function transferLongToShort(uint8 index, uint64 transferFromLongRatio, uint64 transferToShortRatio) private {
@@ -442,11 +441,11 @@ abstract contract XMMPool is FixingManager {
         uint128 shortTransferAmt = uint128((totalShort * transferToShortRatio) >> 32);
 
         // We remove amount from the long side
-        _longPositionsByTerm[index] = SafeMath.subOr0_128(_longPositionsByTerm[index], longTransferAmt);
-        TotalLongPositions = SafeMath.subOr0_128(TotalLongPositions, longTransferAmt);
+        _longPositionsByTerm[index] -= longTransferAmt;
+        TotalLongPositions -= longTransferAmt;
 
         // We transfer amount to the short side
-        _shortPositionsByTerm[index] = SafeMath.add128(_shortPositionsByTerm[index], shortTransferAmt);
-        TotalShortPositions = SafeMath.add128(TotalShortPositions, shortTransferAmt);
+        _shortPositionsByTerm[index] += shortTransferAmt;
+        TotalShortPositions += shortTransferAmt;
     }
 }

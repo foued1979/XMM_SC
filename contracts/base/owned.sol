@@ -1,9 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity >= 0.8.0;
 
-import "../interfaces/iowned.sol";
-
-abstract contract Owned is IOwned {
+abstract contract Owned {
     /**********
      * Events *
      **********/

@@ -1,0 +1,88 @@
+
+
+    /*********************************
+     * The Bridgeable Implementation *
+     *********************************/
+
+    /// @notice Adds a pending bridge in
+    /// @param forUser The address of the beneficiary
+    /// @param fromChainId The chainId where the bridge is coming from
+    /// @param amount The amount
+    function addPendingBridgeIn(address forUser, uint64 fromChainId, uint128 amount) external override onlyOwner {
+        require(AvailableTokens >= uint256(amount), "Insufficient balance");
+        
+        pendingBridgeInAmountByChain[forUser][fromChainId] = SafeMath.add128(pendingBridgeInAmountByChain[forUser][fromChainId], amount);
+        addUserForBridingIn(forUser);
+
+        AvailableTokens = SafeMath.sub(AvailableTokens, amount);
+    }
+
+    /// @notice Cancels a bridge in for a user
+    /// @param forUser The address of the user to remove
+    /// @param fromChainId The chainId where the bridge is coming from
+    function cancelBridgeIn(address forUser, uint64 fromChainId) external override onlyOwner {
+        uint256 pendingAmt = uint256(pendingBridgeInAmountByChain[forUser][fromChainId]);
+
+        AvailableTokens = SafeMath.add(AvailableTokens, pendingAmt);
+        pendingBridgeInAmountByChain[forUser][fromChainId] = 0;
+        
+        removePendingChainIdBridgeForUser(forUser, pendingBridgesIn, pendingChainIdBridgesInForUser[forUser], fromChainId);
+    }
+
+    /// @notice Adds a pending bridge out to a specific chain Id
+    /// @param toChainId The destination Chain id
+    /// @param amount The amount to be bridged out
+    function requestBridgeOut(uint64 toChainId, uint128 amount) external override isValidChain(toChainId) {
+        address user = msg.sender;
+
+        require(_balances[user] >= amount, "Insufficient balance");
+
+        pendingBridgeOutAmountByChain[user][toChainId] = SafeMath.add128(pendingBridgeOutAmountByChain[user][toChainId], amount);
+        _balances[user] = SafeMath.sub(_balances[user], uint256(amount));
+
+        addUserForBridingOut(user);
+        addPendingChainIdBridgeToUser(pendingChainIdBridgesOutForUser[user], toChainId);
+
+        emit BridgeOutRequested(block.timestamp, user, toChainId, amount);
+    }
+
+    /// @notice Cancels a bridging request for a user and for a chainId
+    /// @param forUser The user address to cancel
+    /// @param forChainId The target chain Id to cancel
+    function cancelBridgeOut(address forUser, uint64 forChainId) external override onlyOwner {
+        if (pendingBridgeOutAmountByChain[forUser][forChainId] == 0) return;
+
+        // We credit back the tokens to the user
+        _balances[forUser] = SafeMath.add(_balances[forUser], uint256(pendingBridgeOutAmountByChain[forUser][forChainId]));
+        pendingBridgeOutAmountByChain[forUser][forChainId] = 0;
+
+        removePendingChainIdBridgeForUser(forUser, pendingBridgesOut, pendingChainIdBridgesOutForUser[forUser], forChainId);
+
+        emit BridgeOutCancelled(block.timestamp, forUser, forChainId);
+    }
+
+    /// @notice Validates a bridge in for a user and for a chain Id
+    function validateBridgeOut(address forUser, uint64 forChainId) external override onlyOwner {
+        // We add the bridge quantity back to the available tokens
+        uint128 amt = pendingBridgeOutAmountByChain[forUser][forChainId];
+        
+        AllocatedAmount = SafeMath.sub(AllocatedAmount, uint256(amt));
+        AvailableTokens = SafeMath.add(AvailableTokens, uint256(amt));
+
+        pendingBridgeOutAmountByChain[forUser][forChainId] = 0;
+        removePendingChainIdBridgeForUser(forUser, pendingBridgesOut, pendingChainIdBridgesOutForUser[forUser], forChainId);
+
+        emit BridgeOutValidated(block.timestamp, forUser, forChainId, amt);
+    }
+
+    /// @notice Validates a bridge in for a user
+    /// @param forUser The user to validate
+    /// @param forChainId The chain id where the bridge is coming from
+    function validateBridgeIn(address forUser, uint64 forChainId) external override onlyOwner {
+        uint256 amtToCredit = uint256(pendingBridgeInAmountByChain[forUser][forChainId]);
+        
+        _balances[forUser] = SafeMath.add(_balances[forUser], amtToCredit);
+        AllocatedAmount = SafeMath.add(AllocatedAmount, amtToCredit);
+
+        removePendingChainIdBridgeForUser(forUser, pendingBridgesIn, pendingChainIdBridgesInForUser[forUser], forChainId);
+    }

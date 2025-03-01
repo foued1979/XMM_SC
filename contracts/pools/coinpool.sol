@@ -2,7 +2,6 @@
 pragma solidity >= 0.8.0;
 
 import "../base/xmmpool.sol";
-import "../libraries/safemath.sol";
 import "../libraries/utils.sol";
 import "../structures/position.sol";
 import "../enums.sol";
@@ -42,7 +41,7 @@ contract CoinPool is XMMPool {
                 uint128 minFee = getMinimumFee(msg.sender, timestamp, timestamp + _expiryIntervals[uint8(term)], amount);
                 // The deposit can only be an increase in position
                 // -> hence, we remove the minFee from the deposit
-                amount = SafeMath.subOr0_128(amount, minFee);
+                amount -= minFee;
 
                 Token.call(abi.encodeWithSelector(IERC20.transfer.selector, Owner, minFee));
 
@@ -84,7 +83,6 @@ contract CoinPool is XMMPool {
         // Via checkPosition, we check the prorated rate if user offsets the position before the term.
         // We also check if the position was pending for the next fixing, to adjust the pending notionals
         // not the live positions.
-        Need to get pro-rata given back to users
         int64 rate = checkPosition(position, amount, getRate(position.longShort, position.term, position.startDate));
 
         // If amount equals the position amount, we remove the position from user's positions
@@ -95,11 +93,11 @@ contract CoinPool is XMMPool {
 
         // We remove the penalty
         // Fee is removed only if user has enough cash at offset
-        uint128 totalTransfer = SafeMath.subOr0_128(amount, penalty);
+        uint128 totalTransfer = amount - penalty;
 
         // We charge or we pay the interest
-        if (rate < 0) totalTransfer = SafeMath.subOr0_128(totalTransfer, uint128(-interest));
-        else totalTransfer = SafeMath.add128(totalTransfer, uint128(interest));
+        if (rate < 0) totalTransfer -= uint128(-interest);
+        else totalTransfer += uint128(interest);
 
         // If a user has lost all is money, we cannot charge a fee
         if (totalTransfer == 0) {
@@ -110,7 +108,7 @@ contract CoinPool is XMMPool {
                 fee = totalTransfer;
                 totalTransfer = 0;
             } else {
-                totalTransfer = SafeMath.subOr0_128(totalTransfer, fee);
+                totalTransfer -= fee;
             }
         }
 

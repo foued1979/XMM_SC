@@ -9,17 +9,17 @@ async function _deploy() {
   const contractFactory = await ethers.getContractFactory("Token");
   // Initial supply is 5 mios
   // Allocation to owner is 250k
-  return await contractFactory.deploy("TEST", "Test token", 1, 5_000_000, 250_000);
+  return await contractFactory.deploy("TEST", "Test token", 5_000_000, 250_000);
 }
 
 async function _deployERC20() {
-  const contractFactory = await ethers.getContractFactory("Allocatable");
-  return await contractFactory.deploy("COIN", 10_000, 18);
+  const contractFactory = await ethers.getContractFactory("ERC20Allocatable");
+  return await contractFactory.deploy("0x0", 10_000, "COIN", "COIN", 18);
 }
 
 async function _deployERC20_6() {
-  const contractFactory = await ethers.getContractFactory("Allocatable");
-  return await contractFactory.deploy("COIN", 10_000, 6);
+  const contractFactory = await ethers.getContractFactory("ERC20Allocatable");
+  return await contractFactory.deploy("0x0", 10_000, "COIN", "COIN", 6);
 }
 
 describe('Test base token functions', function () {
@@ -35,8 +35,8 @@ describe('Test base token functions', function () {
 
       expect(await token.balanceOf("0x1234567890123456789012345678901234567890")).to.equal(amount1);
       expect(await token.balanceOf("0x1234567890123456789012345678901233458793")).to.equal(amount2);
-      expect(await token.AllocatedAmount()).to.equal(ownerAmount + amount1 + amount2);
-      expect(await token.AvailableTokens()).to.equal(5_000_000n * BigInt(10 ** 18) - (ownerAmount + amount1 + amount2));
+      expect(await token.allocatedAmount()).to.equal(ownerAmount + amount1 + amount2);
+      expect(await token.availableTokens()).to.equal(5_000_000n * BigInt(10 ** 18) - (ownerAmount + amount1 + amount2));
     });
 
     it('Can allocate to different users', async function() {
@@ -110,11 +110,11 @@ describe('Test base token functions', function () {
       const balance90 = await token.balanceOf("0x1234567890123456789012345678901234567890");
   
       expect(balance90).to.equal(newBalance / 4n);
-      await expect(token.transferFrom(spender, "0x1234567890123456789012345678901234567890", newBalance)).to.be.revertedWith("Insufficient allowance");
-      await expect(token.transferFrom(spender, "0x1234567890123456789012345678901234567890", newBalance / 2n)).to.be.revertedWith("Insufficient allowance");
+      await expect(token.transferFrom(spender, "0x1234567890123456789012345678901234567890", newBalance)).to.be.revertedWithCustomError(token, "ERC20InsufficientAllowance");
+      await expect(token.transferFrom(spender, "0x1234567890123456789012345678901234567890", newBalance / 2n)).to.be.revertedWithCustomError(token, "ERC20InsufficientAllowance");
   
       await token.connect(spender).approve(owner, newBalance);
-      await expect(token.transferFrom(spender, "0x1234567890123456789012345678901234567890", 3n * newBalance / 4n + 1n)).to.be.revertedWith("Insufficient funds");
+      await expect(token.transferFrom(spender, "0x1234567890123456789012345678901234567890", 3n * newBalance / 4n + 1n)).to.be.revertedWithCustomError(token, "ERC20InsufficientBalance");
     });
 
     it('Exchange functions work properly for Coin', async function() {
