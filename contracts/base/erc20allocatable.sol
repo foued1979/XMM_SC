@@ -1,13 +1,16 @@
 // SPDX-License-Identifier: MIT
 pragma solidity >= 0.8.0;
 
-import { ERC20CappedAndOwned } from "./utils/erc20cappedandowned.sol";
+import { DurationUnits } from  "../enums.sol";
+import { ERC20Vested } from "./utils/erc20vested.sol";
+
 import { IERC20Errors } from "../interfaces/ierc20errors.sol";
 import { ILinkToken } from "../interfaces/ilinktoken.sol";
+
 import { IRouterClient } from "@chainlink/contracts-ccip/src/v0.8/ccip/interfaces/IRouterClient.sol";
 import { Client } from "@chainlink/contracts-ccip/src/v0.8/ccip/libraries/Client.sol";
 
-contract ERC20Allocatable is ERC20CappedAndOwned {
+contract ERC20Allocatable is ERC20Vested {
     address public immutable _ccipRouter;  // Chainlink CCIP Router
     address public immutable _linkToken;  // Chainlink CCIP Router
 
@@ -22,17 +25,32 @@ contract ERC20Allocatable is ERC20CappedAndOwned {
      * Constructor *
      ***************/
     constructor(address owner_, address ccipRouter_, address linkToken_, uint32 initialSupply_, string memory name_, string memory symbol_, uint8 decimals_)
-        ERC20CappedAndOwned(owner_, initialSupply_, name_, symbol_, decimals_)
-        { 
-            _ccipRouter = ccipRouter_;
-            _linkToken = linkToken_;
-        }
+        ERC20Vested(owner_, initialSupply_, name_, symbol_, decimals_)
+    { 
+        _ccipRouter = ccipRouter_;
+        _linkToken = linkToken_;
+    }
+
+    /// @notice Allocates a number of token to a beneficiary
+    /// @param to The beneficiary
+    /// @param amount The amount to allocate
+    /// @param cliffDuration The duration of the cliff
+    /// @param cliffDurationUnit The unit of the cliff duration
+    /// @param vestingDuration The duration of the vesting
+    /// @param vestingDurationUnit The unit of the vesting duration
+    function allocateWithVesting(address to, uint256 amount, uint16 cliffDuration, DurationUnits cliffDurationUnit, uint16 vestingDuration, 
+    DurationUnits vestingDurationUnit) external onlyOwner {
+        this.allocate(to, amount);
+
+        uint vestingStart = _addDuration(block.timestamp, cliffDuration, cliffDurationUnit);
+        _createVestingSchedule(to, vestingStart, vestingDuration, vestingDurationUnit, amount);
+    }
 
     /// @notice Allocates a number of token to a beneficiary
     /// @param to The beneficiary
     /// @param amount The amount
     function allocate(address to, uint256 amount) external onlyOwner {
-        require(to != _owner, "Not allowed");
+        require(to != _owner && to != address(0), "Not allowed");
         if(amount > _availableTokens) revert ERC20InsufficientBalance(_owner, _availableTokens, amount);
         super._update(address(0), to, amount);
 
@@ -55,7 +73,9 @@ contract ERC20Allocatable is ERC20CappedAndOwned {
     /// @param destinationChain The destination chain
     /// @param receiver The address of the receiver
     function sendTokens(uint256 amount, uint64 destinationChain, address receiver) external {
-        if (balanceOf(msg.sender) < amount) revert ERC20InsufficientBalance(msg.sender, balanceOf(msg.sender), amount);
+        uint256 availableBalance = _releaseTokens(msg.sender, amount);
+        if (availableBalance < amount) revert ERC20InsufficientBalance(msg.sender, availableBalance, amount);
+
         _burn(msg.sender, amount);  // Burn tokens on the source chain
 
         // Construct the message struct for CCIP

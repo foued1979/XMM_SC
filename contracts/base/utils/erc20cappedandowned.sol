@@ -4,7 +4,7 @@
 pragma solidity >= 0.8.0;
 
 import { ERC20 } from "./erc20.sol";
-import { Owned } from "./erc20owned.sol";
+import { Owned } from "./owned.sol";
 
 /**
  * @dev Extension of {ERC20} that adds a cap to the supply of tokens.

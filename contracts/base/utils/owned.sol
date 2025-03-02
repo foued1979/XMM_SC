@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity >= 0.8.0;
 
-import { IOwned } from  "../../interfaces/ierc20owned.sol";
+import { IOwned } from  "../../interfaces/iowned.sol";
 
 abstract contract Owned is IOwned {
      /*****************

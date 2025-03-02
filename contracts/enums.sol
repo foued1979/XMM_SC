@@ -7,3 +7,4 @@ enum Terms { OneDay, OneWeek, TwoWeeks, ThreeWeeks, OneMonth, TwoMonths, ThreeMo
 enum UpdateIntervals { OneMin, TwoMin, ThreeMin, FiveMin, TenMin, FifteenMin, TwentyMin, ThirtyMin, OneH, TwoH, ThreeH, FourH }
 enum CompensatedSides {None, Long, Short, All}
 enum OptionTypes { Call, Put }
+enum DurationUnits { Days, Weeks, Months }
