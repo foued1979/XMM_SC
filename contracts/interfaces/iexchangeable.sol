@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity >= 0.8.0;
+pragma solidity >= 0.8.20;
 
 interface IExchangeable {
     /// @notice Sets the change authorization status to false

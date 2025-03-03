@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity >= 0.8.0;
+pragma solidity >= 0.8.20;
 
 import { IERC20 } from "../interfaces/ierc20.sol";
 import { IExchangeable } from "../interfaces/iexchangeable.sol";
@@ -9,27 +9,27 @@ abstract contract ERC20Exchangeable is IExchangeable {
      * Modifiers *
      *************/
      modifier _onlyOwner {
-        require(msg.sender == _owner, "Not allowed");
+        require(msg.sender == _owner, "Err0");
         _;
     }
 
     modifier ethDepositIsAllowed {
-        require(ETHDepositIsAllowed, "Not allowed");
+        require(ETHDepositIsAllowed, "Err1");
         _;
     }
 
     modifier ethExchangeIsAllowed {
-        require(ETHExchangeIsAllowed && EthExchangeRate != 0, "Not allowed");
+        require(ETHExchangeIsAllowed && EthExchangeRate != 0, "Err2");
         _;
     }
 
     modifier exchangeIsAllowedForToken(address token) {
-        require(_tokenIsApproved[token] && _exchangeIsAllowed[token] && _exchangeRates[token] != 0, "Not allowed");
+        require(_tokenIsApproved[token] && _exchangeIsAllowed[token] && _exchangeRates[token] != 0, "Err3");
         _;
     }
 
     modifier tokenIsApproved(address token) {
-        require(_tokenIsApproved[token], "Not approved");
+        require(_tokenIsApproved[token], "Err4");
         _;
     }
 
@@ -116,13 +116,13 @@ abstract contract ERC20Exchangeable is IExchangeable {
     function getAvailableQuantityOfToken(address tokenToBeReceived) public tokenIsApproved(tokenToBeReceived) returns(uint256) {
         (bool success , bytes memory res) = tokenToBeReceived.call(abi.encodeWithSelector(IERC20.balanceOf.selector, address(this)));
 
-        require(success, "Comm error");
+        require(success, "Err9");
         return abi.decode(res, (uint256));
     }
 
     /// @notice Adds a token which can be traded against our Token
     function addApprovedToken(address token, uint8 decimals) external _onlyOwner {
-        require(decimals <= 18, "Decimal err");
+        require(decimals <= 18, "Err10");
         if (_tokenIsApproved[token]) return;
 
         _tokenIsApproved[token] = true;

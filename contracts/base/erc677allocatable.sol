@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity >= 0.8.0;
+pragma solidity >= 0.8.20;
 
 import { DurationUnits } from  "../enums.sol";
 import { ERC20Vested } from "./utils/erc20vested.sol";
@@ -8,9 +8,10 @@ import { IERC20 } from "../interfaces/ierc20.sol";
 import { IERC20Errors } from "../interfaces/ierc20errors.sol";
 import { IERC677Errors } from "../interfaces/ierc677errors.sol";
 
-import { IRouterClient } from "@chainlink/contracts-ccip/src/v0.8/ccip/interfaces/IRouterClient.sol";
-import { CCIPReceiver } from "@chainlink/contracts-ccip/src/v0.8/ccip/applications/CCIPReceiver.sol";
 import { Client } from "@chainlink/contracts-ccip/src/v0.8/ccip/libraries/Client.sol";
+import { CCIPReceiver } from "@chainlink/contracts-ccip/src/v0.8/ccip/applications/CCIPReceiver.sol";
+import { IRouterClient } from "@chainlink/contracts-ccip/src/v0.8/ccip/interfaces/IRouterClient.sol";
+
 
 contract ERC677Allocatable is ERC20Vested, CCIPReceiver {
     IRouterClient public immutable _ccipRouter;  // Chainlink CCIP Router
@@ -19,7 +20,7 @@ contract ERC677Allocatable is ERC20Vested, CCIPReceiver {
     /// @dev Modifier that checks if the chain with the given destinationChainSelector is allowed.
     /// @param _destinationChainSelector The selector of the destination chain.
     modifier onlyAllowlistedChain(uint64 _destinationChainSelector) {
-        require(_allowlistedChains[_destinationChainSelector], "Destination chain not allowed");
+        require(_allowlistedChains[_destinationChainSelector], "Chain err");
         _;
     }
 
@@ -83,7 +84,7 @@ contract ERC677Allocatable is ERC20Vested, CCIPReceiver {
     /// @param to The beneficiary
     /// @param amount The amount
     function allocate(address to, uint256 amount) external onlyOwner {
-        require(to != _owner && to != address(0), "Not allowed");
+        require(to != _owner && to != address(0), "Err");
         if(amount > _availableTokens) revert ERC20InsufficientBalance(_owner, _availableTokens, amount);
         super._update(address(0), to, amount);
 
@@ -94,7 +95,7 @@ contract ERC677Allocatable is ERC20Vested, CCIPReceiver {
     /// @param to The beneficiaries
     /// @param amount The amounts
     function massAllocation(address[] memory to, uint256[] memory amount) external onlyOwner {
-        require(to.length == amount.length, "Dim err");
+        require(to.length == amount.length, "Err");
 
         for (uint i = 0; i < to.length; i++) {
             this.allocate(to[i], amount[i]);
@@ -110,15 +111,14 @@ contract ERC677Allocatable is ERC20Vested, CCIPReceiver {
     /// @param destinationChain The destination chain
     /// @param receiver The address of the receiver
     /// @param gasLimit The max amount of gas to be paid
-    /// @param allowOutOfOrderExecution True to allow out of order execution
-    function sendTokensPayLINK(uint256 amount, uint64 destinationChain, address receiver, uint256 gasLimit, bool allowOutOfOrderExecution) external 
+    function sendTokensPayLINK(uint256 amount, uint64 destinationChain, address receiver, uint256 gasLimit) external 
     onlyAllowlistedChain(destinationChain) returns(bytes32 messageId) {
         if (receiver == address(0)) revert ERC20InvalidReceiver(receiver);
 
         uint256 availableBalance = _releaseTokens(msg.sender, amount);
         if (availableBalance < amount) revert ERC20InsufficientBalance(msg.sender, availableBalance, amount);
 
-        Client.EVM2AnyMessage memory message = _buildCCIPMessage(receiver, amount, address(_linkToken), gasLimit, allowOutOfOrderExecution);
+        Client.EVM2AnyMessage memory message = _buildCCIPMessage(receiver, amount, address(_linkToken), gasLimit);
 
         // Get the fee required to send the message
         uint256 fees = _ccipRouter.getFee(destinationChain, message);
@@ -156,7 +156,7 @@ contract ERC677Allocatable is ERC20Vested, CCIPReceiver {
     /// @param receiver The address of the receiver.
     /// @param amount The amount of the token to be transferred.
     /// @param feeTokenAddress The address of the token used for fees. Set address(0) for native gas.
-    function _buildCCIPMessage(address receiver, uint256 amount, address feeTokenAddress, uint256 gasLimit, bool allowOutOfOrderExecution) private view returns (Client.EVM2AnyMessage memory) {
+    function _buildCCIPMessage(address receiver, uint256 amount, address feeTokenAddress, uint256 gasLimit) private view returns (Client.EVM2AnyMessage memory) {
         // Set the token amounts
         Client.EVMTokenAmount[] memory tokenAmounts = new Client.EVMTokenAmount[](1);
         tokenAmounts[0] = Client.EVMTokenAmount({
@@ -172,9 +172,8 @@ contract ERC677Allocatable is ERC20Vested, CCIPReceiver {
                 tokenAmounts: tokenAmounts, // The amount and type of token being transferred
                 extraArgs: Client._argsToBytes(
                     // Additional arguments, setting gas limit and allowing out-of-order execution.
-                    Client.EVMExtraArgsV2({
-                        gasLimit: gasLimit, // Gas limit for the callback on the destination chain
-                        allowOutOfOrderExecution: allowOutOfOrderExecution // Allows the message to be executed out of order relative to other messages from the same sender
+                    Client.EVMExtraArgsV1({
+                        gasLimit: gasLimit // Gas limit for the callback on the destination chain
                     })
                 ),
                 // Set the feeToken to a feeTokenAddress, indicating specific asset will be used for fees

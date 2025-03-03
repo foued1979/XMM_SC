@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // OpenZeppelin Contracts (last updated v5.2.0) (token/ERC20/ERC20.sol)
 
-pragma solidity >= 0.8.0;
+pragma solidity >= 0.8.20;
 
 import {IERC20} from "../../interfaces/ierc20.sol";
 import {IERC20Metadata} from "../../interfaces/ierc20metadata.sol";
@@ -26,7 +26,7 @@ import {IERC20Errors} from "../../interfaces/ierc20errors.sol";
  * conventional and does not conflict with the expectations of ERC-20
  * applications.
  */
-abstract contract ERC20 is Context, IERC20, IERC20Metadata, IERC20Errors {
+abstract contract ERC20 is IERC20, IERC20Metadata, IERC20Errors {
     mapping(address account => uint256) private _balances;
 
     mapping(address account => mapping(address spender => uint256)) private _allowances;
@@ -104,7 +104,7 @@ abstract contract ERC20 is Context, IERC20, IERC20Metadata, IERC20Errors {
      * - the caller must have a balance of at least `value`.
      */
     function transfer(address to, uint256 value) public virtual returns (bool) {
-        address owner = _msgSender();
+        address owner = msg.sender;
         _transfer(owner, to, value);
         return true;
     }
@@ -127,7 +127,7 @@ abstract contract ERC20 is Context, IERC20, IERC20Metadata, IERC20Errors {
      * - `spender` cannot be the zero address.
      */
     function approve(address spender, uint256 value) public virtual returns (bool) {
-        address owner = _msgSender();
+        address owner = msg.sender;
         _approve(owner, spender, value);
         return true;
     }
@@ -149,7 +149,7 @@ abstract contract ERC20 is Context, IERC20, IERC20Metadata, IERC20Errors {
      * `value`.
      */
     function transferFrom(address from, address to, uint256 value) public virtual returns (bool) {
-        address spender = _msgSender();
+        address spender = msg.sender;
         _spendAllowance(from, spender, value);
         _transfer(from, to, value);
         return true;
@@ -209,21 +209,6 @@ abstract contract ERC20 is Context, IERC20, IERC20Metadata, IERC20Errors {
         }
 
         emit Transfer(from, to, value);
-    }
-
-    /**
-     * @dev Creates a `value` amount of tokens and assigns them to `account`, by transferring it from address(0).
-     * Relies on the `_update` mechanism
-     *
-     * Emits a {Transfer} event with `from` set to the zero address.
-     *
-     * NOTE: This function is not virtual, {_update} should be overridden instead.
-     */
-    function _mint(address account, uint256 value) internal {
-        if (account == address(0)) {
-            revert ERC20InvalidReceiver(address(0));
-        }
-        _update(address(0), account, value);
     }
 
     /**

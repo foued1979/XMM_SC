@@ -1,11 +1,13 @@
 // SPDX-License-Identifier: MIT
-pragma solidity >= 0.8.0;
+pragma solidity >= 0.8.20;
 
-import { ERC677Base } from "./base/erc677base.sol";
 import { IERC20Errors } from "./interfaces/ierc20errors.sol";
 import { IERC20 } from "./interfaces/ierc20.sol";
 
-contract Token is ERC677Base {
+import { ERC677Allocatable } from "./base/erc677allocatable.sol";
+import { ERC20Exchangeable } from "./base/erc20exchangeable.sol";
+
+contract OneXMM is ERC677Allocatable, ERC20Exchangeable {
     /**********
      * Events *
      **********/
@@ -21,8 +23,9 @@ contract Token is ERC677Base {
      * @param initialSupply_ The initial supply
      * @param initialOwnerAllocation_ The initial allocation to the owner
      */
-    constructor(string memory symbol_, address ccipRouter_, address linkToken_,  string memory name_, uint32 initialSupply_, uint32 initialOwnerAllocation_) 
-        ERC677Base(msg.sender, ccipRouter_, linkToken_, initialSupply_, name_, symbol_, 18) payable {
+    constructor(string memory symbol_, address ccipRouter_, address linkToken_,  string memory name_, uint32 initialSupply_, uint32 initialOwnerAllocation_)
+        ERC677Allocatable(msg.sender, ccipRouter_, linkToken_, initialSupply_, name_, symbol_, 18)
+        ERC20Exchangeable(msg.sender) payable {
         allocateToOwner(uint256(initialOwnerAllocation_) * uint256(10 ** 18));
     }
 

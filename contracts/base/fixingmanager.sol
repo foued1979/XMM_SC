@@ -220,7 +220,7 @@ abstract contract FixingManager is FixingStore, Rebatable, IFixingManager {
     ///         To avoid multiple updates or wrong fixing updates, only the missed fixing index can be updated 1 time
     function updateMissedFixing(uint missedFixingTimestamp, uint64 spot, uint64[] memory callPremia_t_1__t, uint64[] memory putPremia_t_1__t) external onlyOwner {
         (bool good, uint missedFixingIndex) = Utils.itemExistsInArray(missedFixingTimestamp, _missedFixingTimestamps);
-        require(good, "Bad missed timestamp");
+        require(good, "Err ts");
 
         (uint64 prevFixingSpot, Fixing storage lastFixing) = _getMissedFixingInfo(missedFixingTimestamp);
 

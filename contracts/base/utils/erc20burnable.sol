@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // OpenZeppelin Contracts (last updated v5.0.0) (token/ERC20/extensions/ERC20Capped.sol)
 
-pragma solidity >= 0.8.0;
+pragma solidity >= 0.8.20;
 
 import { ERC20CappedAndOwned } from "./erc20cappedandowned.sol";
 
@@ -38,12 +38,12 @@ abstract contract ERC20Burnable is ERC20CappedAndOwned {
      */
     function burn(uint256 value) public virtual {
         // Owner cannot burn allocated tokens
-        if (_msgSender() == _owner) {
-            require(value <= _availableTokens, "Burn failed");
+        if (msg.sender == _owner) {
+            require(value <= _availableTokens, "Burn err");
             _availableTokens -= value;
         }
         else {
-            _burn(_msgSender(), value);
+            _burn(msg.sender, value);
         }
 
         _cap -= value;
@@ -51,27 +51,7 @@ abstract contract ERC20Burnable is ERC20CappedAndOwned {
         emit Burnt(block.timestamp, value);
     }
 
-    /**
-     * @dev Destroys a `value` amount of tokens from `account`, deducting from
-     * the caller's allowance.
-     *
-     * See {ERC20-_burn} and {ERC20-allowance}.
-     *
-     * Requirements:
-     *
-     * - the caller must have allowance for ``accounts``'s tokens of at least
-     * `value`.
-     */
-    function burnFrom(address account, uint256 value) public virtual {
-        // Owner is not allowed to burn from an account
-        if (_msgSender() == _owner) return;
-
-        _spendAllowance(account, _msgSender(), value);
-        _burn(account, value);
-        _cap -= value;
-
-        emit Burnt(block.timestamp, value);
-    }
+    // burnFrom is not implemented; each user must burn its own token
 
     /**
      * @dev See {ERC20-_update}.

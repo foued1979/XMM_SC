@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity >= 0.8.0;
+pragma solidity >= 0.8.20;
 
 interface IOwned {
     /// @notice Emitted when ownership of the contracted is transferred to a new owner

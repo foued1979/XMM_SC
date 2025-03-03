@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity >= 0.8.0;
+pragma solidity >= 0.8.20;
 
 import { IOwned } from  "../../interfaces/iowned.sol";
 
@@ -8,7 +8,7 @@ abstract contract Owned is IOwned {
      * The modifiers *
      *****************/
     modifier onlyOwner {
-        require(msg.sender == _owner, "Only owner");
+        require(msg.sender == _owner, "Err owner");
         _;
     }
 
