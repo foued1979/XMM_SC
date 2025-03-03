@@ -1,29 +1,32 @@
 // SPDX-License-Identifier: MIT
+// OpenZeppelin Contracts (last updated v5.0.0) (token/ERC20/extensions/ERC20Capped.sol)
 
 pragma solidity >= 0.8.0;
 
-import { ERC20Allocatable } from "./erc20allocatable.sol";
-import { ERC20Exchangeable } from "./erc20exchangeable.sol";
+import { ERC20CappedAndOwned } from "./erc20cappedandowned.sol";
 
 /**
- * @dev Extension of {ERC20} that allows token holders to destroy both their own
- * tokens and those that they have an allowance for, in a way that can be
- * recognized off-chain (via event analysis).
+ * @dev Extension of {ERC20} that adds a cap to the supply of tokens.
  */
-abstract contract ERC20ExchangeableAndBurnable is ERC20Allocatable, ERC20Exchangeable {
+abstract contract ERC20Burnable is ERC20CappedAndOwned {
     /**********
      * Events *
      **********/
     /// @notice The Burnt event is triggered when tokens are burnt
     event Burnt(uint indexed timstamp, uint256 amount);
 
-    /***************
-     * Constructor *
-     ***************/
-    constructor(address owner_, address ccipRouter_, address linkToken_, uint32 initialSupply_, string memory name_, string memory symbol_, uint8 decimals_)
-        ERC20Allocatable(owner_, ccipRouter_, linkToken_, initialSupply_, name_, symbol_, decimals_)
-        ERC20Exchangeable(owner_)
-    { }
+    /**************
+     * Properties *
+     **************/
+    // Private Properties
+    uint256 internal _availableTokens;
+
+    /**
+     * @dev Sets the value of the `cap`. This value is immutable, it can only be
+     * set once during construction.
+     */
+    constructor(address owner_, uint32 initialSupply_, string memory name_, string memory symbol_, uint8 decimals_)
+        ERC20CappedAndOwned(owner_, initialSupply_, name_, symbol_, decimals_) {}
 
     /**
      * @dev Destroys a `value` amount of tokens.
@@ -34,14 +37,16 @@ abstract contract ERC20ExchangeableAndBurnable is ERC20Allocatable, ERC20Exchang
      * See {ERC20-_burn}.
      */
     function burn(uint256 value) public virtual {
+        // Owner cannot burn allocated tokens
         if (_msgSender() == _owner) {
             require(value <= _availableTokens, "Burn failed");
-            _update(address(0), address(0), value);
             _availableTokens -= value;
         }
         else {
             _burn(_msgSender(), value);
         }
+
+        _cap -= value;
 
         emit Burnt(block.timestamp, value);
     }
@@ -63,7 +68,16 @@ abstract contract ERC20ExchangeableAndBurnable is ERC20Allocatable, ERC20Exchang
 
         _spendAllowance(account, _msgSender(), value);
         _burn(account, value);
+        _cap -= value;
 
         emit Burnt(block.timestamp, value);
+    }
+
+    /**
+     * @dev See {ERC20-_update}.
+     */
+    function _update(address from, address to, uint256 value) internal virtual override {
+        super._update(from, to, value);
+        _availableTokens = cap() - totalSupply();
     }
 }

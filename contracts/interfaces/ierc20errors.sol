@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: MIT
-// OpenZeppelin Contracts (last updated v5.1.0) (interfaces/draft-IERC6093.sol)
-pragma solidity ^0.8.20;
+pragma solidity >= 0.8.0;
 
 /**
  * @dev Standard ERC-20 Errors
@@ -46,4 +45,12 @@ interface IERC20Errors {
      * @param spender Address that may be allowed to operate on tokens without being their owner.
      */
     error ERC20InvalidSpender(address spender);
+
+    /**
+     * @dev Indicates a failure with the `amount` to be approved. Used in approvals.
+     * @param from Address of the sender.
+     * @param to Address of the receiver.
+     * @param amount Amount of tokens to be approved.
+     */
+    error ERC20TransferFailed(address from, address to, uint256 amount);
 }

@@ -183,13 +183,6 @@ abstract contract ERC20 is Context, IERC20, IERC20Metadata, IERC20Errors {
      * Emits a {Transfer} event.
      */
     function _update(address from, address to, uint256 value) internal virtual {
-        // When owner burns some tokens, both `from` and `to` are address(0)
-        // This case can only be triggered internally
-        if (from == address(0) && to == address(0)) {
-            _totalSupply -= value;
-            return;
-        }
-
         if (from == address(0)) {
             _totalSupply += value;
         } else {

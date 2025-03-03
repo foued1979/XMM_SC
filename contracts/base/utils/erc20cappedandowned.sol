@@ -10,7 +10,7 @@ import { Owned } from "./owned.sol";
  * @dev Extension of {ERC20} that adds a cap to the supply of tokens.
  */
 abstract contract ERC20CappedAndOwned is ERC20, Owned {
-    uint256 private immutable _cap;
+    uint256 internal _cap;
 
     /**
      * @dev Total supply cap has been exceeded.
@@ -21,12 +21,6 @@ abstract contract ERC20CappedAndOwned is ERC20, Owned {
      * @dev The supplied cap is not a valid cap.
      */
     error ERC20InvalidCap(uint256 cap);
-
-    /**************
-     * Properties *
-     **************/
-    // Private Properties
-    uint256 internal _availableTokens;
 
     /**
      * @dev Sets the value of the `cap`. This value is immutable, it can only be
@@ -58,8 +52,6 @@ abstract contract ERC20CappedAndOwned is ERC20, Owned {
             if (supply > maxSupply) {
                 revert ERC20ExceededCap(supply, maxSupply);
             }
-
-            _availableTokens = maxSupply - supply;
         }
     }
 }

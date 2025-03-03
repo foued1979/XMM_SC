@@ -6,9 +6,9 @@ import { IERC20 } from  "../../interfaces/ierc20.sol";
 import { DurationUnits } from  "../../enums.sol";
 import { VestingSchedule } from  "../../structures/vestingschedule.sol";
 
-import { ERC20CappedAndOwned } from  "./erc20cappedandowned.sol";
+import { ERC20Burnable } from  "./erc20burnable.sol";
 
-abstract contract ERC20Vested is ERC20CappedAndOwned {
+abstract contract ERC20Vested is ERC20Burnable {
     /**********
      * Events *
      **********/
@@ -30,7 +30,7 @@ abstract contract ERC20Vested is ERC20CappedAndOwned {
      * Constructor *
      ***************/
     constructor(address owner_, uint32 initialSupply_, string memory name_, string memory symbol_, uint8 decimals_)
-        ERC20CappedAndOwned(owner_, initialSupply_, name_, symbol_, decimals_)
+        ERC20Burnable(owner_, initialSupply_, name_, symbol_, decimals_)
     {}
 
     /// @notice Transfers tokens from the msg sender to another address
