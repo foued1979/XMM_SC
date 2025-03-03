@@ -26,17 +26,17 @@ describe('Test base token functions', function () {
     it('Allocation is done properly and is reflected in AllocatedAmount', async function () {
       const token = await loadFixture(_deploy);
       
-      //const ownerAmount = 250_000n * BigInt(10 ** 18);
-      //const amount1 = 100n * BigInt(10 ** 18);
-      //await expect(token.allocate("0x1234567890123456789012345678901234567890", amount1)).to.emit(token, 'Allocated');
+      const ownerAmount = 250_000n * BigInt(10 ** 18);
+      const amount1 = 100n * BigInt(10 ** 18);
+      await expect(token.allocate("0x1234567890123456789012345678901234567890", amount1)).to.emit(token, 'Allocated');
 
-      //const amount2 = 50n * BigInt(10 ** 18);
-      //await token.allocate("0x1234567890123456789012345678901233458793", amount2);
+      const amount2 = 50n * BigInt(10 ** 18);
+      await token.allocate("0x1234567890123456789012345678901233458793", amount2);
 
-      //expect(await token.balanceOf("0x1234567890123456789012345678901234567890")).to.equal(amount1);
-      //expect(await token.balanceOf("0x1234567890123456789012345678901233458793")).to.equal(amount2);
-      //expect(await token.allocatedAmount()).to.equal(ownerAmount + amount1 + amount2);
-      //expect(await token.availableTokens()).to.equal(5_000_000n * BigInt(10 ** 18) - (ownerAmount + amount1 + amount2));
+      expect(await token.balanceOf("0x1234567890123456789012345678901234567890")).to.equal(amount1);
+      expect(await token.balanceOf("0x1234567890123456789012345678901233458793")).to.equal(amount2);
+      expect(await token.allocatedAmount()).to.equal(ownerAmount + amount1 + amount2);
+      expect(await token.availableTokens()).to.equal(5_000_000n * BigInt(10 ** 18) - (ownerAmount + amount1 + amount2));
     });
 
     it('Can allocate to different users', async function() {
