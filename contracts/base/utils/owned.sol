@@ -25,12 +25,12 @@ abstract contract Owned is IOwned {
         _owner = owner_;
     }
 
-    /// @notice Returns the current owner of the contract
+    /// @dev Returns the current owner of the contract
     function owner() external view returns (address) {
         return _owner;
     }
 
-    /// @notice Changes the ownership of the contract
+    /// @dev Changes the ownership of the contract
     /// @param newOwner The new owner
     function changeOwnership(address newOwner) external onlyOwner {
         _owner = newOwner;

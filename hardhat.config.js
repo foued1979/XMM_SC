@@ -11,5 +11,5 @@ module.exports = {
         runs: 20,
       },
     },
-  } 
+  },
 };

@@ -11,7 +11,7 @@ abstract contract Owned {
      * The modifiers *
      *****************/
     modifier onlyOwner {
-        require(msg.sender == Owner, "Only owner");
+        require(msg.sender == Owner, "Owner err");
         _;
     }
 

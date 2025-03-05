@@ -24,7 +24,7 @@ abstract contract Owned {
         Owner = owner;
     }
 
-    /// @notice Changes the ownership of the contract
+    /// @dev Changes the ownership of the contract
     function changeOwnership(address newOwner, bool activationStatus) external onlyOwner {
         IsActivated = activationStatus;
         

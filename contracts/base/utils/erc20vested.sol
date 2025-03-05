@@ -2,6 +2,7 @@
 pragma solidity >= 0.8.20;
 
 import { IERC20 } from  "../../interfaces/ierc20.sol";
+import { IERC20Errors } from  "../../interfaces/ierc20errors.sol";
 
 import { DurationUnits } from  "../../enums.sol";
 import { VestingSchedule } from  "../../structures/vestingschedule.sol";
@@ -12,17 +13,17 @@ abstract contract ERC20Vested is ERC20Burnable {
     /**********
      * Events *
      **********/
-    /// @notice Emitted when a vesting schedule is created
-    event VestingScheduleCreated(address indexed beneficiary, uint indexed timestamp, uint start, uint end, uint256 amount);
-    /// @notice Emitted when a vesting schedule is created
+    /// @dev Emitted when a vesting schedule is created
+    event VestingScheduleCreated(address indexed beneficiary, uint indexed timestamp, uint start, uint end, uint8 upfrontRelease, uint256 amount);
+    /// @dev Emitted when a vesting schedule is created
     event TokensAddedToVestingSchedule(address indexed beneficiary, uint indexed timestamp, uint256 amount);
-    /// @notice Emitted when tokens are released
+    /// @dev Emitted when tokens are released
     event TokensReleased(address indexed beneficiary, uint indexed timestamp, uint256 amount);
 
     /**************
      * Properties *
      **************/
-    /// @notice The vesting schedules for each beneficiary
+    /// @dev The vesting schedules for each beneficiary
     mapping(address beneficiary => VestingSchedule) private _vestingSchedules;
     mapping(address beneficiary => bool) private _hasVestingSchedule;
 
@@ -33,33 +34,25 @@ abstract contract ERC20Vested is ERC20Burnable {
         ERC20Burnable(owner_, initialSupply_, name_, symbol_, decimals_)
     {}
 
-    /// @notice Transfers tokens from the msg sender to another address
+    /// @dev Transfers tokens from the msg sender to another address
     /// overrides the transfer function of ERC20
     function transfer(address to, uint256 value) public override returns(bool) {
         uint256 releasableAmount = _releaseTokens(msg.sender, value);
+        require(releasableAmount >= value, "Vest err");
 
-        if (releasableAmount > 0) {
-            super.transfer(to, releasableAmount);
-            return true;
-        }
-
-        return false;
+        return super.transfer(to, value);
     }
 
-    /// @notice Transfers tokens from one address to another
+    /// @dev Transfers tokens from one address to another
     /// overrides the transferFrom function of ERC20
     function transferFrom(address from, address to, uint256 value) public override returns(bool) {
         uint256 releasableAmount = _releaseTokens(from, value);
+        require(releasableAmount >= value, "Vest err");
 
-        if (releasableAmount > 0) {
-            super.transferFrom(from, to, releasableAmount);
-            return true;
-        }
-
-        return false;
+        return super.transferFrom(from, to, value);
     }
 
-    /// @notice Gets the remaining amount of tokens which are vested
+    /// @dev Gets the remaining amount of tokens which are vested
     function getRemainingVestedAmount() public view returns(uint256) {
         if (_hasVestingSchedule[msg.sender]) {
             VestingSchedule storage schedule = _vestingSchedules[msg.sender];
@@ -69,37 +62,38 @@ abstract contract ERC20Vested is ERC20Burnable {
         return 0;
     }
 
-    /// @notice Gets the amount of vested tokens which can be withdrawn by the msg.sender
-    function getReleasableAmount() public returns(uint256) {
-        return _getReleasableAmount(msg.sender);
+    /// @dev Gets the amount of vested tokens which can be withdrawn by the msg.sender
+    function getReleasableAmount() external view returns(uint256) {
+        (uint256 amt, ) = _getReleasableAmount(msg.sender);
+        return amt;
     }
 
-    /// @notice Gets the amount of vested tokens which can be withdrawn by the beneficiary
-    function _getReleasableAmount(address beneficiary) internal returns(uint256) {
+    /// @dev Gets the amount of vested tokens which can be withdrawn by the beneficiary
+    function _getReleasableAmount(address beneficiary) internal view returns(uint256, bool) {
+        uint256 totalReleasableAmount = 0;
+
         if (_hasVestingSchedule[beneficiary]) {
             VestingSchedule storage schedule = _vestingSchedules[beneficiary];
-
+            
             // if end of cliff period has not been reached, 0 can be released
-            if (block.timestamp < schedule.start) return 0;
-            if (block.timestamp > schedule.end) {
-                // to avoid future computations, we remove the schedule attached to the beneficiary
-                _hasVestingSchedule[beneficiary] = false;
-                delete _vestingSchedules[beneficiary];
-
-                return schedule.totalAmount - schedule.released;
+            if (block.timestamp < schedule.start) return (0, false);
+            if (block.timestamp >= schedule.end) {
+                totalReleasableAmount = schedule.totalAmount - schedule.released;
+                return (totalReleasableAmount, true);
             }
-
-            uint256 totalReleasableAmount = uint256((schedule.totalAmount * (block.timestamp - schedule.start)) / schedule.totalDuration);
-
+            
+            uint256 upfrontRelease = uint256((schedule.totalAmount * schedule.upfrontRelease) / 100);
+            totalReleasableAmount = upfrontRelease + uint256(((schedule.totalAmount - upfrontRelease) * (block.timestamp - schedule.start)) / schedule.totalDuration);
+            
             // Sanity check - we make sure to always release at max the total amount of tokens
             if (totalReleasableAmount > schedule.totalAmount) totalReleasableAmount = schedule.totalAmount;
-            return totalReleasableAmount - schedule.released;
+            return (totalReleasableAmount - schedule.released, false);
         }
 
-        return 0;
+        return (0, false);
     }
 
-    /// @notice Gets the amount of tokens which are not vested
+    /// @dev Gets the amount of tokens which are not vested
     function _getNonVestedAmount(address beneficiary) internal view returns(uint256) {
         if (_hasVestingSchedule[beneficiary]) {
             VestingSchedule storage schedule = _vestingSchedules[beneficiary];
@@ -111,26 +105,20 @@ abstract contract ERC20Vested is ERC20Burnable {
         return 0;
     }
 
-    /// @notice Computes the amount of tokens which can be released and updates the schedule (if ever)
+    /// @dev Computes the amount of tokens which can be released and updates the schedule (if ever)
     function _releaseTokens(address beneficiary, uint256 amount) internal returns(uint256) {
         if (_hasVestingSchedule[beneficiary]) {
-            uint256 releasableAmount = _getReleasableAmount(beneficiary);
-            
-            // if beneficiary has enough available tokens to be released, we release them
-            if (releasableAmount >= amount) {
-                _vestingSchedules[beneficiary].released += amount;
-                emit TokensReleased(beneficiary, block.timestamp, amount);
-                return amount;
-            }
-
+            (uint256 releasableAmount, bool canDelete) = _getReleasableAmount(beneficiary);
             uint256 extraAmount = _getNonVestedAmount(beneficiary);
 
-            // if beneficiary does not have enough tokens to be released, we release the maximum amount possible
-            // we complete with the non-vested tokens
-            _vestingSchedules[beneficiary].released += releasableAmount;
-            emit TokensReleased(beneficiary, block.timestamp, releasableAmount);
-
-            if (releasableAmount + extraAmount >= amount) return amount;
+            if (canDelete) {
+                _hasVestingSchedule[beneficiary] = false;
+                delete _vestingSchedules[beneficiary];
+            } else {
+                _vestingSchedules[beneficiary].released += releasableAmount;
+                emit TokensReleased(beneficiary, block.timestamp, releasableAmount);
+            }
+            
             return releasableAmount + extraAmount;
         }
 
@@ -138,14 +126,15 @@ abstract contract ERC20Vested is ERC20Burnable {
     }
 
      /**
-     * @notice Creates a vesting schedule
+     * @dev Creates a vesting schedule
      * @param beneficiary The address of the beneficiary
+     * @param upfrontRelease The amount released when cliff period ends
      * @param start The start UNIX timestamp of the vesting period - this can correspond to a cliff period
      * @param duration The duration of the vesting period in DurationUnits
      * @param durationUnit The units of the duration(0 = days, 1 = weeks, 2 = months)
      * @param amount The total amount of tokens to be vested
      */
-    function _createVestingSchedule(address beneficiary, uint start, uint16 duration, DurationUnits durationUnit, uint256 amount) internal {
+    function _createVestingSchedule(address beneficiary, uint8 upfrontRelease, uint start, uint16 duration, DurationUnits durationUnit, uint256 amount) internal {
         // perform input checks
         require(beneficiary != address(0) && amount > 0 && start > block.timestamp && duration > 0, "Vesting Err");
 
@@ -156,27 +145,20 @@ abstract contract ERC20Vested is ERC20Burnable {
             emit TokensAddedToVestingSchedule(beneficiary, block.timestamp, amount);
             return;
         }
-
+        
         uint end = _addDuration(start, duration, durationUnit);
-
+        
         // create the vesting schedule and add it to the list of schedules for the beneficiary
-        _vestingSchedules[beneficiary] = VestingSchedule({
-                beneficiary: beneficiary,
-                start: start,
-                end: end,
-                totalDuration: end - start,
-                totalAmount: amount,
-                released: 0
-            });
+        _vestingSchedules[beneficiary] = VestingSchedule(beneficiary, upfrontRelease, start, end, end - start, amount, 0);
         _hasVestingSchedule[beneficiary] = true;
 
-        emit VestingScheduleCreated(beneficiary, block.timestamp, start, end, amount);
+        emit VestingScheduleCreated(beneficiary, block.timestamp, start, end, upfrontRelease, amount);
     }
 
     /*******************
      * Private Methods *
      *******************/
-    /// @notice Adds a duration to a timestamp
+    /// @dev Adds a duration to a timestamp
     function _addDuration(uint start, uint16 duration, DurationUnits durationUnit) internal pure returns(uint) {
         if (durationUnit == DurationUnits.Days) return start + duration * 86_400;
         if (durationUnit == DurationUnits.Weeks) return start + duration * 604_800;

@@ -12,7 +12,7 @@ abstract contract ERC20Burnable is ERC20CappedAndOwned {
     /**********
      * Events *
      **********/
-    /// @notice The Burnt event is triggered when tokens are burnt
+    /// @dev The Burnt event is triggered when tokens are burnt
     event Burnt(uint indexed timstamp, uint256 amount);
 
     /**************
@@ -29,6 +29,13 @@ abstract contract ERC20Burnable is ERC20CappedAndOwned {
         ERC20CappedAndOwned(owner_, initialSupply_, name_, symbol_, decimals_) {}
 
     /**
+     * @dev Gets the amount of tokens which remains to be allocated
+     */
+    function availableTokens() external view returns(uint256) {
+        return _availableTokens;
+    }
+
+    /**
      * @dev Destroys a `value` amount of tokens.
      * @param value The amount of tokens to be burnt
      *
@@ -37,17 +44,24 @@ abstract contract ERC20Burnable is ERC20CappedAndOwned {
      * See {ERC20-_burn}.
      */
     function burn(uint256 value) public virtual {
+        _burn(msg.sender, value);
+    }
+
+    /**
+     * See {ERC20-_burn}.
+     * Overrides the ERC20 method to adjust the cap amount.
+     */
+    function _burn(address account, uint256 value) internal override {
         // Owner cannot burn allocated tokens
         if (msg.sender == _owner) {
             require(value <= _availableTokens, "Burn err");
-            _availableTokens -= value;
         }
         else {
-            _burn(msg.sender, value);
+            super._burn(account, value);
         }
-
+        
+        _availableTokens -= value;
         _cap -= value;
-
         emit Burnt(block.timestamp, value);
     }
 

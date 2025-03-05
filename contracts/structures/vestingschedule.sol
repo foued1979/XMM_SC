@@ -6,6 +6,8 @@ import { DurationUnits } from  "../enums.sol";
 struct VestingSchedule {
     // beneficiary of tokens after they are released
     address beneficiary;
+    // The upfront release when the vesting starts
+    uint8 upfrontRelease;
     // start time of the vesting period
     uint start;
     // end of the vesting period in DurationUnits

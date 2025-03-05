@@ -12,7 +12,6 @@ import { Client } from "@chainlink/contracts-ccip/src/v0.8/ccip/libraries/Client
 import { CCIPReceiver } from "@chainlink/contracts-ccip/src/v0.8/ccip/applications/CCIPReceiver.sol";
 import { IRouterClient } from "@chainlink/contracts-ccip/src/v0.8/ccip/interfaces/IRouterClient.sol";
 
-
 contract ERC677Allocatable is ERC20Vested, CCIPReceiver {
     IRouterClient public immutable _ccipRouter;  // Chainlink CCIP Router
     IERC20 public immutable _linkToken;  // Chainlink CCIP Router
@@ -27,7 +26,7 @@ contract ERC677Allocatable is ERC20Vested, CCIPReceiver {
     /**********
      * Events *
      **********/
-    /// @notice The Allocated event is triggered when Owner allocates some token to
+    /// @dev The Allocated event is triggered when Owner allocates some token to
     /// a beneficiary
     event Allocated(uint indexed timestamp, address indexed beneficiary, uint256 amount);
     // Event emitted when the tokens are transferred to an account on another chain.
@@ -52,46 +51,48 @@ contract ERC677Allocatable is ERC20Vested, CCIPReceiver {
         _linkToken = IERC20(linkToken_);
     }
 
-    /// @notice Allocates a number of token to a beneficiary
+    /// @dev Allocates a number of token to a beneficiary
     /// @param to The beneficiary
     /// @param amount The amount to allocate
     /// @param cliffDuration The duration of the cliff
     /// @param cliffDurationUnit The unit of the cliff duration
+    /// @param upfrontRelease The amount released when cliff period ends
     /// @param vestingDuration The duration of the vesting
     /// @param vestingDurationUnit The unit of the vesting duration
-    function allocateWithVesting(address to, uint256 amount, uint16 cliffDuration, DurationUnits cliffDurationUnit, uint16 vestingDuration, 
+    function allocateWithVesting(address to, uint256 amount, uint16 cliffDuration, DurationUnits cliffDurationUnit, uint8 upfrontRelease, uint16 vestingDuration, 
     DurationUnits vestingDurationUnit) external onlyOwner {
-        this.allocate(to, amount);
+        allocate(to, amount);
 
         uint vestingStart = _addDuration(block.timestamp, cliffDuration, cliffDurationUnit);
-        _createVestingSchedule(to, vestingStart, vestingDuration, vestingDurationUnit, amount);
+
+        if (upfrontRelease > 100) upfrontRelease = 100;
+        _createVestingSchedule(to,upfrontRelease, vestingStart, vestingDuration, vestingDurationUnit, amount);
     }
 
-    /// @notice Gets whether a chain id is allowed
+    /// @dev Gets whether a chain id is allowed
     function isChainIdAllowed(uint64 chainId) external view returns(bool) {
         return _allowlistedChains[chainId];
     }
 
     /// @dev Updates the allowlist status of a destination chain for transactions.
-    /// @notice This function can only be called by the owner.
+    /// @dev This function can only be called by the owner.
     /// @param _destinationChainSelector The selector of the destination chain to be updated.
     /// @param allowed The allowlist status to be set for the destination chain.
     function allowlistDestinationChain(uint64 _destinationChainSelector, bool allowed) external onlyOwner {
         _allowlistedChains[_destinationChainSelector] = allowed;
     }
 
-    /// @notice Allocates a number of token to a beneficiary
+    /// @dev Allocates a number of token to a beneficiary
     /// @param to The beneficiary
     /// @param amount The amount
-    function allocate(address to, uint256 amount) external onlyOwner {
+    function allocate(address to, uint256 amount) public onlyOwner {
         require(to != _owner && to != address(0), "Err");
-        if(amount > _availableTokens) revert ERC20InsufficientBalance(_owner, _availableTokens, amount);
         super._update(address(0), to, amount);
 
         emit Allocated(block.timestamp, to, amount);
     }
 
-    /// @notice Allocates a number of token to a beneficiary
+    /// @dev Allocates a number of token to a beneficiary
     /// @param to The beneficiaries
     /// @param amount The amounts
     function massAllocation(address[] memory to, uint256[] memory amount) external onlyOwner {
@@ -102,7 +103,7 @@ contract ERC677Allocatable is ERC20Vested, CCIPReceiver {
         }
     }
 
-    /// @notice Sends a number of tokens to a receiver on another chain
+    /// @dev Sends a number of tokens to a receiver on another chain
     /// Users MUST provide allowance to the CCIP router to enable the bridge:
     ///    - For LINK, the allowance is the fee required to send the message
     ///    - For the token, the allowance is the amount to be sent
@@ -140,7 +141,7 @@ contract ERC677Allocatable is ERC20Vested, CCIPReceiver {
         emit TokensTransferred(messageId, destinationChain, receiver, amount, address(_linkToken), fees);
     }
     
-    /// @notice Receives tokens from another chain
+    /// @dev Receives tokens from another chain
     /// @param message The transfer message sent by the CCIP Router
     function _ccipReceive(Client.Any2EVMMessage memory message) internal override {
         address sender = abi.decode(message.sender, (address));
@@ -151,7 +152,7 @@ contract ERC677Allocatable is ERC20Vested, CCIPReceiver {
         emit TokensReceived(block.timestamp, receiver, sender, message.messageId, amount);
     }
 
-    /// @notice Construct a CCIP message.
+    /// @dev Construct a CCIP message.
     /// @dev This function will create an EVM2AnyMessage struct with all the necessary information for tokens transfer.
     /// @param receiver The address of the receiver.
     /// @param amount The amount of the token to be transferred.

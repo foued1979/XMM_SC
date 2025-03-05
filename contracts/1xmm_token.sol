@@ -26,14 +26,14 @@ contract OneXMM is ERC677Allocatable, ERC20Exchangeable {
     constructor(string memory symbol_, address ccipRouter_, address linkToken_,  string memory name_, uint32 initialSupply_, uint32 initialOwnerAllocation_)
         ERC677Allocatable(msg.sender, ccipRouter_, linkToken_, initialSupply_, name_, symbol_, 18)
         ERC20Exchangeable(msg.sender) payable {
-        allocateToOwner(uint256(initialOwnerAllocation_) * uint256(10 ** 18));
+        _allocateToOwner(uint256(initialOwnerAllocation_) * uint256(10 ** 18));
     }
 
     receive() external payable {
         emit Deposited(block.timestamp, msg.sender, msg.value, 0);
     }
 
-    /// @notice Enables a user to deposit ETH and receive Tokens in exchange
+    /// @dev Enables a user to deposit ETH and receive Tokens in exchange
     /// The conversion rate applies at a fixed rate, updated by Owner
     function depositEther() external payable ethDepositIsAllowed returns(uint256) {
         uint256 amountETH = msg.value;
@@ -59,13 +59,13 @@ contract OneXMM is ERC677Allocatable, ERC20Exchangeable {
         return amountToken;
     }
 
-    /// @notice Enables owner to send back some tokens to the Token contract
+    /// @dev Enables owner to send back some tokens to the Token contract
     function ownerTransfersBack(uint256 amount) external onlyOwner {
         if (amount > balanceOf(_owner)) revert IERC20Errors.ERC20InsufficientBalance(_owner, balanceOf(_owner), amount);
         _update(_owner, address(0), amount);
     }
 
-    /// @notice Enables a user to sell back an amount of Tokens against ETH
+    /// @dev Enables a user to sell back an amount of Tokens against ETH
     /// if there is enough ETH available, and if the change is authorized.
     /// Sold-back tokens are automatically burnt.
     /// @param amountToken The amount of tokens to be exchanged
@@ -88,10 +88,9 @@ contract OneXMM is ERC677Allocatable, ERC20Exchangeable {
 
         emit ChangedBack(block.timestamp, msg.sender, amountETH);
         emit Withdrawn(block.timestamp, msg.sender, amountToken);
-        emit Burnt(block.timestamp, amt256);
     }
 
-    /// @notice Enables a user to sell back an amount of Tokens against a preferred token
+    /// @dev Enables a user to sell back an amount of Tokens against a preferred token
     /// if there is enough token available, and if the change is authorized.
     /// Sold-back tokens are automatically burnt.
     /// @param amountToken The amount of tokens to be exchanged
@@ -122,10 +121,9 @@ contract OneXMM is ERC677Allocatable, ERC20Exchangeable {
 
         emit ChangedBackFor(block.timestamp, msg.sender, tokenToBeReceived, amountExpectedToken);
         emit Withdrawn(block.timestamp, msg.sender, amountToken);
-        emit Burnt(block.timestamp, amt256);
     }
 
-    /// @notice Enables the Owner to buy back tokens from a user, in exchange of ETH
+    /// @dev Enables the Owner to buy back tokens from a user, in exchange of ETH
     /// and at a specified rate
     /// @param from The beneficiary
     /// @param amountToken The amount of tokens
@@ -133,8 +131,10 @@ contract OneXMM is ERC677Allocatable, ERC20Exchangeable {
     function buyBack(address payable from, uint128 amountToken, uint64 rate) external onlyOwner {
         if (balanceOf(from) < uint256(amountToken)) revert IERC20Errors.ERC20InsufficientBalance(msg.sender, balanceOf(msg.sender), amountToken);
 
-        uint256 amountETH = (uint256(amountToken) * uint256(_precision)) / uint256(rate);
         uint256 availableQuantityOfETH = address(this).balance;
+        require (availableQuantityOfETH != 0, "BBack err");
+
+        uint256 amountETH = (uint256(amountToken) * uint256(_precision)) / uint256(rate); 
 
         // We make sure that the available quantity of ETH is bigger than the expected ETH amount
         // If not, we adjust down the quantity of token to be withdrawn
@@ -142,6 +142,10 @@ contract OneXMM is ERC677Allocatable, ERC20Exchangeable {
             amountETH = availableQuantityOfETH;
             amountToken = uint128((amountETH * uint256(rate)) / uint256(_precision));
         }
+
+        // We check the allowance first
+        // If allowance is not enough, it triggers an error
+        _spendAllowance(from, _owner, amountToken);
 
         from.transfer(amountETH);
         _update(from, address(0), amountToken); // In this case, we don't burn the tokens; tokens can be reallocated.
@@ -153,9 +157,9 @@ contract OneXMM is ERC677Allocatable, ERC20Exchangeable {
     /*******************
      * Private methods *
      *******************/
-    /// @notice Allocates a number of token to the owner
+    /// @dev Allocates a number of token to the owner
     /// @param amount The amount
-    function allocateToOwner(uint256 amount) private {
+    function _allocateToOwner(uint256 amount) private {
         require(amount < _cap);
         
         _update(address(0), _owner, amount);
