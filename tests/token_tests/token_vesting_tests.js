@@ -45,6 +45,8 @@ describe('Test vesting functions', function () {
       await expect(spenderConnect.transfer(owner, 1n * BigInt(10 ** 18))).to.be.revertedWith("Vest err");
 
       expect(await token.balanceOf(spender)).to.equal(9_000n * BigInt(10 ** 18));
+
+      await expect(token.allocateWithVesting(spender, amount1, 3, 0, 0, 1, 2)).to.emit(token, 'Allocated').to.emit(token, "TokensAddedToVestingSchedule");
     });
 
     it('can transfer all after vesting', async function () {

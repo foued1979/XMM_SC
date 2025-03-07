@@ -8,6 +8,8 @@ import {IERC20Metadata} from "../../interfaces/ierc20metadata.sol";
 import {Context} from "./context.sol";
 import {IERC20Errors} from "../../interfaces/ierc20errors.sol";
 
+import {console} from "hardhat/console.sol";
+
 /**
  * @dev Implementation of the {IERC20} interface.
  *

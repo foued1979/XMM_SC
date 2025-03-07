@@ -68,4 +68,8 @@ describe('Test ERC20 methods', function () {
       await token.approve(spender, 500n * decimalAdjustment);
       await expect(token.connect(spender).transferFrom(owner, spender, 501n * decimalAdjustment)).to.be.revertedWithCustomError(token, "ERC20InsufficientAllowance");
     });
+
+    if ('Has context methods', async function() {
+
+    });
   });

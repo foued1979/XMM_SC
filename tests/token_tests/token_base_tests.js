@@ -69,7 +69,7 @@ describe('Test base token functions', function () {
       await expect(token.allocate("0x1234567890123456789012345678901234567890", 1n)).to.be.revertedWithCustomError(token, "ERC20ExceededCap");
     });
 
-    it('Approve and Allowance work as expeced', async function() {
+    it('Approve and Allowance work as expected', async function() {
       const token = await loadFixture(_deploy);
       const [ owner, spender ] = await ethers.getSigners();
   
@@ -89,5 +89,15 @@ describe('Test base token functions', function () {
   
       await token.connect(spender).approve(owner, newBalance);
       await expect(token.transferFrom(spender, "0x1234567890123456789012345678901234567890", 3n * newBalance / 4n + 1n)).to.be.revertedWithCustomError(token, "ERC20InsufficientBalance");
+    });
+
+    it('Can change ownership', async function() {
+      const token = await loadFixture(_deploy);
+      const [ owner, spender ] = await ethers.getSigners();
+      
+      await expect(token.connect(spender).changeOwnership(spender)).to.be.revertedWith("Err0");
+      expect(await token.changeOwnership(spender)).to.emit("OwnerChanged");
+
+      expect(await token.owner()).to.equal(spender.address);
     });
   });

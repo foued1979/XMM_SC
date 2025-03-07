@@ -8,10 +8,10 @@ const decimalAdjustment = BigInt(10 ** 18);
 async function _deploy() {
   const [owner] = await ethers.getSigners();
 
-  const contractFactory = await ethers.getContractFactory("Token");
+  const contractFactory = await ethers.getContractFactory("OneXMM");
   // Initial supply is 5 mios
   // Allocation to owner is 250k
-  const token = await contractFactory.deploy("TEST", "Test token", 1, 5_000_000, 250_000);
+  const token = await contractFactory.deploy("TEST", "0x1234567890123456789012345678901234500000", "0x1234567890123456789012345678901234500001", "Test token", 5_000_000, 250_000);
 
   return [ owner, token ];
 }
@@ -28,7 +28,7 @@ describe('Test payable functions', function() {
       var eth = ethers.parseEther("0.5");
       const prevETHBalance = await ethers.provider.getBalance(spender1.address);
 
-      await expect(token.connect(spender1).depositEther({ value: eth })).to.be.revertedWith('Not allowed');
+      await expect(token.connect(spender1).depositEther({ value: eth })).to.be.revertedWith('Err1');
       await token.setETHDepositExchangeRate(30_000_000);
 
       // Now we can transfer
@@ -51,9 +51,9 @@ describe('Test payable functions', function() {
 
       await token.connect(spender1).depositEther({ value: eth });
       
-      await expect(token.sellBack(1_500_000_000_000_000_000_001n)).to.be.revertedWith("Not allowed");
+      await expect(token.sellBack(1_500_000_000_000_000_000_001n)).to.be.revertedWith("Err2");
       await token.connect(owner).updateETHExchangeRate(30_000_000);
-      await expect(token.connect(spender1).sellBack(1_500_000_000_000_000_000_001n)).to.be.revertedWith("Insufficient balance");
+      await expect(token.connect(spender1).sellBack(1_500_000_000_000_000_000_001n)).to.be.revertedWithCustomError(token, "ERC20InsufficientBalance");
 
       await token.connect(spender1).sellBack(750_000_000_000_000_000_000n);
       expect(await token.balanceOf(spender1)).to.equal(750_000_000_000_000_000_000n);

@@ -7,6 +7,8 @@ import { IERC20 } from "./interfaces/ierc20.sol";
 import { ERC677Allocatable } from "./base/erc677allocatable.sol";
 import { ERC20Exchangeable } from "./base/erc20exchangeable.sol";
 
+import {console} from "hardhat/console.sol";
+
 contract OneXMM is ERC677Allocatable, ERC20Exchangeable {
     /**********
      * Events *
@@ -129,6 +131,7 @@ contract OneXMM is ERC677Allocatable, ERC20Exchangeable {
     /// @param amountToken The amount of tokens
     /// @param rate The conversion rate
     function buyBack(address payable from, uint128 amountToken, uint64 rate) external onlyOwner {
+        if (from == address(0)) revert IERC20Errors.ERC20InvalidReceiver(from);
         if (balanceOf(from) < uint256(amountToken)) revert IERC20Errors.ERC20InsufficientBalance(msg.sender, balanceOf(msg.sender), amountToken);
 
         uint256 availableQuantityOfETH = address(this).balance;

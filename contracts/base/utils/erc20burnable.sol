@@ -5,6 +5,8 @@ pragma solidity >= 0.8.20;
 
 import { ERC20CappedAndOwned } from "./erc20cappedandowned.sol";
 
+import {console} from "hardhat/console.sol";
+
 /**
  * @dev Extension of {ERC20} that adds a cap to the supply of tokens.
  */
@@ -52,16 +54,17 @@ abstract contract ERC20Burnable is ERC20CappedAndOwned {
      * Overrides the ERC20 method to adjust the cap amount.
      */
     function _burn(address account, uint256 value) internal override {
+        _cap -= value;
+
         // Owner cannot burn allocated tokens
         if (msg.sender == _owner) {
             require(value <= _availableTokens, "Burn err");
+            _availableTokens -= value;
         }
         else {
             super._burn(account, value);
         }
         
-        _availableTokens -= value;
-        _cap -= value;
         emit Burnt(block.timestamp, value);
     }
 
