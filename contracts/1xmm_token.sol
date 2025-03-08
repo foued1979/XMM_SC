@@ -73,7 +73,7 @@ contract OneXMM is ERC677Allocatable, ERC20Exchangeable {
     /// @param amountToken The amount of tokens to be exchanged
     function sellBack(uint128 amountToken) external ethExchangeIsAllowed {
         if (balanceOf(msg.sender) < uint256(amountToken)) revert IERC20Errors.ERC20InsufficientBalance(msg.sender, balanceOf(msg.sender), amountToken);
-
+        
         uint256 amt256 = uint256(amountToken);
         uint256 amountETH = (amt256 * uint256(_precision)) / uint256(EthExchangeRate);
         uint256 availableQuantityOfETH = address(this).balance;

@@ -16,7 +16,7 @@ async function _deploy() {
 }
 
 describe('Test cap and burn token functions', function () {
-    it('can manage cap properly', async function () {
+    it('Can manage cap properly', async function () {
       const [owner, token] = await loadFixture(_deploy);
       
       const ownerAmount = 250_000n * BigInt(10 ** 18);
@@ -41,7 +41,7 @@ describe('Test cap and burn token functions', function () {
       await expect(token.allocate("0x1234567890123456789012345678901234567893", await token.availableTokens() + 1n)).to.revertedWithCustomError(token, "ERC20ExceededCap");
     });
 
-    it('can burn user\'s tokens properly', async function () {
+    it('Can burn user\'s tokens properly', async function () {
       const [owner, token, spender] = await loadFixture(_deploy);
       
       const ownerAmount = 250_000n * BigInt(10 ** 18);
@@ -60,7 +60,7 @@ describe('Test cap and burn token functions', function () {
       await expect(token.connect(spender).burn(amount1)).to.be.revertedWithCustomError(token, "ERC20InsufficientBalance");
     });
 
-    it('can burn non-allocated tokens properly', async function () {
+    it('Can burn non-allocated tokens properly', async function () {
       const [owner, token, spender] = await loadFixture(_deploy);
       
       const initialCap = await token.cap();

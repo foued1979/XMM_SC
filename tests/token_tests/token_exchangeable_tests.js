@@ -167,7 +167,7 @@ describe('Test exchangeable token functions', function () {
       expect(await token.availableTokens()).to.equal(newCap - (250_000n + 350n) * BigInt(10 ** 18));
     });
 
-    it('Exchange functions work properly for ETH', async function() {
+    it('Can sell back against ETH', async function() {
       const token  = await loadFixture(_deploy);
       const [ owner, spender ] = await ethers.getSigners();
 
@@ -178,6 +178,8 @@ describe('Test exchangeable token functions', function () {
 
       const ethBalance = await ethers.provider.getBalance(await token.getAddress());
       expect(ethBalance).to.equal(ethers.parseEther("2"));
+
+      await expect(token.connect(spender).sellBack(150n * BigInt(10 ** 18))).to.be.revertedWith("Err2");
 
       var ethExchangeRate = await token.EthExchangeRate();
       expect(ethExchangeRate).to.equal(0);
@@ -202,7 +204,7 @@ describe('Test exchangeable token functions', function () {
       expect(tx).to.emit("Withdrawn");
       var receipt = await tx.wait();
       
-      const estimatedBalance = 1000005n * BigInt(10 ** 16) - (2n * receipt.gasUsed * receipt.gasPrice);
+      const estimatedBalance = 1000005n * BigInt(10 ** 16) - (3n * receipt.gasUsed * receipt.gasPrice);
       expect(await ethers.provider.getBalance(spender.address)).to.above(estimatedBalance);
       expect(await token.balanceOf(spender)).to.equal(350n * BigInt(10 ** 18));
       expect(await token.totalSupply()).to.equal(totalSupply - 150n * BigInt(10 ** 18));
@@ -256,8 +258,6 @@ describe('Test exchangeable token functions', function () {
         // We allocate some ERC20 to token
       await token.allocate(spender, 1_500n * BigInt(10 ** 18));
 
-      const initSupply = await token.totalSupply();
-
       // Should error: no ETH on the Token contract
       await expect(token.buyBack(spender, 1_000n * BigInt(10 ** 18), 1_000n * ratePrecision)).to.revertedWith("BBack err");
 
@@ -270,7 +270,7 @@ describe('Test exchangeable token functions', function () {
 
       // Should error: no allowance provided to the owner
       await expect(token.buyBack(spender, 1_000n * BigInt(10 ** 18), 1_000n * ratePrecision)).to.be.revertedWithCustomError(token, "ERC20InsufficientAllowance");
-      token.connect(spender).approve(owner, 2_000n * BigInt(10 ** 18));
+      token.connect(spender).approve(owner, 6_000n * BigInt(10 ** 18));
 
       // Now we are ok
       const tx = await token.buyBack(spender, 1_000n * BigInt(10 ** 18), 1_000n * ratePrecision);
@@ -285,7 +285,20 @@ describe('Test exchangeable token functions', function () {
     it('Can sell back tokens with limited ETH', async function () {
       const token  = await loadFixture(_deploy);
       const [ owner, spender ] = await ethers.getSigners();
-      dddd
+
+      await owner.sendTransaction({
+        to: await token.getAddress(),
+        value: ethers.parseEther("2")
+      });
+      
+      const amt = 1_000n * BigInt(10 ** 18);
+      await token.allocate(spender, amt);
+
+      await token.updateETHExchangeRate(200n * ratePrecision);
+
+      expect(await token.connect(spender).sellBack(amt)).to.emit("ChangedBack").to.emit("Burnt");
+      expect(await token.balanceOf(spender)).to.equal(600n * BigInt(10 ** 18));
+      expect(await token.totalSupply()).to.equal((250_000n + 600n) * BigInt(10 ** 18));
     });
 
     it('Can set ETH deposit rate and auth', async function () {

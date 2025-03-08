@@ -25,6 +25,7 @@ describe('Test ERC20 methods', function () {
       expect(await token.balanceOf(owner)).to.equal(250_000n * decimalAdjustment);
       expect(await token.totalSupply()).to.equal(250_000n * decimalAdjustment);
       expect(await token.cap()).to.equal(5_000_000n * decimalAdjustment);
+      expect(await token.decimals()).to.equal(18);
     });
   
     it('Should properly transfer tokens', async function() {

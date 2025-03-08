@@ -9,6 +9,8 @@ import { VestingSchedule } from  "../../structures/vestingschedule.sol";
 
 import { ERC20Burnable } from  "./erc20burnable.sol";
 
+import { console } from "hardhat/console.sol";
+
 abstract contract ERC20Vested is ERC20Burnable {
     /**********
      * Events *
@@ -109,7 +111,10 @@ abstract contract ERC20Vested is ERC20Burnable {
     function _releaseTokens(address beneficiary, uint256 amount) internal returns(uint256) {
         if (_hasVestingSchedule[beneficiary]) {
             (uint256 releasableAmount, bool canDelete) = _getReleasableAmount(beneficiary);
-            uint256 extraAmount = _getNonVestedAmount(beneficiary);
+            uint256 extraAmount = 0;
+
+            if (releasableAmount < amount) extraAmount = _getNonVestedAmount(beneficiary);
+            else releasableAmount = amount;
 
             if (canDelete) {
                 _hasVestingSchedule[beneficiary] = false;
@@ -136,7 +141,7 @@ abstract contract ERC20Vested is ERC20Burnable {
      */
     function _createVestingSchedule(address beneficiary, uint8 upfrontRelease, uint start, uint16 duration, DurationUnits durationUnit, uint256 amount) internal {
         // perform input checks
-        require(beneficiary != address(0) && amount > 0 && start > block.timestamp && duration > 0, "Vesting Err");
+        require(beneficiary != address(0) && amount > 0 && start >= block.timestamp && duration > 0, "Vesting Err");
 
         // if beneficiary already has a vesting schedule, we just add the amount to the existing schedule
         if (_hasVestingSchedule[beneficiary]) {

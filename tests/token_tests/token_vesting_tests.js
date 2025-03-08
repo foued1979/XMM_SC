@@ -16,7 +16,7 @@ async function _deploy() {
 }
 
 describe('Test vesting functions', function () {
-    it('can allocate without vesting', async function () {
+    it('Can allocate without vesting', async function () {
         const [owner, token, spender] = await loadFixture(_deploy);
       
       const ownerAmount = 250_000n * BigInt(10 ** 18);
@@ -27,8 +27,7 @@ describe('Test vesting functions', function () {
       expect(await spenderConnect.getReleasableAmount()).to.equal(0n);
     });
 
-
-    it('can allocate with vesting', async function () {
+    it('Can allocate with vesting', async function () {
       const [owner, token, spender] = await loadFixture(_deploy);
       
       const ownerAmount = 250_000n * BigInt(10 ** 18);
@@ -49,7 +48,7 @@ describe('Test vesting functions', function () {
       await expect(token.allocateWithVesting(spender, amount1, 3, 0, 0, 1, 2)).to.emit(token, 'Allocated').to.emit(token, "TokensAddedToVestingSchedule");
     });
 
-    it('can transfer all after vesting', async function () {
+    it('Can transfer all after vesting', async function () {
       const [owner, token, spender] = await loadFixture(_deploy);
       
       const ownerAmount = 250_000n * BigInt(10 ** 18);
@@ -64,7 +63,7 @@ describe('Test vesting functions', function () {
       expect(await token.balanceOf(spender)).to.equal(0n);
     });
 
-    it('can manage upftont at cliff', async function () {
+    it('Can manage upftont at cliff', async function () {
       const [owner, token, spender] = await loadFixture(_deploy);
       
       const amount1 = 10_000n * BigInt(10 ** 18);
@@ -78,5 +77,25 @@ describe('Test vesting functions', function () {
       expect(await spenderConnect.getReleasableAmount()).to.be.above(2_000n * BigInt(10 ** 18));
       await time.increase(30*24*3600 + 1);
       expect(await spenderConnect.getReleasableAmount()).to.be.equal(amount1);
+    });
+
+    it('Can get allocate with no cliff', async function () {
+      const [owner, token, spender] = await loadFixture(_deploy);
+      
+      const amount1 = 10_000n * BigInt(10 ** 18);
+      
+      var spenderConnect = await token.connect(spender);
+      expect(await token.allocateWithVesting(spender, amount1, 0, 0, 20, 1, 2)).to.emit("VestingScheduleCreated");
+
+      const releasable = await spenderConnect.getReleasableAmount();
+      expect(releasable).to.equal(2_000n * BigInt(10 ** 18));
+
+      const initAmt = await spenderConnect.getRemainingVestedAmount();
+      expect(initAmt).to.equal(10_000n * BigInt(10 ** 18));
+
+      await spenderConnect.transfer("0x1234567890123456789012345678901234500005", 1_000n * BigInt(10 ** 18));
+      expect(await spenderConnect.getRemainingVestedAmount()).to.equal(9_000n * BigInt(10 ** 18));
+
+      expect(await token.getRemainingVestedAmount()).to.equal(0n);
     });
   });
