@@ -3,7 +3,7 @@
 
 pragma solidity >= 0.8.20;
 
-import { ERC20 } from "./erc20.sol";
+import { ERC20 } from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import { Owned } from "./owned.sol";
 
 /**
@@ -22,15 +22,26 @@ abstract contract ERC20CappedAndOwned is ERC20, Owned {
      */
     error ERC20InvalidCap(uint256 cap);
 
+    /// @dev The decimal property
+    uint8 private _decimals;
+
     /**
      * @dev Sets the value of the `cap`. This value is immutable, it can only be
      * set once during construction.
      */
     constructor(address owner_, uint32 initialSupply_, string memory name_, string memory symbol_, uint8 decimals_)
-        ERC20(name_, symbol_, decimals_)
+        ERC20(name_, symbol_)
         Owned(owner_) {
         if (initialSupply_ == 0) { revert ERC20InvalidCap(0); }
+        _decimals = decimals_;
         _cap = initialSupply_ * (10 ** decimals_);
+    }
+
+    /**
+     * @dev Returns the token's number of decimals.
+     */
+    function decimals() public view override returns (uint8) {
+        return _decimals;
     }
 
     /**

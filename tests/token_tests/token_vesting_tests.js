@@ -33,6 +33,7 @@ describe('Test vesting functions', function () {
       const ownerAmount = 250_000n * BigInt(10 ** 18);
       const amount1 = 10_000n * BigInt(10 ** 18);
       
+      await expect(token.connect(spender).allocateWithVesting(spender, amount1, 3, 0, 0, 1, 2)).to.be.rejectedWith("Err0");
       await expect(token.allocateWithVesting(spender, amount1, 3, 0, 0, 1, 2)).to.emit(token, 'Allocated').to.emit(token, "VestingScheduleCreated");
 
       var spenderConnect = await token.connect(spender);

@@ -116,8 +116,8 @@ abstract contract ERC20Exchangeable is IExchangeable {
     function getAvailableQuantityOfToken(address tokenToBeReceived) public tokenIsApproved(tokenToBeReceived) returns(uint256) {
         (bool success , bytes memory res) = tokenToBeReceived.call(abi.encodeWithSelector(IERC20.balanceOf.selector, address(this)));
 
-        require(success, "Err9");
-        return abi.decode(res, (uint256));
+        if (success) return abi.decode(res, (uint256));
+        return 0;
     }
 
     /// @dev Adds a token which can be traded against our Token

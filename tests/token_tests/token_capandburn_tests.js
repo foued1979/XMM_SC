@@ -78,21 +78,36 @@ describe('Test cap and burn token functions', function () {
       await expect(token.burn(await token.availableTokens() + 1n)).to.be.revertedWith("Burn err");
     });
 
-    it('Cannot burn more than available tokens', async function() {
-          const [owner, token] = await loadFixture(_deploy);
+  it('Cannot burn more than available tokens', async function() {
+    const [owner, token] = await loadFixture(_deploy);
           
-          const initCap = await token.cap();
-          const ownerAmount = 250_000n * BigInt(10 ** 18);
+    const initCap = await token.cap();
+    const ownerAmount = 250_000n * BigInt(10 ** 18);
     
-          await expect(token.burn(initCap)).to.be.revertedWith("Burn err");
-          const burntAmt = 250_000n * BigInt(10 ** 18);
-          await expect(token.burn(burntAmt)).to.emit(token, 'Burnt');
+    await expect(token.burn(initCap)).to.be.revertedWith("Burn err");
+    const burntAmt = 250_000n * BigInt(10 ** 18);
+    await expect(token.burn(burntAmt)).to.emit(token, 'Burnt');
     
-          const newCap = await token.cap();
-          expect(newCap).to.equal(initCap - burntAmt);
+    const newCap = await token.cap();
+    expect(newCap).to.equal(initCap - burntAmt);
     
-          await token.allocate("0x1234567890123456789012345678901234567890", burntAmt);
-          expect(await token.totalSupply()).to.equal(ownerAmount + burntAmt);
-          await expect(token.burn(newCap - burntAmt)).to.be.revertedWith("Burn err");
-        });
+    await token.allocate("0x1234567890123456789012345678901234567890", burntAmt);
+    expect(await token.totalSupply()).to.equal(ownerAmount + burntAmt);
+    await expect(token.burn(newCap - burntAmt)).to.be.revertedWith("Burn err");
   });
+
+  it ('Can burn from another account', async function() {
+    const [owner, token, spender] = await loadFixture(_deploy);
+
+    const amt1 = 2_000n * BigInt(10 ** 18);
+    await token.allocate(spender, amt1);
+    const initCap = await token.cap();
+
+    await expect(token.burnFrom(spender, amt1 / 2n)).to.be.revertedWithCustomError(token, "ERC20InsufficientAllowance");
+    expect(await token.cap()).to.equal(initCap);
+    await token.connect(spender).approve(owner, amt1);
+
+    expect(await token.burnFrom(spender, amt1 / 2n)).to.emit("Burnt");
+    expect(await token.balanceOf(spender)).to.equal(amt1 / 2n);
+  })
+});

@@ -39,41 +39,45 @@ abstract contract ERC20Burnable is ERC20CappedAndOwned {
 
     /**
      * @dev Destroys a `value` amount of tokens.
-     * @param value The amount of tokens to be burnt
+     * @param amount The amount of tokens to be burnt
      *
-     * The burn function has been changed to allow the owner to burn tokens
+     * The burn function allows the owner to burn tokens
      * which are available but not allocated.
-     * See {ERC20-_burn}.
      */
-    function burn(uint256 value) public virtual {
-        _burn(msg.sender, value);
+    function burn(uint256 amount) public virtual {
+        _cap -= amount;
+
+        // Owner cannot burn non-allocated tokens
+        if (msg.sender == _owner) {
+            require(amount <= _availableTokens, "Burn err");
+            _availableTokens -= amount;
+        }
+        else {
+            super._burn(msg.sender, amount);
+        }
+        
+        emit Burnt(block.timestamp, amount);
     }
 
     /**
-     * See {ERC20-_burn}.
-     * Overrides the ERC20 method to adjust the cap amount.
+     * @dev Destroys a `value` amount of tokens.
+     * @param account The account to burn from
+     * @param amount The amount of tokens to be burnt
+     *
      */
-    function _burn(address account, uint256 value) internal override {
-        _cap -= value;
+    function burnFrom(address account, uint256 amount) public virtual {
+        _spendAllowance(account, msg.sender, amount);
 
-        // Owner cannot burn allocated tokens
-        if (msg.sender == _owner) {
-            require(value <= _availableTokens, "Burn err");
-            _availableTokens -= value;
-        }
-        else {
-            super._burn(account, value);
-        }
-        
-        emit Burnt(block.timestamp, value);
+        _cap -= amount;
+        super._burn(account, amount);
+
+        emit Burnt(block.timestamp, amount);
     }
-
-    // burnFrom is not implemented; each user must burn its own token
 
     /**
      * @dev See {ERC20-_update}.
      */
-    function _update(address from, address to, uint256 value) internal virtual override {
+    function _update(address from, address to, uint256 value) internal override {
         super._update(from, to, value);
         _availableTokens = cap() - totalSupply();
     }

@@ -30,8 +30,12 @@ describe('Test base token functions', function () {
     });
 
     it('Can allocate to different users', async function() {
+      const [owner, spender] = await ethers.getSigners();
+
       const token = await loadFixture(_deploy);
       const amount1 = 200n * BigInt(10 ** 18);
+
+      await expect(token.connect(spender).allocate(spender, amount1)).to.be.rejectedWith("Err0");
 
       await token.allocate("0x1234567890123456789012345678901111111111", amount1);
       await token.allocate("0x1234567890123456789012345678902222222222", 2n * amount1);
@@ -99,5 +103,22 @@ describe('Test base token functions', function () {
       expect(await token.changeOwnership(spender)).to.emit("OwnerChanged");
 
       expect(await token.owner()).to.equal(spender.address);
+    });
+
+    if ('Can mass allocate', async function() {
+      const token = await loadFixture(_deploy);
+      const [ owner, spender ] = await ethers.getSigners();
+
+      const allocateTo = ["0x1234567890123456789012345678901234567890", "0x1234567890123456789012345678901234567891"];
+      const allocateAmt = [1_000n * BigInt(10 ** 18), 1_500n * BigInt(10 ** 18)];
+
+      // OnlyOwner can mass allocate
+      await expect(token.connect(spender).massAllocation(allocateTo, allocateAmt)).to.be.revertedWith("Err0");
+      await token.massAllocation(allocateTo, allocateAmt);
+
+      expect(await token.balanceOf("0x1234567890123456789012345678901234567890")).to.equal(1_000n * BigInt(10 ** 18));
+      expect(await token.balanceOf("0x1234567890123456789012345678901234567891")).to.equal(1_500n * BigInt(10 ** 18));
+
+      expect(await token.totalSupply()).to.equal(252_000n * BigInt(10 ** 18));
     });
   });

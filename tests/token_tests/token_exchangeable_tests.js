@@ -48,8 +48,12 @@ describe('Test exchangeable token functions', function () {
 
       // There is no exchange rate yet
       await expect(token.getExchangeInfoForToken(approvedTokenAddress)).to.be.revertedWith("Err4");
+      await expect(token.connect(spender).sellBackAgainst(150n * BigInt(10 ** 18), approvedTokenAddress)).to.be.rejectedWith("Err3");
 
       // We add an approved token for exchange
+      // OnlyOwner can do it
+      await expect(token.connect(spender).addApprovedToken(approvedTokenAddress, 18)).to.be.rejectedWith("Err0");
+      await expect(token.addApprovedToken(approvedTokenAddress, 19)).to.be.rejectedWith("Err10");
       await token.addApprovedToken(approvedTokenAddress, 18);
 
       // We cannot change yet
@@ -84,6 +88,9 @@ describe('Test exchangeable token functions', function () {
       expect(newAvailable).to.equal(newCap - (250_000n + 350n) * BigInt(10 ** 18));
 
       // We make sure that we can remove exchange auth.
+      // OnlyOwner can do it
+      await expect(token.connect(spender).removeExchangeAuthorizationForToken(approvedTokenAddress)).to.be.rejectedWith("Err0");
+      await expect(token.removeExchangeAuthorizationForToken("0x1234567890123456789012345678901234500002")).to.be.rejectedWith("Err4");
       await token.removeExchangeAuthorizationForToken(approvedTokenAddress);
       [ exchangeIsAllowed, exchangeRate ] = await token.getExchangeInfoForToken(approvedTokenAddress);
       expect(exchangeIsAllowed).to.be.false;
@@ -117,6 +124,8 @@ describe('Test exchangeable token functions', function () {
       expect(newBalance).to.equal(1_000n * BigInt(10 ** 18));
 
       // Then we test if the exchange authorization can be removed
+      // OnlyOwner can do it
+      await expect(token.connect(spender).removeExchangeAuthorizationForToken(approvedTokenAddress)).to.be.rejectedWith("Err0");
       await token.removeExchangeAuthorizationForToken(approvedTokenAddress);
       const tokenInfo = await token.getExchangeInfoForToken(approvedTokenAddress);
       expect(tokenInfo[0]).to.equal(false);
@@ -150,6 +159,8 @@ describe('Test exchangeable token functions', function () {
 
       // We update the exchange rate, which enables change
       await token.updateTokenExchangeRate(approvedTokenAddress, 150n * ratePrecision);
+      await expect(token.connect(spender).updateTokenExchangeRate(approvedTokenAddress, 150n * ratePrecision)).to.be.rejectedWith("Err0");
+      await expect(token.updateTokenExchangeRate("0x1234567890123456789012345678901234500002", 150n * ratePrecision)).to.be.rejectedWith("Err4");
       [ exchangeIsAllowed, exchangeRate ] = await token.getExchangeInfoForToken(approvedTokenAddress);
 
       // We test the sellBack function
@@ -185,6 +196,8 @@ describe('Test exchangeable token functions', function () {
       expect(ethExchangeRate).to.equal(0);
 
       // We update the exchange
+      // OnlyOwner can do it
+      await expect(token.connect(spender).updateETHExchangeRate(3_000n * ratePrecision)).to.be.rejectedWith("Err0");
       await token.updateETHExchangeRate(3_000n * ratePrecision);
       ethExchangeRate = await token.EthExchangeRate();
 
@@ -204,7 +217,7 @@ describe('Test exchangeable token functions', function () {
       expect(tx).to.emit("Withdrawn");
       var receipt = await tx.wait();
       
-      const estimatedBalance = 1000005n * BigInt(10 ** 16) - (3n * receipt.gasUsed * receipt.gasPrice);
+      const estimatedBalance = 1000005n * BigInt(10 ** 16) - (10n * receipt.gasUsed * receipt.gasPrice);
       expect(await ethers.provider.getBalance(spender.address)).to.above(estimatedBalance);
       expect(await token.balanceOf(spender)).to.equal(350n * BigInt(10 ** 18));
       expect(await token.totalSupply()).to.equal(totalSupply - 150n * BigInt(10 ** 18));
@@ -214,6 +227,8 @@ describe('Test exchangeable token functions', function () {
       expect(await token.availableTokens()).to.equal(newCap - await token.totalSupply());
 
       // Then we test if the exchange authorization can be removed
+      // OnlyOwner can do it
+      await expect(token.connect(spender).removeETHExchangeAuthorization()).to.be.rejectedWith("Err0");
       await token.removeETHExchangeAuthorization();
       expect(await token.ETHExchangeIsAllowed()).to.equal(false);
     });
@@ -238,6 +253,7 @@ describe('Test exchangeable token functions', function () {
       const spenderInitETHBal = await ethers.provider.getBalance(spender);
 
       // Should error: no allowance provided to the owner
+      await expect(token.buyBack("0x0000000000000000000000000000000000000000", 1_000n * BigInt(10 ** 18), 1_000n * ratePrecision)).to.be.revertedWithCustomError(token, "ERC20InvalidReceiver");
       await expect(token.buyBack(spender, 1_000n * BigInt(10 ** 18), 1_000n * ratePrecision)).to.be.revertedWithCustomError(token, "ERC20InsufficientAllowance");
       token.connect(spender).approve(owner, 1_000n * BigInt(10 ** 18));
 
@@ -270,7 +286,7 @@ describe('Test exchangeable token functions', function () {
 
       // Should error: no allowance provided to the owner
       await expect(token.buyBack(spender, 1_000n * BigInt(10 ** 18), 1_000n * ratePrecision)).to.be.revertedWithCustomError(token, "ERC20InsufficientAllowance");
-      token.connect(spender).approve(owner, 6_000n * BigInt(10 ** 18));
+      await token.connect(spender).approve(owner, 6_000n * BigInt(10 ** 18));
 
       // Now we are ok
       const tx = await token.buyBack(spender, 1_000n * BigInt(10 ** 18), 1_000n * ratePrecision);

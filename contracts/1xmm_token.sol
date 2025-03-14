@@ -86,7 +86,7 @@ contract OneXMM is ERC677Allocatable, ERC20Exchangeable {
         payable(msg.sender).transfer(amountETH);
         
         // Now we burn the tokens
-        _burn(msg.sender, amountToken);
+        burn(amountToken);
 
         emit ChangedBack(block.timestamp, msg.sender, amountETH);
         emit Withdrawn(block.timestamp, msg.sender, amountToken);
@@ -119,7 +119,7 @@ contract OneXMM is ERC677Allocatable, ERC20Exchangeable {
         IERC20(tokenToBeReceived).transfer(msg.sender, amountExpectedToken);
         
         // Now we burn the tokens
-        _burn(msg.sender, amountToken);
+        burn(amountToken);
 
         emit ChangedBackFor(block.timestamp, msg.sender, tokenToBeReceived, amountExpectedToken);
         emit Withdrawn(block.timestamp, msg.sender, amountToken);

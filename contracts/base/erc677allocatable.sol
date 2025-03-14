@@ -103,6 +103,11 @@ contract ERC677Allocatable is ERC20Vested, CCIPReceiver {
         }
     }
 
+    /// @dev Returns the token administrator's address
+    function getCCIPAdmin() external view returns(address) {
+        return _owner;
+    }
+
     /// @dev Sends a number of tokens to a receiver on another chain
     /// Users MUST provide allowance to the CCIP router to enable the bridge:
     ///    - For LINK, the allowance is the fee required to send the message

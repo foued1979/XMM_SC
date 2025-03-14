@@ -6,14 +6,14 @@ const decimalAdjustment = BigInt(10 ** 18);
 const ratePrecision = 10_000n;
 
 async function _deploy() {
-  const [owner] = await ethers.getSigners();
+  const [owner, spender] = await ethers.getSigners();
 
   const contractFactory = await ethers.getContractFactory("OneXMM");
   // Initial supply is 5 mios
   // Allocation to owner is 250k
   const token = await contractFactory.deploy("TEST", "0x1234567890123456789012345678901234500000", "0x1234567890123456789012345678901234500001", "Test token", 5_000_000, 250_000);
 
-  return [ owner, token ];
+  return [ owner, token, spender ];
 }
 
 async function _deployERC20() {
@@ -30,8 +30,9 @@ async function _deployERC20_6() {
 
 describe('Test 1XMM specific token functions', function () {
     it('Owner can transfer back', async function() {
-      const [owner, token] = await loadFixture(_deploy);
+      const [owner, token, spender] = await loadFixture(_deploy);
       
+      await expect(token.connect(spender).ownerTransfersBack(250_001n * BigInt(10 ** 18))).to.be.rejectedWith("Err0");
       await expect(token.ownerTransfersBack(250_001n * BigInt(10 ** 18))).to.be.revertedWithCustomError(token, "ERC20InsufficientBalance");
       expect(await token.ownerTransfersBack(150_000n * BigInt(10 ** 18))).to.emit("Transfer");
 
