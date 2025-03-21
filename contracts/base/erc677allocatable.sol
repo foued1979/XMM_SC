@@ -124,6 +124,7 @@ contract ERC677Allocatable is ERC20Vested, CCIPReceiver {
         uint256 availableBalance = _releaseTokens(msg.sender, amount);
         if (availableBalance < amount) revert ERC20InsufficientBalance(msg.sender, availableBalance, amount);
 
+        // Create an EVM2AnyMessage struct in memory with necessary information for sending a cross-chain message
         Client.EVM2AnyMessage memory message = _buildCCIPMessage(receiver, amount, address(_linkToken), gasLimit);
 
         // Get the fee required to send the message
@@ -146,6 +147,44 @@ contract ERC677Allocatable is ERC20Vested, CCIPReceiver {
         emit TokensTransferred(messageId, destinationChain, receiver, amount, address(_linkToken), fees);
     }
     
+    /// @dev Sends a number of tokens to a receiver on another chain
+    /// Users MUST provide allowance to the CCIP router to enable the bridge:
+    ///    - For the token, the allowance is the amount to be sent
+    /// CCIP Router address is accessible via the getRouter() function
+    /// @param amount The amount to be sent
+    /// @param destinationChain The destination chain
+    /// @param receiver The address of the receiver
+    /// @param gasLimit The max amount of gas to be paid
+    function sendTokensPayNative(uint256 amount, uint64 destinationChain, address receiver, uint256 gasLimit) external 
+    onlyAllowlistedChain(destinationChain) payable returns(bytes32 messageId) {
+        if (receiver == address(0)) revert ERC20InvalidReceiver(receiver);
+
+        uint256 availableBalance = _releaseTokens(msg.sender, amount);
+        if (availableBalance < amount) revert ERC20InsufficientBalance(msg.sender, availableBalance, amount);
+
+        // Create an EVM2AnyMessage struct in memory with necessary information for sending a cross-chain message
+        // address(0) means fees are paid in native gas
+        Client.EVM2AnyMessage memory message = _buildCCIPMessage(receiver, amount, address(0), gasLimit);
+
+        // Get the fee required to send the message
+        uint256 fees = _ccipRouter.getFee(destinationChain, message);
+
+        // We check that msg.sender has attached enough native tokens to pay for the fee
+        if (msg.value < fees) revert IERC677Errors.ERC677InsufficientNativeTokenForFee(msg.sender, fees);
+
+        // Then, we check that the token has an allowance for the amount, approved by msg.sender
+        if (amount > this.allowance(msg.sender, i_ccipRouter)) 
+            revert IERC677Errors.ERC677InsufficientCCIPRouterAllowance(msg.sender, i_ccipRouter, address(this), amount);
+
+        // Send the message via Chainlink CCIP Router
+        messageId = _ccipRouter.ccipSend{value: fees}(destinationChain, message);
+
+        _update(msg.sender, address(0), amount); // Tokens are removed from sender balance and from supply
+
+        // Emit an event with message details
+        emit TokensTransferred(messageId, destinationChain, receiver, amount, address(0), fees);
+    }
+
     /// @dev Receives tokens from another chain
     /// @param message The transfer message sent by the CCIP Router
     function _ccipReceive(Client.Any2EVMMessage memory message) internal override {

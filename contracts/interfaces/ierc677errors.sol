@@ -13,4 +13,12 @@ interface IERC677Errors {
      * @param needed Minimum amount required to perform a bridge.
      */
     error ERC677InsufficientCCIPRouterAllowance(address sender, address router, address token, uint256 needed);
+
+    /**
+     * @dev Indicates an error related to the amount of native tokens attached 
+     * to msg to pay ChainLink Fee.
+     * @param sender Address whose tokens are being transferred.
+     * @param needed Fee amount required to perform a bridge.
+     */
+    error ERC677InsufficientNativeTokenForFee(address sender, uint256 needed);
 }
