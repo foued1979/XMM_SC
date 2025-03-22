@@ -3,6 +3,7 @@ pragma solidity >= 0.8.20;
 
 import { DurationUnits } from  "../enums.sol";
 import { ERC20Vested } from "./utils/erc20vested.sol";
+import { ERC20Burnable } from "./utils/erc20burnable.sol";
 
 import { IERC20 } from "../interfaces/ierc20.sol";
 import { IERC20Errors } from "../interfaces/ierc20errors.sol";
@@ -12,7 +13,9 @@ import { Client } from "@chainlink/contracts-ccip/src/v0.8/ccip/libraries/Client
 import { CCIPReceiver } from "@chainlink/contracts-ccip/src/v0.8/ccip/applications/CCIPReceiver.sol";
 import { IRouterClient } from "@chainlink/contracts-ccip/src/v0.8/ccip/interfaces/IRouterClient.sol";
 
-contract ERC677Allocatable is ERC20Vested, CCIPReceiver {
+import { IBurnMint } from "../interfaces/iburnmint.sol";
+
+contract ERC677Allocatable is ERC20Vested, CCIPReceiver, IBurnMint {
     IRouterClient public immutable _ccipRouter;  // Chainlink CCIP Router
     IERC20 public immutable _linkToken;  // Chainlink CCIP Router
 
@@ -23,16 +26,21 @@ contract ERC677Allocatable is ERC20Vested, CCIPReceiver {
         _;
     }
 
+    modifier onlyCCIPRouter(address sender) {
+        require(sender == address(_ccipRouter), "Denied");
+        _;
+    }
+
     /**********
      * Events *
      **********/
     /// @dev The Allocated event is triggered when Owner allocates some token to
     /// a beneficiary
-    event Allocated(uint indexed timestamp, address indexed beneficiary, uint256 amount);
+    event Allocated(address indexed beneficiary, uint256 amount);
     // Event emitted when the tokens are transferred to an account on another chain.
     event TokensTransferred(bytes32 indexed messageId, uint64 indexed destinationChainSelector, address receiver, uint256 tokenAmount, address feeToken, uint256 fees);
     // Event emitted when the tokens are received on another chain.
-    event TokensReceived(uint indexed timestamp, address indexed receiver, address indexed sender, bytes32 messageId, uint256 amount);
+    event TokensReceived(address indexed receiver, address indexed sender, uint64 fromChain, bytes32 messageId, uint256 amount);
 
     /**************
      * Properties *
@@ -89,7 +97,7 @@ contract ERC677Allocatable is ERC20Vested, CCIPReceiver {
         require(to != _owner && to != address(0), "Err");
         super._update(address(0), to, amount);
 
-        emit Allocated(block.timestamp, to, amount);
+        emit Allocated(to, amount);
     }
 
     /// @dev Allocates a number of token to a beneficiary
@@ -107,6 +115,52 @@ contract ERC677Allocatable is ERC20Vested, CCIPReceiver {
     function getCCIPAdmin() external view returns(address) {
         return _owner;
     }
+
+    /*******************
+     *  IBurnMintImpl  *
+     *******************/
+    /// @dev Mints 'value' amount of tokens when a cross-chain transfer is performed
+    /// @param account The account to receive the tokens
+    /// @param value The amount of tokens to be minted
+    /// @dev this function increases the cap.
+    function mint(address account, uint256 value) external onlyCCIPRouter(msg.sender) {
+        require(account != address(0), "Err");
+        _cap += value;
+        _availableTokens = _cap - totalSupply();
+    }
+
+    /// @inheritdoc ERC20Burnable
+    function burn(uint256 amount) public override(ERC20Burnable, IBurnMint) {
+        _cap -= amount;
+
+        // Owner cannot burn non-allocated tokens
+        if (msg.sender == _owner) {
+            require(amount <= _availableTokens, "Burn err");
+            _availableTokens -= amount;
+        }
+        else {
+            super._burn(msg.sender, amount);
+        }
+        
+        emit Burnt(amount);
+    }
+
+    /// @inheritdoc ERC20Burnable
+    function burn(address account, uint256 amount) public override(ERC20Burnable, IBurnMint) {
+        burnFrom(account, amount);
+    }
+
+    /// @inheritdoc ERC20Burnable
+    function burnFrom(address account, uint256 amount) public override(ERC20Burnable, IBurnMint) {
+        _spendAllowance(account, msg.sender, amount);
+
+        _cap -= amount;
+        super._burn(account, amount);
+
+        emit Burnt(amount);
+    }
+
+    /********************/
 
     /// @dev Sends a number of tokens to a receiver on another chain
     /// Users MUST provide allowance to the CCIP router to enable the bridge:
@@ -141,7 +195,6 @@ contract ERC677Allocatable is ERC20Vested, CCIPReceiver {
 
         // Send the message via Chainlink CCIP Router
         messageId = _ccipRouter.ccipSend(destinationChain, message);
-        _update(msg.sender, address(0), amount); // Tokens are removed from sender balance and from supply
 
         // Emit an event with message details
         emit TokensTransferred(messageId, destinationChain, receiver, amount, address(_linkToken), fees);
@@ -179,21 +232,20 @@ contract ERC677Allocatable is ERC20Vested, CCIPReceiver {
         // Send the message via Chainlink CCIP Router
         messageId = _ccipRouter.ccipSend{value: fees}(destinationChain, message);
 
-        _update(msg.sender, address(0), amount); // Tokens are removed from sender balance and from supply
-
         // Emit an event with message details
         emit TokensTransferred(messageId, destinationChain, receiver, amount, address(0), fees);
     }
 
     /// @dev Receives tokens from another chain
     /// @param message The transfer message sent by the CCIP Router
-    function _ccipReceive(Client.Any2EVMMessage memory message) internal override {
+    function _ccipReceive(Client.Any2EVMMessage memory message) internal override(CCIPReceiver) {
         address sender = abi.decode(message.sender, (address));
         address receiver = abi.decode(message.data, (address));
         uint256 amount = message.destTokenAmounts[0].amount;
 
         _update(address(0), receiver, amount);
-        emit TokensReceived(block.timestamp, receiver, sender, message.messageId, amount);
+
+        emit TokensReceived(receiver, sender, message.sourceChainSelector, message.messageId, amount);
     }
 
     /// @dev Construct a CCIP message.
@@ -201,7 +253,7 @@ contract ERC677Allocatable is ERC20Vested, CCIPReceiver {
     /// @param receiver The address of the receiver.
     /// @param amount The amount of the token to be transferred.
     /// @param feeTokenAddress The address of the token used for fees. Set address(0) for native gas.
-    function _buildCCIPMessage(address receiver, uint256 amount, address feeTokenAddress, uint256 gasLimit) private view returns (Client.EVM2AnyMessage memory) {
+    function _buildCCIPMessage(address receiver, uint256 amount, address feeTokenAddress, uint256 gasLimit) private view returns (Client.EVM2AnyMessage memory message) {
         // Set the token amounts
         Client.EVMTokenAmount[] memory tokenAmounts = new Client.EVMTokenAmount[](1);
         tokenAmounts[0] = Client.EVMTokenAmount({
@@ -210,8 +262,7 @@ contract ERC677Allocatable is ERC20Vested, CCIPReceiver {
         });
 
         // Create an EVM2AnyMessage struct in memory with necessary information for sending a cross-chain message
-        return
-            Client.EVM2AnyMessage({
+        message = Client.EVM2AnyMessage({
                 receiver: abi.encode(receiver), // ABI-encoded receiver address
                 data: "", // No data
                 tokenAmounts: tokenAmounts, // The amount and type of token being transferred

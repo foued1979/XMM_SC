@@ -99,4 +99,24 @@ describe('Test vesting functions', function () {
 
       expect(await token.getRemainingVestedAmount()).to.equal(0n);
     });
+
+    it('Can get the right non-vested amt after release', async function() {
+      const [owner, token, spender] = await loadFixture(_deploy);
+      
+      const amount1 = 10_000n * BigInt(10 ** 18);
+
+      // we transfer first to spender
+      await token.allocateWithVesting(spender, amount1, 0, 0, 20, 1, 2);
+      // spender will transfer the cliff amt to dummy address
+      expect(await token.connect(spender).transfer("0x1234567890123456789012345678901234500005", 2_000n * BigInt(10 ** 18))).to.emit("Transfer");
+
+      await token.allocate(spender, 1_000n * BigInt(10 ** 18));
+      await time.increase(10*24*3600);
+
+      const nonVested = await token.balanceOf(spender) - await token.connect(spender).getRemainingVestedAmount();
+      expect (nonVested).to.equal(1_000n * BigInt(10 ** 18));
+
+      expect (await token.balanceOf(spender)).to.equal(9_000n * BigInt(10 ** 18));
+      expect (await token.transfer("0x1234567890123456789012345678901234500005", 3_666n * BigInt(10 ** 18))).to.emit("Transfer");
+    })
   });

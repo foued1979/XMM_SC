@@ -9,18 +9,16 @@ import { VestingSchedule } from  "../../structures/vestingschedule.sol";
 
 import { ERC20Burnable } from  "./erc20burnable.sol";
 
-import { console } from "hardhat/console.sol";
-
 abstract contract ERC20Vested is ERC20Burnable {
     /**********
      * Events *
      **********/
     /// @dev Emitted when a vesting schedule is created
-    event VestingScheduleCreated(address indexed beneficiary, uint indexed timestamp, uint start, uint end, uint8 upfrontRelease, uint256 amount);
+    event VestingScheduleCreated(address indexed beneficiary, uint start, uint end, uint8 upfrontRelease, uint256 amount);
     /// @dev Emitted when a vesting schedule is created
-    event TokensAddedToVestingSchedule(address indexed beneficiary, uint indexed timestamp, uint256 amount);
+    event TokensAddedToVestingSchedule(address indexed beneficiary, uint256 amount);
     /// @dev Emitted when tokens are released
-    event TokensReleased(address indexed beneficiary, uint indexed timestamp, uint256 amount);
+    event TokensReleased(address indexed beneficiary, uint256 amount);
 
     /**************
      * Properties *
@@ -55,56 +53,55 @@ abstract contract ERC20Vested is ERC20Burnable {
     }
 
     /// @dev Gets the remaining amount of tokens which are vested
-    function getRemainingVestedAmount() public view returns(uint256) {
+    function getRemainingVestedAmount() public view returns(uint256 remainingVestedAmt) {
+        remainingVestedAmt = 0;
+
         if (_hasVestingSchedule[msg.sender]) {
             VestingSchedule storage schedule = _vestingSchedules[msg.sender];
-            return schedule.totalAmount - schedule.released;
+            remainingVestedAmt = schedule.totalAmount - schedule.released;
         }
-
-        return 0;
     }
 
     /// @dev Gets the amount of vested tokens which can be withdrawn by the msg.sender
-    function getReleasableAmount() external view returns(uint256) {
-        (uint256 amt, ) = _getReleasableAmount(msg.sender);
-        return amt;
+    function getReleasableAmount() external view returns(uint256 releasableAmt) {
+        (releasableAmt, ) = _getReleasableAmount(msg.sender);
     }
 
     /// @dev Gets the amount of vested tokens which can be withdrawn by the beneficiary
-    function _getReleasableAmount(address beneficiary) internal view returns(uint256, bool) {
-        uint256 totalReleasableAmount = 0;
+    function _getReleasableAmount(address beneficiary) internal view returns(uint256 releasableAmt, bool vestingEnded) {
+        releasableAmt = 0;
+        vestingEnded = false;
 
         if (_hasVestingSchedule[beneficiary]) {
             VestingSchedule storage schedule = _vestingSchedules[beneficiary];
             
             // if end of cliff period has not been reached, 0 can be released
-            if (block.timestamp < schedule.start) return (0, false);
+            if (block.timestamp < schedule.start) return (releasableAmt, vestingEnded);
             if (block.timestamp >= schedule.end) {
-                totalReleasableAmount = schedule.totalAmount - schedule.released;
-                return (totalReleasableAmount, true);
+                vestingEnded = true;
+                releasableAmt = schedule.totalAmount - schedule.released;
+                return (releasableAmt, vestingEnded);
             }
             
             uint256 upfrontRelease = uint256((schedule.totalAmount * schedule.upfrontRelease) / 100);
-            totalReleasableAmount = upfrontRelease + uint256(((schedule.totalAmount - upfrontRelease) * (block.timestamp - schedule.start)) / schedule.totalDuration);
+            releasableAmt = upfrontRelease + uint256(((schedule.totalAmount - upfrontRelease) * (block.timestamp - schedule.start)) / schedule.totalDuration);
             
             // Sanity check - we make sure to always release at max the total amount of tokens
-            if (totalReleasableAmount > schedule.totalAmount) totalReleasableAmount = schedule.totalAmount;
-            return (totalReleasableAmount - schedule.released, false);
+            if (releasableAmt > schedule.totalAmount) releasableAmt = schedule.totalAmount;
+            releasableAmt -= schedule.released;
         }
-
-        return (0, false);
     }
 
     /// @dev Gets the amount of tokens which are not vested
-    function _getNonVestedAmount(address beneficiary) internal view returns(uint256) {
+    function _getNonVestedAmount(address beneficiary) internal view returns(uint256 nonVestedAmt) {
+        nonVestedAmt = 0;
+
         if (_hasVestingSchedule[beneficiary]) {
             VestingSchedule storage schedule = _vestingSchedules[beneficiary];
 
             uint256 currentBalance = IERC20(address(this)).balanceOf(beneficiary);
-            if (currentBalance > schedule.totalAmount) return currentBalance - schedule.totalAmount;
+            if (currentBalance > schedule.totalAmount) nonVestedAmt = currentBalance - (schedule.totalAmount - schedule.released);
         }
-
-        return 0;
     }
 
     /// @dev Computes the amount of tokens which can be released and updates the schedule (if ever)
@@ -121,7 +118,7 @@ abstract contract ERC20Vested is ERC20Burnable {
                 delete _vestingSchedules[beneficiary];
             } else {
                 _vestingSchedules[beneficiary].released += releasableAmount;
-                emit TokensReleased(beneficiary, block.timestamp, releasableAmount);
+                emit TokensReleased(beneficiary, releasableAmount);
             }
             
             return releasableAmount + extraAmount;
@@ -147,7 +144,7 @@ abstract contract ERC20Vested is ERC20Burnable {
         if (_hasVestingSchedule[beneficiary]) {
             VestingSchedule storage schedule = _vestingSchedules[beneficiary];
             schedule.totalAmount += amount;
-            emit TokensAddedToVestingSchedule(beneficiary, block.timestamp, amount);
+            emit TokensAddedToVestingSchedule(beneficiary, amount);
             return;
         }
         
@@ -157,7 +154,7 @@ abstract contract ERC20Vested is ERC20Burnable {
         _vestingSchedules[beneficiary] = VestingSchedule(beneficiary, upfrontRelease, start, end, end - start, amount, 0);
         _hasVestingSchedule[beneficiary] = true;
 
-        emit VestingScheduleCreated(beneficiary, block.timestamp, start, end, upfrontRelease, amount);
+        emit VestingScheduleCreated(beneficiary, start, end, upfrontRelease, amount);
     }
 
     /*******************

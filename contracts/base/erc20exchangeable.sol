@@ -107,17 +107,19 @@ abstract contract ERC20Exchangeable is IExchangeable {
     }
 
     /// @dev Returns the latest exchange rate associated to the token to be received
-    /// @return Whether the exchange is authorized and the latest exchange rate
-    function getExchangeInfoForToken(address tokenToBeReceived) external view tokenIsApproved(tokenToBeReceived) returns(bool, uint64) {
-        return (_exchangeIsAllowed[tokenToBeReceived], _exchangeRates[tokenToBeReceived]);
+    /// @return isAllowed true if the exchange is authorized
+    /// @return rate the exchange rate
+    function getExchangeInfoForToken(address tokenToBeReceived) external view tokenIsApproved(tokenToBeReceived) returns(bool isAllowed, uint64 rate) {
+        isAllowed = _exchangeIsAllowed[tokenToBeReceived];
+        rate = _exchangeRates[tokenToBeReceived];
     }
 
     /// @dev Returns the available quantity of a token to be exchanged
-    function getAvailableQuantityOfToken(address tokenToBeReceived) public tokenIsApproved(tokenToBeReceived) returns(uint256) {
-        (bool success , bytes memory res) = tokenToBeReceived.call(abi.encodeWithSelector(IERC20.balanceOf.selector, address(this)));
+    function getAvailableQuantityOfToken(address tokenToBeReceived) public tokenIsApproved(tokenToBeReceived) returns(uint256 availableQuantity) {
+        availableQuantity = 0;
 
-        if (success) return abi.decode(res, (uint256));
-        return 0;
+        (bool success , bytes memory res) = tokenToBeReceived.call(abi.encodeWithSelector(IERC20.balanceOf.selector, address(this)));
+        if (success) availableQuantity = abi.decode(res, (uint256));
     }
 
     /// @dev Adds a token which can be traded against our Token

@@ -5,8 +5,6 @@ pragma solidity >= 0.8.20;
 
 import { ERC20CappedAndOwned } from "./erc20cappedandowned.sol";
 
-import {console} from "hardhat/console.sol";
-
 /**
  * @dev Extension of {ERC20} that adds a cap to the supply of tokens.
  */
@@ -15,7 +13,7 @@ abstract contract ERC20Burnable is ERC20CappedAndOwned {
      * Events *
      **********/
     /// @dev The Burnt event is triggered when tokens are burnt
-    event Burnt(uint indexed timstamp, uint256 amount);
+    event Burnt(uint256 amount);
 
     /**************
      * Properties *
@@ -44,20 +42,7 @@ abstract contract ERC20Burnable is ERC20CappedAndOwned {
      * The burn function allows the owner to burn tokens
      * which are available but not allocated.
      */
-    function burn(uint256 amount) public virtual {
-        _cap -= amount;
-
-        // Owner cannot burn non-allocated tokens
-        if (msg.sender == _owner) {
-            require(amount <= _availableTokens, "Burn err");
-            _availableTokens -= amount;
-        }
-        else {
-            super._burn(msg.sender, amount);
-        }
-        
-        emit Burnt(block.timestamp, amount);
-    }
+    function burn(uint256 amount) public virtual;
 
     /**
      * @dev Destroys a `value` amount of tokens.
@@ -65,19 +50,20 @@ abstract contract ERC20Burnable is ERC20CappedAndOwned {
      * @param amount The amount of tokens to be burnt
      *
      */
-    function burnFrom(address account, uint256 amount) public virtual {
-        _spendAllowance(account, msg.sender, amount);
+    function burn(address account, uint256 amount) public virtual;
 
-        _cap -= amount;
-        super._burn(account, amount);
-
-        emit Burnt(block.timestamp, amount);
-    }
+    /**
+     * @dev Destroys a `value` amount of tokens.
+     * @param account The account to burn from
+     * @param amount The amount of tokens to be burnt
+     *
+     */
+    function burnFrom(address account, uint256 amount) public virtual;
 
     /**
      * @dev See {ERC20-_update}.
      */
-    function _update(address from, address to, uint256 value) internal override {
+    function _update(address from, address to, uint256 value) internal override(ERC20CappedAndOwned) {
         super._update(from, to, value);
         _availableTokens = cap() - totalSupply();
     }

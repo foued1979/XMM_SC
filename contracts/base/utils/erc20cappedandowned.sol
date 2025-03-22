@@ -40,7 +40,7 @@ abstract contract ERC20CappedAndOwned is ERC20, Owned {
     /**
      * @dev Returns the token's number of decimals.
      */
-    function decimals() public view override returns (uint8) {
+    function decimals() public view override(ERC20) returns (uint8) {
         return _decimals;
     }
 
@@ -54,7 +54,7 @@ abstract contract ERC20CappedAndOwned is ERC20, Owned {
     /**
      * @dev See {ERC20-_update}.
      */
-    function _update(address from, address to, uint256 value) internal virtual override {
+    function _update(address from, address to, uint256 value) internal virtual override(ERC20) {
         if (from == address(0)) {
             uint256 maxSupply = cap();
             uint256 supply = totalSupply();
