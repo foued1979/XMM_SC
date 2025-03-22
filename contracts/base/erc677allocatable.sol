@@ -123,9 +123,9 @@ contract ERC677Allocatable is ERC20Vested, CCIPReceiver, IBurnMint {
     /// @param account The account to receive the tokens
     /// @param value The amount of tokens to be minted
     /// @dev this function increases the cap.
-    function mint(address account, uint256 value) external onlyCCIPRouter(msg.sender) {
-        require(account != address(0), "Err");
+    function mint(address account, uint256 value) public onlyCCIPRouter(msg.sender) {
         _cap += value;
+        _mint(account, value);
         _availableTokens = _cap - totalSupply();
     }
 
@@ -243,7 +243,9 @@ contract ERC677Allocatable is ERC20Vested, CCIPReceiver, IBurnMint {
         address receiver = abi.decode(message.data, (address));
         uint256 amount = message.destTokenAmounts[0].amount;
 
-        _update(address(0), receiver, amount);
+        _cap += amount;
+        _mint(receiver, amount);
+        _availableTokens = _cap - totalSupply();
 
         emit TokensReceived(receiver, sender, message.sourceChainSelector, message.messageId, amount);
     }

@@ -27,7 +27,7 @@ function findEventArgs(logs, eventName) {
 }
 
   describe('Test bridge functions', function () {
-    it('Can bridge as expected', async function () {
+    it('can bridge as expected', async function () {
         const [ owner, token, spender ] = await loadFixture(_deploy);
 
         expect (await token.getCCIPAdmin()).to.equal(owner);
@@ -39,5 +39,11 @@ function findEventArgs(logs, eventName) {
 
         await token.allowlistDestinationChain(151, false);
         expect (await token.connect(spender).isChainIdAllowed(151)).to.equal(false);
+    });
+
+    it('can mint and burn as expected', async function() {
+      const [ owner, token, spender ] = await loadFixture(_deploy);
+
+      await expect(token.mint())
     });
 });
