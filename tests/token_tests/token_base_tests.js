@@ -9,7 +9,7 @@ async function _deploy() {
   const contractFactory = await ethers.getContractFactory("OneXMM");
   // Initial supply is 5 mios
   // Allocation to owner is 250k
-  return await contractFactory.deploy("TEST", "0x1234567890123456789012345678901234500000", "0x1234567890123456789012345678901234500001", "Test token", 5_000_000, 250_000);
+  return await contractFactory.deploy("TEST", "Test token", 5_000_000, 250_000);
 }
 
 describe('Test base token functions', function () {

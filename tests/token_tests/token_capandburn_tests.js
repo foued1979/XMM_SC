@@ -10,7 +10,7 @@ async function _deploy() {
   const contractFactory = await ethers.getContractFactory("OneXMM");
   // Initial supply is 5 mios
   // Allocation to owner is 250k
-  const token = await contractFactory.deploy("TEST", "0x1234567890123456789012345678901234500000", "0x1234567890123456789012345678901234500001", "Test token", 5_000_000, 250_000);
+  const token = await contractFactory.deploy("TEST", "Test token", 5_000_000, 250_000);
 
   return [owner, token, spender];
 }
@@ -78,6 +78,28 @@ describe('Test cap and burn token functions', function () {
       await expect(token.burn(await token.availableTokens() + 1n)).to.be.revertedWith("Burn err");
     });
 
+  it('Can burn and allocate', async function() {
+    const [owner, token, spender] = await loadFixture(_deploy);
+
+    const burntAmt = 250_000n * BigInt(10 ** 18);
+    const initCap = await token.cap();
+    expect (initCap).to.equal(5_000_000n * BigInt(10 ** 18));
+
+    await expect(token.burn(burntAmt)).to.emit(token, 'Burnt');
+
+    const newCap = await token.cap(); // new cap is 4.75mios
+    expect(newCap).to.equal(initCap - burntAmt);
+
+    const totalSupply = await token.totalSupply();
+    expect (totalSupply).to.equal(250_000n * BigInt(10 ** 18));
+
+    await expect(token.allocate(spender, newCap - totalSupply + 1n)).to.be.revertedWithCustomError(token, 'ERC20ExceededCap');
+    await expect(token.allocate(spender, initCap - totalSupply)).to.be.revertedWithCustomError(token, 'ERC20ExceededCap');
+    await expect(token.allocate(spender, newCap - totalSupply)).to.emit(token, 'Allocated');
+
+    expect(await token.totalSupply()).to.equal(initCap - burntAmt);
+  });
+
   it('Cannot burn more than available tokens', async function() {
     const [owner, token] = await loadFixture(_deploy);
           
@@ -110,4 +132,14 @@ describe('Test cap and burn token functions', function () {
     expect(await token.burnFrom(spender, amt1 / 2n)).to.emit("Burnt");
     expect(await token.balanceOf(spender)).to.equal(amt1 / 2n);
   })
+
+  it ('Can burn from ourselves', async function() {
+    const [owner, token, spender] = await loadFixture(_deploy);
+
+    const amt1 = 2_000n * BigInt(10 ** 18);
+    await token.allocate(spender, amt1);
+
+    await expect(token.connect(spender).getFunction("burn(address,uint256)")(spender, amt1)).to.emit(token, "Burnt");
+    expect(await token.balanceOf(spender)).to.equal(0n);
+  });
 });

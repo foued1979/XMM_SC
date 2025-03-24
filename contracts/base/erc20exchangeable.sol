@@ -40,13 +40,13 @@ abstract contract ERC20Exchangeable is IExchangeable {
      address private _owner;
 
     // Public properties linked to IExchangeable
-    // The exchange rate represents a real number with 4 digits precision
+    /// @dev The exchange rate represents a real number with 4 digits precision
     bool public ETHExchangeIsAllowed;
     bool public ETHDepositIsAllowed;
     uint64 public EthExchangeRate;
     uint16 internal _precision = 10_000;
 
-    // Parameters to manage other token exchanges
+    /// @dev Parameters to manage other token exchanges
     mapping(address tokenAddress => bool) internal _tokenIsApproved;
     mapping(address tokenAddress => uint64) internal _exchangeRates;
     mapping(address tokenAddress => bool) internal _exchangeIsAllowed;
@@ -64,36 +64,36 @@ abstract contract ERC20Exchangeable is IExchangeable {
         ETHExchangeIsAllowed = false;
     }
 
-    /// @dev Sets the change authorization status for ETH to false
+    /// @notice Sets the change authorization status for ETH to false
     function removeETHExchangeAuthorization() external _onlyOwner {
         ETHExchangeIsAllowed = false;
     }
 
-    /// @dev Sets the change authorization status for a token to false
+    /// @notice Sets the change authorization status for a token to false
     function removeExchangeAuthorizationForToken(address tokenToBeReceived) external _onlyOwner tokenIsApproved(tokenToBeReceived) {
         _exchangeIsAllowed[tokenToBeReceived] = false;
     }
 
-    /// @dev Sets whether the deposit of ETH against token is allowed or not
-    //          The exchange rate is expressed in pips
+    /// @notice Sets whether the deposit of ETH against token is allowed or not
+    /// @dev The exchange rate is expressed in pips
     function setETHDepositExchangeRate(uint64 exchangeRate) external _onlyOwner {
         EthExchangeRate = exchangeRate;
         ETHDepositIsAllowed = true;
     }
 
-    /// @dev Sets the ETH deposit authorization to false
+    /// @notice Sets the ETH deposit authorization to false
     function removeETHDepositAuthorization() external _onlyOwner {
         ETHDepositIsAllowed = false;
     }
 
-    /// @dev Updates the exchange rate between ETH and the Token
-    //          The exchange rate is expressed in pips
+    /// @notice Updates the exchange rate between ETH and the Token
+    /// @dev The exchange rate is expressed in pips
     function updateETHExchangeRate(uint64 exchangeRate) external _onlyOwner {
         EthExchangeRate = exchangeRate;
         ETHExchangeIsAllowed = true;
     }
 
-    /// @dev Updates the exchange rate between a token and our Token
+    /// @notice Updates the exchange rate between a token and our Token
     /// @param  tokenToBeReceived The token to be received in exchange of our Token
     /// @param  exchangeRate The exchange rate, with 4 digits precision (in pips)
     function updateTokenExchangeRate(address tokenToBeReceived, uint64 exchangeRate) external _onlyOwner tokenIsApproved(tokenToBeReceived) {
@@ -101,12 +101,12 @@ abstract contract ERC20Exchangeable is IExchangeable {
         _exchangeIsAllowed[tokenToBeReceived] = true;
     }
 
-    /// @dev Returns the quantity of ETH available for change against Token
+    /// @notice Returns the quantity of ETH available for change against Token
     function getAvailableQuantityOfETH() external view returns(uint256) {
         return address(this).balance;
     }
 
-    /// @dev Returns the latest exchange rate associated to the token to be received
+    /// @notice Returns the latest exchange rate associated to the token to be received
     /// @return isAllowed true if the exchange is authorized
     /// @return rate the exchange rate
     function getExchangeInfoForToken(address tokenToBeReceived) external view tokenIsApproved(tokenToBeReceived) returns(bool isAllowed, uint64 rate) {
@@ -114,7 +114,7 @@ abstract contract ERC20Exchangeable is IExchangeable {
         rate = _exchangeRates[tokenToBeReceived];
     }
 
-    /// @dev Returns the available quantity of a token to be exchanged
+    /// @notice Returns the available quantity of a token to be exchanged
     function getAvailableQuantityOfToken(address tokenToBeReceived) public tokenIsApproved(tokenToBeReceived) returns(uint256 availableQuantity) {
         availableQuantity = 0;
 
@@ -122,7 +122,7 @@ abstract contract ERC20Exchangeable is IExchangeable {
         if (success) availableQuantity = abi.decode(res, (uint256));
     }
 
-    /// @dev Adds a token which can be traded against our Token
+    /// @notice Adds a token which can be traded against our Token
     function addApprovedToken(address token, uint8 decimals) external _onlyOwner {
         require(decimals <= 18, "Err10");
         if (_tokenIsApproved[token]) return;
@@ -134,7 +134,7 @@ abstract contract ERC20Exchangeable is IExchangeable {
         _approvedTokenDecimals[token] = decimals;
     }
 
-    /// @dev Gets approved tokens
+    /// @notice Gets approved tokens
     function getApprovedTokens() external view returns(address[] memory) {
         return ApprovedTokens;
     }

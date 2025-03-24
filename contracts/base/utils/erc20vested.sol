@@ -13,17 +13,17 @@ abstract contract ERC20Vested is ERC20Burnable {
     /**********
      * Events *
      **********/
-    /// @dev Emitted when a vesting schedule is created
+    /// @notice Emitted when a vesting schedule is created
     event VestingScheduleCreated(address indexed beneficiary, uint start, uint end, uint8 upfrontRelease, uint256 amount);
-    /// @dev Emitted when a vesting schedule is created
+    /// @notice Emitted when a vesting schedule is created
     event TokensAddedToVestingSchedule(address indexed beneficiary, uint256 amount);
-    /// @dev Emitted when tokens are released
+    /// @notice Emitted when tokens are released
     event TokensReleased(address indexed beneficiary, uint256 amount);
 
     /**************
      * Properties *
      **************/
-    /// @dev The vesting schedules for each beneficiary
+    /// @notice The vesting schedules for each beneficiary
     mapping(address beneficiary => VestingSchedule) private _vestingSchedules;
     mapping(address beneficiary => bool) private _hasVestingSchedule;
 
@@ -34,7 +34,7 @@ abstract contract ERC20Vested is ERC20Burnable {
         ERC20Burnable(owner_, initialSupply_, name_, symbol_, decimals_)
     {}
 
-    /// @dev Transfers tokens from the msg sender to another address
+    /// @notice Transfers tokens from the msg sender to another address
     /// overrides the transfer function of ERC20
     function transfer(address to, uint256 value) public override returns(bool) {
         uint256 releasableAmount = _releaseTokens(msg.sender, value);
@@ -43,7 +43,7 @@ abstract contract ERC20Vested is ERC20Burnable {
         return super.transfer(to, value);
     }
 
-    /// @dev Transfers tokens from one address to another
+    /// @notice Transfers tokens from one address to another
     /// overrides the transferFrom function of ERC20
     function transferFrom(address from, address to, uint256 value) public override returns(bool) {
         uint256 releasableAmount = _releaseTokens(from, value);
@@ -52,7 +52,7 @@ abstract contract ERC20Vested is ERC20Burnable {
         return super.transferFrom(from, to, value);
     }
 
-    /// @dev Gets the remaining amount of tokens which are vested
+    /// @notice Gets the remaining amount of tokens which are vested
     function getRemainingVestedAmount() public view returns(uint256 remainingVestedAmt) {
         remainingVestedAmt = 0;
 
@@ -62,7 +62,7 @@ abstract contract ERC20Vested is ERC20Burnable {
         }
     }
 
-    /// @dev Gets the amount of vested tokens which can be withdrawn by the msg.sender
+    /// @notice Gets the amount of vested tokens which can be withdrawn by the msg.sender
     function getReleasableAmount() external view returns(uint256 releasableAmt) {
         (releasableAmt, ) = _getReleasableAmount(msg.sender);
     }

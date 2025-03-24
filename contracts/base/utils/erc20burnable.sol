@@ -12,7 +12,7 @@ abstract contract ERC20Burnable is ERC20CappedAndOwned {
     /**********
      * Events *
      **********/
-    /// @dev The Burnt event is triggered when tokens are burnt
+    /// @notice The Burnt event is triggered when tokens are burnt
     event Burnt(uint256 amount);
 
     /**************
@@ -22,21 +22,21 @@ abstract contract ERC20Burnable is ERC20CappedAndOwned {
     uint256 internal _availableTokens;
 
     /**
-     * @dev Sets the value of the `cap`. This value is immutable, it can only be
+     * @notice Sets the value of the `cap`. This value is immutable, it can only be
      * set once during construction.
      */
     constructor(address owner_, uint32 initialSupply_, string memory name_, string memory symbol_, uint8 decimals_)
         ERC20CappedAndOwned(owner_, initialSupply_, name_, symbol_, decimals_) {}
 
     /**
-     * @dev Gets the amount of tokens which remains to be allocated
+     * @notice Gets the amount of tokens which remains to be allocated
      */
     function availableTokens() external view returns(uint256) {
         return _availableTokens;
     }
 
     /**
-     * @dev Destroys a `value` amount of tokens.
+     * @notice Destroys a `value` amount of tokens.
      * @param amount The amount of tokens to be burnt
      *
      * The burn function allows the owner to burn tokens
@@ -45,15 +45,7 @@ abstract contract ERC20Burnable is ERC20CappedAndOwned {
     function burn(uint256 amount) public virtual;
 
     /**
-     * @dev Destroys a `value` amount of tokens.
-     * @param account The account to burn from
-     * @param amount The amount of tokens to be burnt
-     *
-     */
-    function burn(address account, uint256 amount) public virtual;
-
-    /**
-     * @dev Destroys a `value` amount of tokens.
+     * @notice Destroys a `value` amount of tokens.
      * @param account The account to burn from
      * @param amount The amount of tokens to be burnt
      *

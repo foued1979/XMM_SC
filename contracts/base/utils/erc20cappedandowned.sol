@@ -13,20 +13,20 @@ abstract contract ERC20CappedAndOwned is ERC20, Owned {
     uint256 internal _cap;
 
     /**
-     * @dev Total supply cap has been exceeded.
+     * @notice Total supply cap has been exceeded.
      */
     error ERC20ExceededCap(uint256 increasedSupply, uint256 cap);
 
     /**
-     * @dev The supplied cap is not a valid cap.
+     * @notice The supplied cap is not a valid cap.
      */
     error ERC20InvalidCap(uint256 cap);
 
-    /// @dev The decimal property
+    /// @notice The decimal property
     uint8 private _decimals;
 
     /**
-     * @dev Sets the value of the `cap`. This value is immutable, it can only be
+     * @notice Sets the value of the `cap`. This value is immutable, it can only be
      * set once during construction.
      */
     constructor(address owner_, uint32 initialSupply_, string memory name_, string memory symbol_, uint8 decimals_)
@@ -38,14 +38,14 @@ abstract contract ERC20CappedAndOwned is ERC20, Owned {
     }
 
     /**
-     * @dev Returns the token's number of decimals.
+     * @notice Returns the token's number of decimals.
      */
     function decimals() public view override(ERC20) returns (uint8) {
         return _decimals;
     }
 
     /**
-     * @dev Returns the cap on the token's total supply.
+     * @notice Returns the cap on the token's total supply.
      */
     function cap() public view virtual returns (uint256) {
         return _cap;

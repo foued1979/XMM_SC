@@ -11,7 +11,7 @@ async function _deploy() {
   const contractFactory = await ethers.getContractFactory("OneXMM");
   // Initial supply is 5 mios
   // Allocation to owner is 250k
-  const token = await contractFactory.deploy("TEST", "0x1234567890123456789012345678901234500000", "0x1234567890123456789012345678901234500001", "Test token", 5_000_000, 250_000);
+  const token = await contractFactory.deploy("TEST", "Test token", 5_000_000, 250_000);
 
   return [ owner, token, spender ];
 }
@@ -19,13 +19,13 @@ async function _deploy() {
 async function _deployERC20() {
   const [owner] = await ethers.getSigners();
   const contractFactory = await ethers.getContractFactory("ERC677Allocatable");
-  return await contractFactory.deploy(owner[0].address, "0x1234567890123456789012345678901234500002", "0x1234567890123456789012345678901234500003", 100_000, "COIN1", "COIN1", 18);
+  return await contractFactory.deploy(owner[0].address, 100_000, "COIN1", "COIN1", 18);
 }
 
 async function _deployERC20_6() {
   const [owner] = await ethers.getSigners();
   const contractFactory = await ethers.getContractFactory("ERC677Allocatable");
-  return await contractFactory.deploy(owner[0].address, "0x1234567890123456789012345678901234500002", "0x1234567890123456789012345678901234500003", 50_000, "COIN2", "COIN2", 6);
+  return await contractFactory.deploy(owner[0].address, 50_000, "COIN2", "COIN2", 6);
 }
 
 describe('Test 1XMM specific token functions', function () {
@@ -39,5 +39,21 @@ describe('Test 1XMM specific token functions', function () {
       expect(await token.balanceOf(owner)).to.equal(100_000n * BigInt(10 ** 18));
       expect(await token.totalSupply()).to.equal(100_000n * BigInt(10 ** 18));
       expect(await token.cap()).to.equal(5_000_000n * BigInt(10 ** 18));
+    });
+
+    it('Can mass allocate', async function() {
+      const [owner, token, spender] = await loadFixture(_deploy);
+      const addresses = ["0x1234567890123456789012345678901234500002", "0x1234567890123456789012345678901234500003", "0x1234567890123456789012345678901234500004"];
+      const amt = 100_000n * BigInt(10 ** 18);
+      const amts = [amt, 2n * amt, amt];
+
+      await expect(token.connect(spender).massAllocation(addresses, amts)).to.be.rejectedWith("Err0");
+      await expect(token.massAllocation(addresses, amts)).to.emit(token, "Allocated");
+
+      expect(await token.balanceOf("0x1234567890123456789012345678901234500002")).to.equal(amt);
+      expect(await token.balanceOf("0x1234567890123456789012345678901234500003")).to.equal(2n * amt);
+      expect(await token.balanceOf("0x1234567890123456789012345678901234500004")).to.equal(amt);
+
+      expect(await token.totalSupply()).to.equal(250_000n * BigInt(10 ** 18) + 4n * amt);
     });
 });

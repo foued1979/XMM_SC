@@ -23,8 +23,8 @@ contract OneXMM is ERC677Allocatable, ERC20Exchangeable {
      * @param initialSupply_ The initial supply
      * @param initialOwnerAllocation_ The initial allocation to the owner
      */
-    constructor(string memory symbol_, address ccipRouter_, address linkToken_,  string memory name_, uint32 initialSupply_, uint32 initialOwnerAllocation_)
-        ERC677Allocatable(msg.sender, ccipRouter_, linkToken_, initialSupply_, name_, symbol_, 18)
+    constructor(string memory symbol_, string memory name_, uint32 initialSupply_, uint32 initialOwnerAllocation_)
+        ERC677Allocatable(msg.sender, initialSupply_, name_, symbol_, 18)
         ERC20Exchangeable(msg.sender) payable {
         _allocateToOwner(uint256(initialOwnerAllocation_) * uint256(10 ** 18));
     }
