@@ -135,7 +135,7 @@ contract ERC677Allocatable is ERC20Vested, IGetCCIPAdmin, IBurnMint {
         _cap -= amount;
 
         // Owner or CCIPAdmin cannot burn non-allocated tokens
-        if (msg.sender == _owner || msg.sender == _ccipAdmin) {
+        if (msg.sender == _owner) {
             require(amount <= _availableTokens, "Burn err");
             _availableTokens -= amount;
         }

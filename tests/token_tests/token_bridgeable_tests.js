@@ -51,8 +51,14 @@ function findEventArgs(logs, eventName) {
       // At this stage, ccipAdmin is not set
       await expect(token.connect(ccipAdmin).burn(burnMint)).to.be.revertedWithCustomError(token, "ERC20InsufficientBalance");
 
+      await token.allocate(spender, burnMint); // Spender gets 250k tokens
+
       // Now we sent ccipAdmin
       await token.setCCIPAdmin(ccipAdmin);
+      await expect(token.connect(ccipAdmin).burn(burnMint)).to.be.rejectedWith(token, "ERC20InsufficientBalance");
+      await token.connect(spender).approve(ccipAdmin, burnMint); // Spender approves allowance to ccipAdmin
+      await expect(token.connect(ccipAdmin).transferFrom(spender, ccipAdmin, burnMint)).to.emit(token, "Transfer");
+
       await expect(token.connect(ccipAdmin).burn(burnMint)).to.emit(token, 'Burnt');
       await expect(token.mint(spender, burnMint)).to.be.revertedWith("Denied");
       await expect(token.connect(ccipAdmin).mint(spender, burnMint)).to.emit(token, 'Minted');
