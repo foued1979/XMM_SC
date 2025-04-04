@@ -44,8 +44,9 @@ function findEventArgs(logs, eventName) {
 
     it('CCIPAdmin can mint and burn as expected', async function() {
       const [ owner, token, spender, ccipAdmin ] = await loadFixture(_deploy);
+      await token.unlockTransfers(); // Unlock transfers to allow minting and burning
       const burnMint = 250_000n * BigInt(10 ** 18);
-      const initCap = await token.cap();
+      const initSupply = await token.totalSupply();
 
       await expect(token.connect(ccipAdmin).mint(spender, burnMint)).to.be.revertedWith("Denied");
       // At this stage, ccipAdmin is not set
@@ -60,13 +61,16 @@ function findEventArgs(logs, eventName) {
       await expect(token.connect(ccipAdmin).transferFrom(spender, ccipAdmin, burnMint)).to.emit(token, "Transfer");
 
       await expect(token.connect(ccipAdmin).burn(burnMint)).to.emit(token, 'Burnt');
+      expect(await token.totalSupply()).to.equal(initSupply - burnMint);
+      expect(await token.cap()).to.equal(await token.totalSupply() + burnMint);
+
       await expect(token.mint(spender, burnMint)).to.be.revertedWith("Denied");
       await expect(token.connect(ccipAdmin).mint(spender, burnMint)).to.emit(token, 'Minted');
 
-      const totalSupply = await token.totalSupply();
-      expect(totalSupply).to.equal(2n * burnMint);
+      const circSupply = await token.circulatingSupply();
+      expect(circSupply).to.equal(2n * burnMint);
       expect(await token.balanceOf(spender)).to.equal(burnMint);
-      expect(await token.cap()).to.equal(initCap);
+      expect(await token.cap()).to.equal(initSupply);
     });
 
     it('CCIPAdmin can burnFrom and mint as expected', async function() {
@@ -84,14 +88,14 @@ function findEventArgs(logs, eventName) {
 
       await token.allocate(spender, burnMint);
       await expect(token.connect(ccipAdmin).burnFrom(spender, burnMint)).to.emit(token, 'Burnt');
-      expect(await token.cap()).to.equal(initCap - burnMint);
+      expect(await token.totalSupply()).to.equal(initCap - burnMint);
       expect(await token.balanceOf(spender)).to.equal(0n);
 
       await expect(token.connect(ccipAdmin).mint(spender, burnMint)).to.emit(token, 'Minted');
 
-      const totalSupply = await token.totalSupply();
-      expect(totalSupply).to.equal(2n * burnMint);
+      const circSupply = await token.circulatingSupply();
+      expect(circSupply).to.equal(2n * burnMint);
       expect(await token.balanceOf(spender)).to.equal(burnMint);
-      expect(await token.cap()).to.equal(initCap);
+      expect(await token.totalSupply()).to.equal(initCap);
     });
 });

@@ -53,4 +53,11 @@ interface IERC20Errors {
      * @param amount Amount of tokens to be approved.
      */
     error ERC20TransferFailed(address from, address to, uint256 amount);
+
+    /**
+     * @dev Indicates a failure with the `amount` to be allocated.
+     * @param allocation The increase of circulating supply.
+     * @param totalSupply The total supply.
+     */
+    error ERC20AllocationFailed(uint256 allocation, uint256 totalSupply);
 }

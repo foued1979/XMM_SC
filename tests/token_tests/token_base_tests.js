@@ -13,9 +13,21 @@ async function _deploy() {
 }
 
 describe('Test base token functions', function () {
-    it('Allocation is done properly and is reflected in AllocatedAmount', async function () {
+    it('Cannot transfer if locked', async function () {
+      const [owner, spender] = await ethers.getSigners();
       const token = await loadFixture(_deploy);
       
+      const amount1 = 100n * BigInt(10 ** 18);
+      await expect(token.allocate(spender, amount1)).to.emit(token, 'Allocated');
+      await expect(token.connect(spender).transfer(owner.address, amount1)).to.be.revertedWith("Locked");
+
+      await token.unlockTransfers();
+      await expect(token.connect(spender).transfer(owner.address, amount1)).to.emit(token, 'Transfer');
+    });
+
+    it('Allocation is done properly and is reflected in AllocatedAmount', async function () {
+      const token = await loadFixture(_deploy);
+
       const ownerAmount = 250_000n * BigInt(10 ** 18);
       const amount1 = 100n * BigInt(10 ** 18);
       await expect(token.allocate("0x1234567890123456789012345678901234567890", amount1)).to.emit(token, 'Allocated');
@@ -25,16 +37,16 @@ describe('Test base token functions', function () {
 
       expect(await token.balanceOf("0x1234567890123456789012345678901234567890")).to.equal(amount1);
       expect(await token.balanceOf("0x1234567890123456789012345678901233458793")).to.equal(amount2);
-      expect(await token.totalSupply()).to.equal(ownerAmount + amount1 + amount2);
+      expect(await token.totalSupply()).to.equal(5_000_000n * BigInt(10 ** 18));
+      expect(await token.circulatingSupply()).to.equal(ownerAmount + amount1 + amount2);
       expect(await token.availableTokens()).to.equal(5_000_000n * BigInt(10 ** 18) - (ownerAmount + amount1 + amount2));
     });
 
     it('Can allocate to different users', async function() {
       const [owner, spender] = await ethers.getSigners();
-
       const token = await loadFixture(_deploy);
-      const amount1 = 200n * BigInt(10 ** 18);
 
+      const amount1 = 200n * BigInt(10 ** 18);
       await expect(token.connect(spender).allocate(spender, amount1)).to.be.rejectedWith("Err0");
 
       await token.allocate("0x1234567890123456789012345678901111111111", amount1);
@@ -49,8 +61,7 @@ describe('Test base token functions', function () {
     it('Owner cannot transfer to himself', async function() {
       const token = await loadFixture(_deploy);
       const [ owner, spender ] = await ethers.getSigners();
-
-      const ownerAmount = 250_000n * BigInt(10 ** 18);
+      await token.unlockTransfers();
 
       const transfer = 20n * BigInt(10 ** 18);
       expect(await token.transfer(owner.address, transfer)).to.be.revertedWith('No no');
@@ -60,22 +71,24 @@ describe('Test base token functions', function () {
       const token = await loadFixture(_deploy);
       const [ owner, spender ] = await ethers.getSigners();
 
-      const cap = await token.cap();
+      const cap = await token.totalSupply();
       const ownerBalance = await token.balanceOf(owner.address);
 
-      await expect(token.allocate("0x1234567890123456789012345678901234567890", cap)).to.be.revertedWithCustomError(token, "ERC20ExceededCap");
-      await expect(token.allocate("0x1234567890123456789012345678901234567890", cap -  ownerBalance + 1n)).to.be.revertedWithCustomError(token, "ERC20ExceededCap");
+      await expect(token.allocate("0x1234567890123456789012345678901234567890", cap)).to.be.revertedWithCustomError(token, "ERC20AllocationFailed");
+      await expect(token.allocate("0x1234567890123456789012345678901234567890", cap -  ownerBalance + 1n)).to.be.revertedWithCustomError(token, "ERC20AllocationFailed");
 
       await token.allocate("0x1234567890123456789012345678901234567890", cap -  ownerBalance);
       const newBalance = await token.balanceOf("0x1234567890123456789012345678901234567890");
 
-      expect(newBalance + ownerBalance).to.equal(cap);
-      await expect(token.allocate("0x1234567890123456789012345678901234567890", 1n)).to.be.revertedWithCustomError(token, "ERC20ExceededCap");
+      expect(newBalance + ownerBalance).to.equal(await token.circulatingSupply());
+      expect(await token.circulatingSupply() + await token.balanceOf(token)).to.equal(await token.totalSupply());
+      await expect(token.allocate("0x1234567890123456789012345678901234567890", 1n)).to.be.revertedWithCustomError(token, "ERC20AllocationFailed");
     });
 
     it('Approve and Allowance work as expected', async function() {
       const token = await loadFixture(_deploy);
       const [ owner, spender ] = await ethers.getSigners();
+      await token.unlockTransfers();
   
       const newBalance = 2_500n * BigInt(10 ** 18);
       await token.allocate(spender.address, newBalance);

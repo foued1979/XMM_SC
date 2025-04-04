@@ -7,15 +7,11 @@ import { ERC20Burnable } from "./utils/erc20burnable.sol";
 
 import { IERC20 } from "../interfaces/ierc20.sol";
 import { IERC20Errors } from "../interfaces/ierc20errors.sol";
-import { IERC677Errors } from "../interfaces/ierc677errors.sol";
 
-import { Client } from "@chainlink/contracts-ccip/src/v0.8/ccip/libraries/Client.sol";
 import { IGetCCIPAdmin } from "@chainlink/contracts-ccip/src/v0.8/ccip/interfaces/IGetCCIPAdmin.sol";
-import { IRouterClient } from "@chainlink/contracts-ccip/src/v0.8/ccip/interfaces/IRouterClient.sol";
-
 import { IBurnMint } from "../interfaces/iburnmint.sol";
 
-contract ERC677Allocatable is ERC20Vested, IGetCCIPAdmin, IBurnMint {
+contract ERC20Allocatable is ERC20Vested, IGetCCIPAdmin, IBurnMint {
     /// @dev Modifier that checks if the msg.sender is the ccipAdmin.
     // This function shall be called only when tokens are transferred from one chain to another.
     // Owner has no right to mint.
@@ -59,12 +55,23 @@ contract ERC677Allocatable is ERC20Vested, IGetCCIPAdmin, IBurnMint {
     /// @param vestingDurationUnit The unit of the vesting duration
     function allocateWithVesting(address to, uint256 amount, uint16 cliffDuration, DurationUnits cliffDurationUnit, uint8 upfrontRelease, uint16 vestingDuration, 
     DurationUnits vestingDurationUnit) external onlyOwner {
+        uint vestingStart = _addDuration(block.timestamp, cliffDuration, cliffDurationUnit);
+        allocateWithVesting(to,amount, vestingStart, upfrontRelease, vestingDuration, vestingDurationUnit);
+    }
+
+    /// @notice Allocates a number of token to a beneficiary
+    /// @param to The beneficiary
+    /// @param amount The amount to allocate
+    /// @param cliffEnd The timsestamp of cliff end
+    /// @param upfrontRelease The amount released when cliff period ends
+    /// @param vestingDuration The duration of the vesting
+    /// @param vestingDurationUnit The unit of the vesting duration
+    function allocateWithVesting(address to, uint256 amount, uint cliffEnd, uint8 upfrontRelease, uint16 vestingDuration, DurationUnits vestingDurationUnit) 
+    public onlyOwner {
         allocate(to, amount);
 
-        uint vestingStart = _addDuration(block.timestamp, cliffDuration, cliffDurationUnit);
-
         if (upfrontRelease > 100) upfrontRelease = 100;
-        _createVestingSchedule(to,upfrontRelease, vestingStart, vestingDuration, vestingDurationUnit, amount);
+        _createVestingSchedule(to,upfrontRelease, cliffEnd, vestingDuration, vestingDurationUnit, amount);
     }
 
     /// @notice Gets whether a chain id is allowed
@@ -84,9 +91,10 @@ contract ERC677Allocatable is ERC20Vested, IGetCCIPAdmin, IBurnMint {
     /// @param to The beneficiary
     /// @param amount The amount
     function allocate(address to, uint256 amount) public onlyOwner {
-        require(to != _owner && to != address(0), "Err");
-        super._update(address(0), to, amount);
+        require(to != address(0), "Err");
+        if (amount > balanceOf(address(this))) revert IERC20Errors.ERC20AllocationFailed(amount, totalSupply());
 
+        super._update(address(this), to, amount);
         emit Allocated(to, amount);
     }
 
@@ -123,20 +131,19 @@ contract ERC677Allocatable is ERC20Vested, IGetCCIPAdmin, IBurnMint {
     /// @param value The amount of tokens to be minted
     /// @dev this function increases the cap.
     function mint(address account, uint256 value) public onlyMinter {
-        _cap += value;
+        if (totalSupply() + value > _cap) revert ERC20ExceededCap(totalSupply(), _cap);
         _mint(account, value);
-        _availableTokens = _cap - totalSupply();
+        _availableTokens = totalSupply() - circulatingSupply();
 
         emit Minted(account, _ccipAdmin, value);
     }
 
     /// @inheritdoc ERC20Burnable
     function burn(uint256 amount) public override(ERC20Burnable) {
-        _cap -= amount;
-
         // Owner or CCIPAdmin cannot burn non-allocated tokens
         if (msg.sender == _owner) {
             require(amount <= _availableTokens, "Burn err");
+            super._update(address(this), address(0), amount);
             _availableTokens -= amount;
         }
         else {
@@ -156,9 +163,7 @@ contract ERC677Allocatable is ERC20Vested, IGetCCIPAdmin, IBurnMint {
     function burnFrom(address account, uint256 amount) public override(ERC20Burnable, IBurnMint) {
         _spendAllowance(account, msg.sender, amount);
 
-        _cap -= amount;
         super._burn(account, amount);
-
         emit Burnt(amount);
     }
 

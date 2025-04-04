@@ -20,12 +20,24 @@ abstract contract ERC20Vested is ERC20Burnable {
     /// @notice Emitted when tokens are released
     event TokensReleased(address indexed beneficiary, uint256 amount);
 
+    /*************
+     * Modifiers *
+     *************/
+    /// @notice Modifier that checks if the contract is unlocked
+    modifier unlocked() {
+        require(_unlocked, "Locked");
+        _;
+    }
+
     /**************
      * Properties *
      **************/
     /// @notice The vesting schedules for each beneficiary
     mapping(address beneficiary => VestingSchedule) private _vestingSchedules;
     mapping(address beneficiary => bool) private _hasVestingSchedule;
+
+    // Private properties
+    bool private _unlocked = false;
 
     /***************
      * Constructor *
@@ -36,7 +48,7 @@ abstract contract ERC20Vested is ERC20Burnable {
 
     /// @notice Transfers tokens from the msg sender to another address
     /// overrides the transfer function of ERC20
-    function transfer(address to, uint256 value) public override returns(bool) {
+    function transfer(address to, uint256 value) public override unlocked returns(bool) {
         uint256 releasableAmount = _releaseTokens(msg.sender, value);
         require(releasableAmount >= value, "Vest err");
 
@@ -45,7 +57,7 @@ abstract contract ERC20Vested is ERC20Burnable {
 
     /// @notice Transfers tokens from one address to another
     /// overrides the transferFrom function of ERC20
-    function transferFrom(address from, address to, uint256 value) public override returns(bool) {
+    function transferFrom(address from, address to, uint256 value) public override unlocked returns(bool) {
         uint256 releasableAmount = _releaseTokens(from, value);
         require(releasableAmount >= value, "Vest err");
 
@@ -65,6 +77,13 @@ abstract contract ERC20Vested is ERC20Burnable {
     /// @notice Gets the amount of vested tokens which can be withdrawn by the msg.sender
     function getReleasableAmount() external view returns(uint256 releasableAmt) {
         (releasableAmt, ) = _getReleasableAmount(msg.sender);
+    }
+
+    /// @notice Unlocks the contract and allows transfers to be made
+    /// @dev This function can only be called to set the unlocked property to true
+    // Once the contract is unlocked, it cannot be locked again
+    function unlockTransfers() external onlyOwner {
+        _unlocked = true;
     }
 
     /// @dev Gets the amount of vested tokens which can be withdrawn by the beneficiary

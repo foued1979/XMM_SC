@@ -57,6 +57,6 @@ abstract contract ERC20Burnable is ERC20CappedAndOwned {
      */
     function _update(address from, address to, uint256 value) internal override(ERC20CappedAndOwned) {
         super._update(from, to, value);
-        _availableTokens = cap() - totalSupply();
+        _availableTokens = totalSupply() - circulatingSupply();
     }
 }

@@ -4,17 +4,28 @@ pragma solidity >= 0.8.20;
 import { IERC20Errors } from "./interfaces/ierc20errors.sol";
 import { IERC20 } from "./interfaces/ierc20.sol";
 
-import { ERC677Allocatable } from "./base/erc677allocatable.sol";
+import { ERC20Allocatable } from "./base/erc20allocatable.sol";
 import { ERC20Exchangeable } from "./base/erc20exchangeable.sol";
 
-contract OneXMM is ERC677Allocatable, ERC20Exchangeable {
+contract OneXMM is ERC20Allocatable, ERC20Exchangeable {
+    modifier isApproved(address account) {
+        require(_approvedDepositors[account], "Not Approved");
+        _;
+    }
+
     /**********
      * Events *
      **********/
+    event DepositorStatusChanged(address indexed account, bool status);
     event Deposited(address indexed from, uint256 amountETH, uint256 amountToken);
     event ChangedBack(address indexed beneficiary, uint256 amountTokens);
     event ChangedBackFor(address indexed beneficiary, address tokenReceived, uint256 amount);
-    event Withdrawn(address indexed from, uint256 amount);    
+    event Withdrawn(address indexed from, uint256 amount);   
+
+    /**************
+     * Properties *
+     **************/
+    mapping(address account => bool) private _approvedDepositors;
 
     /**
      * @dev Constructor
@@ -24,18 +35,27 @@ contract OneXMM is ERC677Allocatable, ERC20Exchangeable {
      * @param initialOwnerAllocation_ The initial allocation to the owner
      */
     constructor(string memory symbol_, string memory name_, uint32 initialSupply_, uint32 initialOwnerAllocation_)
-        ERC677Allocatable(msg.sender, initialSupply_, name_, symbol_, 18)
+        ERC20Allocatable(msg.sender, initialSupply_, name_, symbol_, 18)
         ERC20Exchangeable(msg.sender) payable {
-        _allocateToOwner(uint256(initialOwnerAllocation_) * uint256(10 ** 18));
+
+        // Owners is allocated with his share of the initial supply
+        uint256 amount = uint256(initialOwnerAllocation_) * (10 ** 18);
+        allocate(msg.sender, amount);
     }
 
     receive() external payable {
         emit Deposited(msg.sender, msg.value, 0);
     }
 
-    /// @dev Enables a user to deposit ETH and receive Tokens in exchange
+    /// @notice Adds an approved depositor who will be able to deposit ETH against Token
+    function changeDepositorStatus(address account, bool status) external onlyOwner {
+        _approvedDepositors[account] = status;
+        emit DepositorStatusChanged(account, status);
+    }
+
+    /// @notice Enables a user to deposit ETH and receive Tokens in exchange
     /// The conversion rate applies at a fixed rate, updated by Owner
-    function depositEther() external payable ethDepositIsAllowed returns(uint256 amountToken) {
+    function depositEther() external payable ethDepositIsAllowed isApproved(msg.sender) returns(uint256 amountToken) {
         uint256 amountETH = msg.value;
         if (amountETH == 0) return 0;
 
@@ -151,17 +171,5 @@ contract OneXMM is ERC677Allocatable, ERC20Exchangeable {
 
         emit ChangedBack(from, amountETH);
         emit Withdrawn(from, amountToken);
-    }
-
-    /*******************
-     * Private methods *
-     *******************/
-    /// @dev Allocates a number of token to the owner
-    /// @param amount The amount
-    function _allocateToOwner(uint256 amount) private {
-        require(amount < _cap);
-        
-        _update(address(0), _owner, amount);
-        emit Allocated(_owner, amount);
     }
 }

@@ -17,11 +17,6 @@ abstract contract ERC20CappedAndOwned is ERC20, Owned {
      */
     error ERC20ExceededCap(uint256 increasedSupply, uint256 cap);
 
-    /**
-     * @notice The supplied cap is not a valid cap.
-     */
-    error ERC20InvalidCap(uint256 cap);
-
     /// @notice The decimal property
     uint8 private _decimals;
 
@@ -32,9 +27,12 @@ abstract contract ERC20CappedAndOwned is ERC20, Owned {
     constructor(address owner_, uint32 initialSupply_, string memory name_, string memory symbol_, uint8 decimals_)
         ERC20(name_, symbol_)
         Owned(owner_) {
-        if (initialSupply_ == 0) { revert ERC20InvalidCap(0); }
+
         _decimals = decimals_;
-        _cap = initialSupply_ * (10 ** decimals_);
+        _cap = uint256(initialSupply_) * (10 ** decimals_);
+
+        // We set the initial supply to the Contract
+        super._update(address(0), address(this), _cap);
     }
 
     /**
@@ -45,10 +43,17 @@ abstract contract ERC20CappedAndOwned is ERC20, Owned {
     }
 
     /**
-     * @notice Returns the cap on the token's total supply.
+     * @notice Returns the cap of total supply.
      */
-    function cap() public view virtual returns (uint256) {
+    function cap() external view returns (uint256) {
         return _cap;
+    }
+
+    /**
+     * @notice The number of tokens which are circulating.
+     */
+    function circulatingSupply() public view returns (uint256) {
+        return totalSupply() - balanceOf(address(this));
     }
 
     /**
@@ -56,10 +61,10 @@ abstract contract ERC20CappedAndOwned is ERC20, Owned {
      */
     function _update(address from, address to, uint256 value) internal virtual override(ERC20) {
         if (from == address(0)) {
-            uint256 maxSupply = cap();
-            uint256 supply = totalSupply();
+            uint256 maxSupply = totalSupply();
+            uint256 circulatingSupply = circulatingSupply();
 
-            if (supply + value > maxSupply) revert ERC20ExceededCap(supply, maxSupply);
+            if (circulatingSupply + value > maxSupply) revert ERC20ExceededCap(circulatingSupply, maxSupply);
         }
 
         super._update(from, to, value);
