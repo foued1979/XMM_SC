@@ -71,7 +71,7 @@ contract OneXMM is ERC20Allocatable, ERC20Exchangeable {
             receiver.call{value:msg.value - amountETH}("");
         }
 
-        _update(address(0), msg.sender, amountToken);
+        _update(address(this), msg.sender, amountToken);
 
         emit Deposited(msg.sender, amountETH, amountToken);
         emit Allocated(msg.sender, amountToken);
@@ -80,7 +80,7 @@ contract OneXMM is ERC20Allocatable, ERC20Exchangeable {
     /// @dev Enables owner to send back some tokens to the Token contract
     function ownerTransfersBack(uint256 amount) external onlyOwner {
         if (amount > balanceOf(_owner)) revert IERC20Errors.ERC20InsufficientBalance(_owner, balanceOf(_owner), amount);
-        _update(_owner, address(0), amount);
+        _update(_owner, address(this), amount);
     }
 
     /// @dev Enables a user to sell back an amount of Tokens against ETH
@@ -151,7 +151,7 @@ contract OneXMM is ERC20Allocatable, ERC20Exchangeable {
         if (balanceOf(from) < uint256(amountToken)) revert IERC20Errors.ERC20InsufficientBalance(msg.sender, balanceOf(msg.sender), amountToken);
 
         uint256 availableQuantityOfETH = address(this).balance;
-        require (availableQuantityOfETH != 0, "BBack err");
+        require (availableQuantityOfETH != 0, "E106");
 
         uint256 amountETH = (uint256(amountToken) * uint256(_precision)) / uint256(rate); 
 
@@ -167,7 +167,7 @@ contract OneXMM is ERC20Allocatable, ERC20Exchangeable {
         _spendAllowance(from, _owner, amountToken);
 
         from.call{value:amountETH}("");
-        _update(from, address(0), amountToken); // In this case, we don't burn the tokens; tokens can be reallocated.
+        _update(from, address(this), amountToken); // In this case, we don't burn the tokens; tokens can be reallocated.
 
         emit ChangedBack(from, amountETH);
         emit Withdrawn(from, amountToken);

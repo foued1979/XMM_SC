@@ -18,15 +18,18 @@ async function _deploy() {
 describe('Test cap and burn token functions', function () {
     it('Can manage cap properly', async function () {
       const [owner, token] = await loadFixture(_deploy);
+      await token.unlockTransfers();
       
       const ownerAmount = 250_000n * BigInt(10 ** 18);
       const cap = 5_000_000n * BigInt(10 ** 18);
       const amount1 = 100n * BigInt(10 ** 18);
 
       await expect(token.allocate("0x1234567890123456789012345678901234567890", amount1)).to.emit(token, 'Allocated');
+      expect (await token.availableTokens()).to.equal(cap - (ownerAmount + amount1));
 
-      expect(await token.totalSupply()).to.equal(ownerAmount + amount1);
-      expect(await token.cap()).to.equal(cap);
+      expect(await token.circulatingSupply()).to.equal(ownerAmount + amount1);
+      expect (await token.availableTokens()).to.equal(await token.totalSupply() - await token.circulatingSupply());
+      expect(await token.totalSupply()).to.equal(cap);
 
       await token.transfer("0x1234567890123456789012345678901234567893", amount1);
 
@@ -35,10 +38,11 @@ describe('Test cap and burn token functions', function () {
       expect(await token.balanceOf(owner)).to.equal(ownerAmount - amount1);
 
       // supply and cap have not changed
-      expect(await token.totalSupply()).to.equal(ownerAmount + amount1);
-      expect(await token.cap()).to.equal(cap);
+      expect(await token.circulatingSupply()).to.equal(ownerAmount + amount1);
+      expect(await token.totalSupply()).to.equal(cap);
+      expect (await token.availableTokens()).to.equal(await token.totalSupply() - await token.circulatingSupply());
 
-      await expect(token.allocate("0x1234567890123456789012345678901234567893", await token.availableTokens() + 1n)).to.revertedWithCustomError(token, "ERC20ExceededCap");
+      await expect(token.allocate("0x1234567890123456789012345678901234567893", await token.availableTokens() + 1n)).to.revertedWithCustomError(token, "ERC20AllocationFailed");
     });
 
     it('Can burn user\'s tokens properly', async function () {
@@ -50,12 +54,13 @@ describe('Test cap and burn token functions', function () {
 
       await token.allocate(spender, amount1);
       
-      expect(await token.totalSupply()).to.equal(ownerAmount + amount1);
+      expect(await token.circulatingSupply()).to.equal(ownerAmount + amount1);
       expect(await token.connect(spender).burn(burnAmount)).to.emit(token, "Burnt");
 
       expect(await token.balanceOf(spender)).to.equal(amount1 - burnAmount);
-      expect(await token.totalSupply()).to.equal(ownerAmount + amount1 - burnAmount);
-      expect(await token.cap()).to.equal(5_000_000n * BigInt(10 ** 18) - burnAmount);
+      expect(await token.circulatingSupply()).to.equal(ownerAmount + amount1 - burnAmount);
+      expect(await token.totalSupply()).to.equal(5_000_000n * BigInt(10 ** 18) - burnAmount);
+      expect (await token.availableTokens()).to.equal(await token.totalSupply() - await token.circulatingSupply());
 
       await expect(token.connect(spender).burn(amount1)).to.be.revertedWithCustomError(token, "ERC20InsufficientBalance");
     });
@@ -63,7 +68,7 @@ describe('Test cap and burn token functions', function () {
     it('Can burn non-allocated tokens properly', async function () {
       const [owner, token, spender] = await loadFixture(_deploy);
       
-      const initialCap = await token.cap();
+      const initialSupply = await token.totalSupply();
       const ownerAmount = 250_000n * BigInt(10 ** 18);
       const amount1 = 10_000n * BigInt(10 ** 18);
       const burnAmount = 10_000n * BigInt(10 ** 18);
@@ -71,11 +76,11 @@ describe('Test cap and burn token functions', function () {
       await token.allocate(spender, amount1);
       expect(await token.burn(burnAmount)).to.emit(token, "Burnt");
 
-      expect(await token.cap()).to.equal(initialCap - burnAmount);
-      expect(await token.totalSupply()).to.equal(ownerAmount + amount1);
-      expect(await token.availableTokens()).to.equal(initialCap - (burnAmount + ownerAmount + amount1));
+      expect(await token.totalSupply()).to.equal(initialSupply - burnAmount);
+      expect(await token.circulatingSupply()).to.equal(ownerAmount + amount1);
+      expect(await token.availableTokens()).to.equal(initialSupply - (burnAmount + ownerAmount + amount1));
 
-      await expect(token.burn(await token.availableTokens() + 1n)).to.be.revertedWith("Burn err");
+      await expect(token.burn(await token.availableTokens() + 1n)).to.be.revertedWith("E1");
     });
 
   it('Can burn and allocate', async function() {
@@ -83,19 +88,23 @@ describe('Test cap and burn token functions', function () {
 
     const burntAmt = 250_000n * BigInt(10 ** 18);
     const initCap = await token.cap();
-    expect (initCap).to.equal(5_000_000n * BigInt(10 ** 18));
 
     await expect(token.burn(burntAmt)).to.emit(token, 'Burnt');
+    const newSupply = await token.totalSupply(); // new supply is 4.75mios
 
-    const newCap = await token.cap(); // new cap is 4.75mios
-    expect(newCap).to.equal(initCap - burntAmt);
+    expect (newSupply).to.equal(initCap - burntAmt);
+    expect (await token.availableTokens()).to.equal(await token.totalSupply() - await token.circulatingSupply());
 
-    const totalSupply = await token.totalSupply();
-    expect (totalSupply).to.equal(250_000n * BigInt(10 ** 18));
+    const circSupply = await token.circulatingSupply();
+    expect (circSupply).to.equal(await token.balanceOf(owner));
+    expect (circSupply).to.equal(250_000n * BigInt(10 ** 18));
 
-    await expect(token.allocate(spender, newCap - totalSupply + 1n)).to.be.revertedWithCustomError(token, 'ERC20ExceededCap');
-    await expect(token.allocate(spender, initCap - totalSupply)).to.be.revertedWithCustomError(token, 'ERC20ExceededCap');
-    await expect(token.allocate(spender, newCap - totalSupply)).to.emit(token, 'Allocated');
+    await expect(token.allocate(spender, newSupply - circSupply + 1n)).to.be.revertedWithCustomError(token, 'ERC20AllocationFailed');
+    await expect(token.allocate(spender, initCap - circSupply)).to.be.revertedWithCustomError(token, 'ERC20AllocationFailed');
+    await expect(token.allocate(spender, newSupply - circSupply)).to.emit(token, 'Allocated');
+
+    expect (await token.circulatingSupply()).to.equal(await token.balanceOf(spender) + await token.balanceOf(owner));
+    expect (await token.availableTokens()).to.equal(await token.totalSupply() - await token.circulatingSupply());
 
     expect(await token.totalSupply()).to.equal(initCap - burntAmt);
   });
@@ -103,19 +112,20 @@ describe('Test cap and burn token functions', function () {
   it('Cannot burn more than available tokens', async function() {
     const [owner, token] = await loadFixture(_deploy);
           
-    const initCap = await token.cap();
+    const initSupply = await token.totalSupply();
     const ownerAmount = 250_000n * BigInt(10 ** 18);
     
-    await expect(token.burn(initCap)).to.be.revertedWith("Burn err");
+    await expect(token.burn(initSupply)).to.be.revertedWith("E1");
     const burntAmt = 250_000n * BigInt(10 ** 18);
     await expect(token.burn(burntAmt)).to.emit(token, 'Burnt');
     
-    const newCap = await token.cap();
-    expect(newCap).to.equal(initCap - burntAmt);
+    const newSupply = await token.totalSupply();
+    expect(newSupply).to.equal(initSupply - burntAmt);
     
     await token.allocate("0x1234567890123456789012345678901234567890", burntAmt);
-    expect(await token.totalSupply()).to.equal(ownerAmount + burntAmt);
-    await expect(token.burn(newCap - burntAmt)).to.be.revertedWith("Burn err");
+    expect(await token.circulatingSupply()).to.equal(ownerAmount + burntAmt);
+    expect(await token.availableTokens()).to.equal(newSupply - (ownerAmount + burntAmt));
+    await expect(token.burn(newSupply - burntAmt)).to.be.revertedWith("E1");
   });
 
   it ('Can burn from another account', async function() {

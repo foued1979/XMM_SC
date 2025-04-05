@@ -14,13 +14,13 @@ async function _deploy() {
 
 async function _deployERC20() {
   const owner = await ethers.getSigners();
-  const contractFactory = await ethers.getContractFactory("ERC677Allocatable");
+  const contractFactory = await ethers.getContractFactory("ERC20Allocatable");
   return await contractFactory.deploy(owner[0].address, 100_000, "COIN1", "COIN1", 18);
 }
 
 async function _deployERC20_6() {
   const owner = await ethers.getSigners();
-  const contractFactory = await ethers.getContractFactory("ERC677Allocatable");
+  const contractFactory = await ethers.getContractFactory("ERC20Allocatable");
   return await contractFactory.deploy(owner[0].address, 50_000, "COIN2", "COIN2", 6);
 }
 
@@ -33,7 +33,10 @@ describe('Test exchangeable token functions', function () {
       const approvedToken = await loadFixture(_deployERC20);
       const approvedTokenAddress = await approvedToken.getAddress();
 
-      const initCap = await token.cap();
+      await token.unlockTransfers();
+      await approvedToken.unlockTransfers();
+
+      const initSupply = await token.totalSupply();
 
       // We allocate some ERC20 to token
       await approvedToken.allocate(tokenAddress, 1_500n * BigInt(10 ** 18));
@@ -44,16 +47,16 @@ describe('Test exchangeable token functions', function () {
       const allocatedAmount = 500n * BigInt(10 ** 18);
       expect (await token.allocate(spender, allocatedAmount)).to.emit(token, "transfer");
       const oAvailable = await token.availableTokens();
-      expect(oAvailable).to.equal(initCap - (250_000n + 500n) * BigInt(10 ** 18));
+      expect(oAvailable).to.equal(initSupply - (250_000n + 500n) * BigInt(10 ** 18));
 
       // There is no exchange rate yet
-      await expect(token.getExchangeInfoForToken(approvedTokenAddress)).to.be.revertedWith("Err4");
-      await expect(token.connect(spender).sellBackAgainst(150n * BigInt(10 ** 18), approvedTokenAddress)).to.be.rejectedWith("Err3");
+      await expect(token.getExchangeInfoForToken(approvedTokenAddress)).to.be.revertedWith("E5");
+      await expect(token.connect(spender).sellBackAgainst(150n * BigInt(10 ** 18), approvedTokenAddress)).to.be.rejectedWith("E4");
 
       // We add an approved token for exchange
       // OnlyOwner can do it
-      await expect(token.connect(spender).addApprovedToken(approvedTokenAddress, 18)).to.be.rejectedWith("Err0");
-      await expect(token.addApprovedToken(approvedTokenAddress, 19)).to.be.rejectedWith("Err10");
+      await expect(token.connect(spender).addApprovedToken(approvedTokenAddress, 18)).to.be.rejectedWith("E0");
+      await expect(token.addApprovedToken(approvedTokenAddress, 19)).to.be.rejectedWith("E105");
       await token.addApprovedToken(approvedTokenAddress, 18);
 
       // We cannot change yet
@@ -79,18 +82,18 @@ describe('Test exchangeable token functions', function () {
 
       expect(balanceOfSpenderForApprovedToken).to.equal(1n * BigInt(10 ** 18));
       expect(await token.balanceOf(spender)).to.equal(350n * BigInt(10 ** 18));
-      expect(await token.totalSupply()).to.equal(allocatedAmount + (250_000n - 150n) * BigInt(10 ** 18));
+      expect(await token.circulatingSupply()).to.equal(allocatedAmount + (250_000n - 150n) * BigInt(10 ** 18));
       
-      const newCap = await token.cap();
-      expect(newCap).to.equal(initCap - 150n * BigInt(10 ** 18));
+      const newSupply = await token.totalSupply();
+      expect(newSupply).to.equal(initSupply - 150n * BigInt(10 ** 18));
 
       const newAvailable = await token.availableTokens();
-      expect(newAvailable).to.equal(newCap - (250_000n + 350n) * BigInt(10 ** 18));
+      expect(newAvailable).to.equal(newSupply - (250_000n + 350n) * BigInt(10 ** 18));
 
       // We make sure that we can remove exchange auth.
       // OnlyOwner can do it
-      await expect(token.connect(spender).removeExchangeAuthorizationForToken(approvedTokenAddress)).to.be.rejectedWith("Err0");
-      await expect(token.removeExchangeAuthorizationForToken("0x1234567890123456789012345678901234500002")).to.be.rejectedWith("Err4");
+      await expect(token.connect(spender).removeExchangeAuthorizationForToken(approvedTokenAddress)).to.be.rejectedWith("E0");
+      await expect(token.removeExchangeAuthorizationForToken("0x1234567890123456789012345678901234500002")).to.be.rejectedWith("E5");
       await token.removeExchangeAuthorizationForToken(approvedTokenAddress);
       [ exchangeIsAllowed, exchangeRate ] = await token.getExchangeInfoForToken(approvedTokenAddress);
       expect(exchangeIsAllowed).to.be.false;
@@ -103,6 +106,9 @@ describe('Test exchangeable token functions', function () {
 
       const approvedToken = await loadFixture(_deployERC20);
       const approvedTokenAddress = await approvedToken.getAddress();
+
+      await token.unlockTransfers();
+      await approvedToken.unlockTransfers();
 
       const initCap = await token.cap();
       await token.addApprovedToken(approvedTokenAddress, 18);
@@ -125,7 +131,7 @@ describe('Test exchangeable token functions', function () {
 
       // Then we test if the exchange authorization can be removed
       // OnlyOwner can do it
-      await expect(token.connect(spender).removeExchangeAuthorizationForToken(approvedTokenAddress)).to.be.rejectedWith("Err0");
+      await expect(token.connect(spender).removeExchangeAuthorizationForToken(approvedTokenAddress)).to.be.rejectedWith("E0");
       await token.removeExchangeAuthorizationForToken(approvedTokenAddress);
       const tokenInfo = await token.getExchangeInfoForToken(approvedTokenAddress);
       expect(tokenInfo[0]).to.equal(false);
@@ -140,6 +146,9 @@ describe('Test exchangeable token functions', function () {
       const approvedToken = await loadFixture(_deployERC20_6);
       const approvedTokenAddress = await approvedToken.getAddress();
 
+      await token.unlockTransfers();
+      await approvedToken.unlockTransfers();
+
       // We allocate some ERC20 to token
       await approvedToken.allocate(tokenAddress, 1_500n * BigInt(10 ** decimals));
 
@@ -151,16 +160,16 @@ describe('Test exchangeable token functions', function () {
       await token.allocate(spender, allocatedAmount);
 
       const availableTokens = await token.availableTokens();
-      const initCap = await token.cap();
-      expect(availableTokens).to.equal(initCap - (250_000n + 500n) * BigInt(10 ** 18));
+      const initSupply = await token.totalSupply();
+      expect(availableTokens).to.equal(initSupply - (250_000n + 500n) * BigInt(10 ** 18));
 
       // We add an approved token for exchange
       await token.addApprovedToken(approvedTokenAddress, decimals);
 
       // We update the exchange rate, which enables change
       await token.updateTokenExchangeRate(approvedTokenAddress, 150n * ratePrecision);
-      await expect(token.connect(spender).updateTokenExchangeRate(approvedTokenAddress, 150n * ratePrecision)).to.be.rejectedWith("Err0");
-      await expect(token.updateTokenExchangeRate("0x1234567890123456789012345678901234500002", 150n * ratePrecision)).to.be.rejectedWith("Err4");
+      await expect(token.connect(spender).updateTokenExchangeRate(approvedTokenAddress, 150n * ratePrecision)).to.be.rejectedWith("E0");
+      await expect(token.updateTokenExchangeRate("0x1234567890123456789012345678901234500002", 150n * ratePrecision)).to.be.rejectedWith("E5");
       [ exchangeIsAllowed, exchangeRate ] = await token.getExchangeInfoForToken(approvedTokenAddress);
 
       // We test the sellBack function
@@ -171,11 +180,11 @@ describe('Test exchangeable token functions', function () {
 
       expect(balanceOfSpender).to.equal(1n * BigInt(10 ** decimals));
       expect(await token.balanceOf(spender)).to.equal(350n * BigInt(10 ** 18));
-      expect(await token.totalSupply()).to.equal((250_000n + 350n) * BigInt(10 ** 18));
+      expect(await token.circulatingSupply()).to.equal((250_000n + 350n) * BigInt(10 ** 18));
 
-      const newCap = await token.cap();
-      expect(newCap).to.equal(initCap - 150n * BigInt(10 ** 18));
-      expect(await token.availableTokens()).to.equal(newCap - (250_000n + 350n) * BigInt(10 ** 18));
+      const newSupply = await token.totalSupply();
+      expect(newSupply).to.equal(initSupply - 150n * BigInt(10 ** 18));
+      expect(await token.availableTokens()).to.equal(newSupply - (250_000n + 350n) * BigInt(10 ** 18));
     });
 
     it('Can sell back against ETH', async function() {
@@ -190,26 +199,30 @@ describe('Test exchangeable token functions', function () {
       const ethBalance = await ethers.provider.getBalance(await token.getAddress());
       expect(ethBalance).to.equal(ethers.parseEther("2"));
 
-      await expect(token.connect(spender).sellBack(150n * BigInt(10 ** 18))).to.be.revertedWith("Err2");
+      await expect(token.connect(spender).sellBack(150n * BigInt(10 ** 18))).to.be.revertedWith("E3");
 
       var ethExchangeRate = await token.EthExchangeRate();
       expect(ethExchangeRate).to.equal(0);
 
       // We update the exchange
       // OnlyOwner can do it
-      await expect(token.connect(spender).updateETHExchangeRate(3_000n * ratePrecision)).to.be.rejectedWith("Err0");
-      await token.updateETHExchangeRate(3_000n * ratePrecision);
+      await expect(token.connect(spender).updateEthExchangeRate(3_000n * ratePrecision)).to.be.rejectedWith("E0");
+      await token.updateEthExchangeRate(3_000n * ratePrecision);
       ethExchangeRate = await token.EthExchangeRate();
 
       expect(ethExchangeRate).to.equal(30_000_000n)
-      expect(await token.ETHExchangeIsAllowed()).to.be.true;
+      expect(await token.EthExchangeIsAllowed()).to.be.true;
 
       // We allocate some tokens to spender
       await token.allocate(spender, 500n * BigInt(10 ** 18));
       expect(await token.balanceOf(spender)).to.equal(500n * BigInt(10 ** 18));
-      const availableTokens = await token.availableTokens();
+      
       const initCap = await token.cap();
-      const totalSupply = await token.totalSupply();
+      const initSupply = await token.totalSupply();
+      const initCircSupply = await token.circulatingSupply();
+
+      // Sanity check
+      expect(initCircSupply).to.equal(await token.balanceOf(owner) + await token.balanceOf(spender));
 
       // We test the sellBack function
       const tx = await token.connect(spender).sellBack(150n * BigInt(10 ** 18));
@@ -220,30 +233,32 @@ describe('Test exchangeable token functions', function () {
       const estimatedBalance = 1000005n * BigInt(10 ** 16) - (10n * receipt.gasUsed * receipt.gasPrice);
       expect(await ethers.provider.getBalance(spender.address)).to.above(estimatedBalance);
       expect(await token.balanceOf(spender)).to.equal(350n * BigInt(10 ** 18));
-      expect(await token.totalSupply()).to.equal(totalSupply - 150n * BigInt(10 ** 18));
+      expect(await token.totalSupply()).to.equal(initSupply - 150n * BigInt(10 ** 18));
+      expect(await token.circulatingSupply()).to.equal(initCircSupply - 150n * BigInt(10 ** 18));
+      expect(await token.cap()).to.equal(initCap);
 
-      const newCap = await token.cap();
-      expect(newCap).to.equal(initCap - 150n * BigInt(10 ** 18));
-      expect(await token.availableTokens()).to.equal(newCap - await token.totalSupply());
+      const newSupply = await token.totalSupply();
+      expect(newSupply).to.equal(initSupply - 150n * BigInt(10 ** 18));
+      expect(await token.availableTokens()).to.equal(newSupply - await token.circulatingSupply());
 
       // Then we test if the exchange authorization can be removed
       // OnlyOwner can do it
-      await expect(token.connect(spender).removeETHExchangeAuthorization()).to.be.rejectedWith("Err0");
-      await token.removeETHExchangeAuthorization();
-      expect(await token.ETHExchangeIsAllowed()).to.equal(false);
+      await expect(token.connect(spender).removeEthExchangeAuthorization()).to.be.rejectedWith("E0");
+      await token.removeEthExchangeAuthorization();
+      expect(await token.EthExchangeIsAllowed()).to.equal(false);
     });
 
     it('Can buy back tokens from user', async function () {
-        const token  = await loadFixture(_deploy);
-        const [ owner, spender ] = await ethers.getSigners();
+      const token  = await loadFixture(_deploy);
+      const [ owner, spender ] = await ethers.getSigners();
 
-        // We allocate some ERC20 to token
+      // We allocate some ERC20 to token
       await token.allocate(spender, 1_500n * BigInt(10 ** 18));
 
       const initSupply = await token.totalSupply();
 
       // Should error: no ETH on the Token contract
-      await expect(token.buyBack(spender, 1_000n * BigInt(10 ** 18), 1_000n * ratePrecision)).to.revertedWith("BBack err");
+      await expect(token.buyBack(spender, 1_000n * BigInt(10 ** 18), 1_000n * ratePrecision)).to.revertedWith("E106");
 
       await owner.sendTransaction({
         to: await token.getAddress(),
@@ -275,7 +290,7 @@ describe('Test exchangeable token functions', function () {
       await token.allocate(spender, 1_500n * BigInt(10 ** 18));
 
       // Should error: no ETH on the Token contract
-      await expect(token.buyBack(spender, 1_000n * BigInt(10 ** 18), 1_000n * ratePrecision)).to.revertedWith("BBack err");
+      await expect(token.buyBack(spender, 1_000n * BigInt(10 ** 18), 1_000n * ratePrecision)).to.revertedWith("E106");
 
       await owner.sendTransaction({
         to: await token.getAddress(),
@@ -310,26 +325,26 @@ describe('Test exchangeable token functions', function () {
       const amt = 1_000n * BigInt(10 ** 18);
       await token.allocate(spender, amt);
 
-      await token.updateETHExchangeRate(200n * ratePrecision);
+      await token.updateEthExchangeRate(200n * ratePrecision);
 
       expect(await token.connect(spender).sellBack(amt)).to.emit("ChangedBack").to.emit("Burnt");
       expect(await token.balanceOf(spender)).to.equal(600n * BigInt(10 ** 18));
-      expect(await token.totalSupply()).to.equal((250_000n + 600n) * BigInt(10 ** 18));
+      expect(await token.circulatingSupply()).to.equal((250_000n + 600n) * BigInt(10 ** 18));
     });
 
     it('Can set ETH deposit rate and auth', async function () {
       const token  = await loadFixture(_deploy);
       const [ owner, spender ] = await ethers.getSigners();
 
-      expect(await token.ETHDepositIsAllowed()).to.equal(false);
-      await expect(token.connect(spender).setETHDepositExchangeRate(150 * 10_000)).to.revertedWith("Err0");
+      expect(await token.EthDepositIsAllowed()).to.equal(false);
+      await expect(token.connect(spender).setEthDepositExchangeRate(150 * 10_000)).to.revertedWith("E0");
 
-      await token.setETHDepositExchangeRate(150 * 10_000);
-      expect(await token.ETHDepositIsAllowed()).to.equal(true);
+      await token.setEthDepositExchangeRate(150 * 10_000);
+      expect(await token.EthDepositIsAllowed()).to.equal(true);
       expect(await token.EthExchangeRate()).to.equal(150 * 10_000);
 
-      await expect(token.connect(spender).removeETHDepositAuthorization()).to.revertedWith("Err0");
-      await token.removeETHDepositAuthorization();
-      expect(await token.ETHDepositIsAllowed()).to.equal(false);
+      await expect(token.connect(spender).removeEthDepositAuthorization()).to.revertedWith("E0");
+      await token.removeEthDepositAuthorization();
+      expect(await token.EthDepositIsAllowed()).to.equal(false);
     });
   });

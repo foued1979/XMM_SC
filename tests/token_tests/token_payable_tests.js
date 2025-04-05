@@ -28,8 +28,12 @@ describe('Test payable functions', function() {
       var eth = ethers.parseEther("0.5");
       const prevETHBalance = await ethers.provider.getBalance(spender1.address);
 
-      await expect(token.connect(spender1).depositEther({ value: eth })).to.be.revertedWith('Err1');
-      await token.setETHDepositExchangeRate(30_000_000);
+      await expect(token.connect(spender1).depositEther({ value: eth })).to.be.revertedWith('E2');
+      await token.setEthDepositExchangeRate(30_000_000);
+
+      // Spender has not been approved
+      await expect(token.connect(spender1).depositEther({ value: eth })).to.be.revertedWith('Not Approved');
+      await expect(token.changeDepositorStatus(spender1, true)).to.emit(token, "DepositorStatusChanged").withArgs(spender1, true);
 
       // Now we can transfer
       await token.connect(spender1).depositEther({ value: eth })
@@ -39,6 +43,10 @@ describe('Test payable functions', function() {
       const newETHBalance = await ethers.provider.getBalance(spender1.address);
       const estimatedETHBalance = prevETHBalance - eth;
       expect(abs((newETHBalance - estimatedETHBalance) * 1000n / estimatedETHBalance)).to.be.lessThanOrEqual(10);
+
+      // Spender approval is removed
+      await expect(token.changeDepositorStatus(spender1, false)).to.emit(token, "DepositorStatusChanged").withArgs(spender1, false);
+      await expect(token.connect(spender1).depositEther({ value: eth })).to.be.revertedWith('Not Approved');
     });
 
     it ('Sell-back is working properly', async function() {
@@ -46,13 +54,14 @@ describe('Test payable functions', function() {
       const [ owner1, spender1 ] = await ethers.getSigners();
 
       var eth = ethers.parseEther("0.5");
-      await token.setETHDepositExchangeRate(30_000_000);
+      await token.setEthDepositExchangeRate(30_000_000);
       const prevETHBalance = await ethers.provider.getBalance(spender1.address);
 
+      await token.changeDepositorStatus(spender1, true);
       await token.connect(spender1).depositEther({ value: eth });
       
-      await expect(token.sellBack(1_500_000_000_000_000_000_001n)).to.be.revertedWith("Err2");
-      await token.connect(owner).updateETHExchangeRate(30_000_000);
+      await expect(token.sellBack(1_500_000_000_000_000_000_001n)).to.be.revertedWith("E3");
+      await token.connect(owner).updateEthExchangeRate(30_000_000);
       await expect(token.connect(spender1).sellBack(1_500_000_000_000_000_000_001n)).to.be.revertedWithCustomError(token, "ERC20InsufficientBalance");
 
       await token.connect(spender1).sellBack(750_000_000_000_000_000_000n);
@@ -71,9 +80,10 @@ describe('Test payable functions', function() {
       const [ owner1, spender1 ] = await ethers.getSigners();
 
       var eth = ethers.parseEther("2500");
-      await token.setETHDepositExchangeRate(30_000_000);
+      await token.setEthDepositExchangeRate(30_000_000);
       const prevETHBalance = await ethers.provider.getBalance(spender1.address);
 
+      await token.changeDepositorStatus(spender1, true);
       await token.connect(spender1).depositEther({ value: eth });
 
       var spenderBalance = await token.balanceOf(spender1);
@@ -90,10 +100,11 @@ describe('Test payable functions', function() {
       const [ owner1, spender1 ] = await ethers.getSigners();
 
       var eth = ethers.parseEther("0.5");
-      await token.setETHDepositExchangeRate(30_000_000);
-      await token.updateETHExchangeRate(30_000_000);
+      await token.setEthDepositExchangeRate(30_000_000);
+      await token.updateEthExchangeRate(30_000_000);
       const prevETHBalance = await ethers.provider.getBalance(spender1.address);
 
+      await token.changeDepositorStatus(spender1, true);
       await token.connect(spender1).depositEther({ value: eth });
       await token.allocate(spender1.address, 1_500_000_000_000_000_000_000n);
 

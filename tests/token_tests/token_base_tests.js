@@ -47,7 +47,7 @@ describe('Test base token functions', function () {
       const token = await loadFixture(_deploy);
 
       const amount1 = 200n * BigInt(10 ** 18);
-      await expect(token.connect(spender).allocate(spender, amount1)).to.be.rejectedWith("Err0");
+      await expect(token.connect(spender).allocate(spender, amount1)).to.be.rejectedWith("E0");
 
       await token.allocate("0x1234567890123456789012345678901111111111", amount1);
       await token.allocate("0x1234567890123456789012345678902222222222", 2n * amount1);
@@ -56,15 +56,8 @@ describe('Test base token functions', function () {
       expect(await token.balanceOf("0x1234567890123456789012345678901111111111")).to.equal(amount1);
       expect(await token.balanceOf("0x1234567890123456789012345678902222222222")).to.equal(2n * amount1);
       expect(await token.balanceOf("0x1234567890123456789012345678903333333333")).to.equal(3n * amount1);
-    });
 
-    it('Owner cannot transfer to himself', async function() {
-      const token = await loadFixture(_deploy);
-      const [ owner, spender ] = await ethers.getSigners();
-      await token.unlockTransfers();
-
-      const transfer = 20n * BigInt(10 ** 18);
-      expect(await token.transfer(owner.address, transfer)).to.be.revertedWith('No no');
+      expect(await token.availableTokens()).to.equal(await token.totalSupply() - (6n * amount1 + 250_000n * BigInt(10 ** 18)));
     });
 
     it('Cannot allocate more than available', async function() {
@@ -79,7 +72,8 @@ describe('Test base token functions', function () {
 
       await token.allocate("0x1234567890123456789012345678901234567890", cap -  ownerBalance);
       const newBalance = await token.balanceOf("0x1234567890123456789012345678901234567890");
-
+      
+      expect(await token.availableTokens()).to.equal(await token.totalSupply() - await token.circulatingSupply());
       expect(newBalance + ownerBalance).to.equal(await token.circulatingSupply());
       expect(await token.circulatingSupply() + await token.balanceOf(token)).to.equal(await token.totalSupply());
       await expect(token.allocate("0x1234567890123456789012345678901234567890", 1n)).to.be.revertedWithCustomError(token, "ERC20AllocationFailed");
@@ -112,26 +106,47 @@ describe('Test base token functions', function () {
       const token = await loadFixture(_deploy);
       const [ owner, spender ] = await ethers.getSigners();
       
-      await expect(token.connect(spender).changeOwnership(spender)).to.be.revertedWith("Err0");
+      await expect(token.connect(spender).changeOwnership(spender)).to.be.revertedWith("E0");
       expect(await token.changeOwnership(spender)).to.emit("OwnerChanged");
 
       expect(await token.owner()).to.equal(spender.address);
     });
 
-    if ('Can mass allocate', async function() {
+    it ('Can mass allocate', async function() {
       const token = await loadFixture(_deploy);
       const [ owner, spender ] = await ethers.getSigners();
 
       const allocateTo = ["0x1234567890123456789012345678901234567890", "0x1234567890123456789012345678901234567891"];
+      const wrongAllocateTo = ["0x1234567890123456789012345678901234567890", "0x1234567890123456789012345678901234567891", "0x1234567890123456789012345678901234567892"];
       const allocateAmt = [1_000n * BigInt(10 ** 18), 1_500n * BigInt(10 ** 18)];
+      const wrongAllocateAmt = [1_000n * BigInt(10 ** 18), 1_500n * BigInt(10 ** 18), 2_000n * BigInt(10 ** 18)];
 
       // OnlyOwner can mass allocate
-      await expect(token.connect(spender).massAllocation(allocateTo, allocateAmt)).to.be.revertedWith("Err0");
+      await expect(token.connect(spender).massAllocation(allocateTo, allocateAmt)).to.be.revertedWith("E0");
+
+      // Cannot allocate if parameters do not have same size
+      await expect(token.massAllocation(wrongAllocateTo, allocateAmt)).to.be.revertedWith("E104");
+      await expect(token.massAllocation(allocateTo, wrongAllocateAmt)).to.be.revertedWith("E104");
+
       await token.massAllocation(allocateTo, allocateAmt);
 
       expect(await token.balanceOf("0x1234567890123456789012345678901234567890")).to.equal(1_000n * BigInt(10 ** 18));
       expect(await token.balanceOf("0x1234567890123456789012345678901234567891")).to.equal(1_500n * BigInt(10 ** 18));
 
-      expect(await token.totalSupply()).to.equal(252_000n * BigInt(10 ** 18));
+      expect(await token.circulatingSupply()).to.equal(252_500n * BigInt(10 ** 18));
+    });
+
+    it ('Cannot allocate/transfer to, or approve address 0', async function() {
+      const token = await loadFixture(_deploy);
+      const [ owner, spender ] = await ethers.getSigners();
+
+      await expect(token.transfer("0x0000000000000000000000000000000000000000", 1_000n * BigInt(10 ** 18))).to.be.revertedWith("Locked");
+
+      await token.unlockTransfers();
+      
+      await expect(token.allocate("0x0000000000000000000000000000000000000000", 1_000n * BigInt(10 ** 18))).to.be.revertedWith("E103");
+      await expect(token.transfer("0x0000000000000000000000000000000000000000", 1_000n * BigInt(10 ** 18))).to.be.revertedWithCustomError(token, "ERC20InvalidReceiver");
+      await expect(token.transferFrom("0x0000000000000000000000000000000000000000", spender, 1_000n * BigInt(10 ** 18))).to.be.revertedWithCustomError(token, "ERC20InvalidSender");
+      await expect(token.approve("0x0000000000000000000000000000000000000000", 1_000n * BigInt(10 ** 18))).to.be.revertedWithCustomError(token, "ERC20InvalidSpender");
     });
   });

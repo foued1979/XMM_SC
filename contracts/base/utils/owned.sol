@@ -8,7 +8,7 @@ abstract contract Owned is IOwned {
      * The modifiers *
      *****************/
     modifier onlyOwner {
-        require(msg.sender == _owner, "Err0");
+        require(msg.sender == _owner, "E0");
         _;
     }
 

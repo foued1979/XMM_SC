@@ -91,10 +91,10 @@ contract ERC20Allocatable is ERC20Vested, IGetCCIPAdmin, IBurnMint {
     /// @param to The beneficiary
     /// @param amount The amount
     function allocate(address to, uint256 amount) public onlyOwner {
-        require(to != address(0), "Err");
+        require(to != address(0), "E103");
         if (amount > balanceOf(address(this))) revert IERC20Errors.ERC20AllocationFailed(amount, totalSupply());
 
-        super._update(address(this), to, amount);
+        _update(address(this), to, amount);
         emit Allocated(to, amount);
     }
 
@@ -102,7 +102,7 @@ contract ERC20Allocatable is ERC20Vested, IGetCCIPAdmin, IBurnMint {
     /// @param to The beneficiaries
     /// @param amount The amounts
     function massAllocation(address[] memory to, uint256[] memory amount) external onlyOwner {
-        require(to.length == amount.length, "Err");
+        require(to.length == amount.length, "E104");
 
         for (uint i = 0; i < to.length; i++) {
             allocate(to[i], amount[i]);
@@ -142,9 +142,8 @@ contract ERC20Allocatable is ERC20Vested, IGetCCIPAdmin, IBurnMint {
     function burn(uint256 amount) public override(ERC20Burnable) {
         // Owner or CCIPAdmin cannot burn non-allocated tokens
         if (msg.sender == _owner) {
-            require(amount <= _availableTokens, "Burn err");
+            require(amount <= _availableTokens, "E1");
             super._update(address(this), address(0), amount);
-            _availableTokens -= amount;
         }
         else {
             super._burn(msg.sender, amount);

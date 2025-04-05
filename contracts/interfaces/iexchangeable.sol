@@ -3,19 +3,19 @@ pragma solidity >= 0.8.20;
 
 interface IExchangeable {
     /// @notice Sets the change authorization status to false
-    function removeETHExchangeAuthorization() external;
+    function removeEthExchangeAuthorization() external;
 
     /// @notice Sets the change authorization status for a token to false
     function removeExchangeAuthorizationForToken(address tokenToBeReceived) external;
 
     /// @notice Sets whether the deposit of ETH against token is allowed or not
-    function setETHDepositExchangeRate(uint64 exchangeRate) external;
+    function setEthDepositExchangeRate(uint64 exchangeRate) external;
 
     /// @notice Sets the ETH deposit authorization to false
-    function removeETHDepositAuthorization() external;
+    function removeEthDepositAuthorization() external;
 
     /// @notice Updates the exchange rate between ETH and the Token
-    function updateETHExchangeRate(uint64 exchangeRate) external;
+    function updateEthExchangeRate(uint64 exchangeRate) external;
 
     /// @notice Updates the exchange rate between a token and our Token
     /// @param  tokenToBeReceived The token to be received in exchange of our Token

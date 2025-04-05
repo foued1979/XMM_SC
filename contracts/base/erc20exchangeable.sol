@@ -9,27 +9,27 @@ abstract contract ERC20Exchangeable is IExchangeable {
      * Modifiers *
      *************/
      modifier _onlyOwner {
-        require(msg.sender == _owner, "Err0");
+        require(msg.sender == _owner, "E0");
         _;
     }
 
     modifier ethDepositIsAllowed {
-        require(ETHDepositIsAllowed, "Err1");
+        require(EthDepositIsAllowed, "E2");
         _;
     }
 
     modifier ethExchangeIsAllowed {
-        require(ETHExchangeIsAllowed && EthExchangeRate != 0, "Err2");
+        require(EthExchangeIsAllowed && EthExchangeRate != 0, "E3");
         _;
     }
 
     modifier exchangeIsAllowedForToken(address token) {
-        require(_tokenIsApproved[token] && _exchangeIsAllowed[token] && _exchangeRates[token] != 0, "Err3");
+        require(_tokenIsApproved[token] && _exchangeIsAllowed[token] && _exchangeRates[token] != 0, "E4");
         _;
     }
 
     modifier tokenIsApproved(address token) {
-        require(_tokenIsApproved[token], "Err4");
+        require(_tokenIsApproved[token], "E5");
         _;
     }
 
@@ -41,8 +41,8 @@ abstract contract ERC20Exchangeable is IExchangeable {
 
     // Public properties linked to IExchangeable
     /// @dev The exchange rate represents a real number with 4 digits precision
-    bool public ETHExchangeIsAllowed;
-    bool public ETHDepositIsAllowed;
+    bool public EthExchangeIsAllowed;
+    bool public EthDepositIsAllowed;
     uint64 public EthExchangeRate;
     uint16 internal _precision = 10_000;
 
@@ -60,13 +60,13 @@ abstract contract ERC20Exchangeable is IExchangeable {
      ***************/
     constructor(address owner_) {
         _owner = owner_;
-        ETHDepositIsAllowed = false;
-        ETHExchangeIsAllowed = false;
+        EthDepositIsAllowed = false;
+        EthExchangeIsAllowed = false;
     }
 
     /// @notice Sets the change authorization status for ETH to false
-    function removeETHExchangeAuthorization() external _onlyOwner {
-        ETHExchangeIsAllowed = false;
+    function removeEthExchangeAuthorization() external _onlyOwner {
+        EthExchangeIsAllowed = false;
     }
 
     /// @notice Sets the change authorization status for a token to false
@@ -76,21 +76,21 @@ abstract contract ERC20Exchangeable is IExchangeable {
 
     /// @notice Sets whether the deposit of ETH against token is allowed or not
     /// @dev The exchange rate is expressed in pips
-    function setETHDepositExchangeRate(uint64 exchangeRate) external _onlyOwner {
+    function setEthDepositExchangeRate(uint64 exchangeRate) external _onlyOwner {
         EthExchangeRate = exchangeRate;
-        ETHDepositIsAllowed = true;
+        EthDepositIsAllowed = true;
     }
 
     /// @notice Sets the ETH deposit authorization to false
-    function removeETHDepositAuthorization() external _onlyOwner {
-        ETHDepositIsAllowed = false;
+    function removeEthDepositAuthorization() external _onlyOwner {
+        EthDepositIsAllowed = false;
     }
 
     /// @notice Updates the exchange rate between ETH and the Token
     /// @dev The exchange rate is expressed in pips
-    function updateETHExchangeRate(uint64 exchangeRate) external _onlyOwner {
+    function updateEthExchangeRate(uint64 exchangeRate) external _onlyOwner {
         EthExchangeRate = exchangeRate;
-        ETHExchangeIsAllowed = true;
+        EthExchangeIsAllowed = true;
     }
 
     /// @notice Updates the exchange rate between a token and our Token
@@ -124,7 +124,7 @@ abstract contract ERC20Exchangeable is IExchangeable {
 
     /// @notice Adds a token which can be traded against our Token
     function addApprovedToken(address token, uint8 decimals) external _onlyOwner {
-        require(decimals <= 18, "Err10");
+        require(decimals <= 18, "E105");
         if (_tokenIsApproved[token]) return;
 
         _tokenIsApproved[token] = true;

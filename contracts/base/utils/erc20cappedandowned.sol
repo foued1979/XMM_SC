@@ -62,9 +62,9 @@ abstract contract ERC20CappedAndOwned is ERC20, Owned {
     function _update(address from, address to, uint256 value) internal virtual override(ERC20) {
         if (from == address(0)) {
             uint256 maxSupply = totalSupply();
-            uint256 circulatingSupply = circulatingSupply();
+            uint256 circSupply = circulatingSupply();
 
-            if (circulatingSupply + value > maxSupply) revert ERC20ExceededCap(circulatingSupply, maxSupply);
+            if (circSupply + value > maxSupply) revert ERC20ExceededCap(circSupply, maxSupply);
         }
 
         super._update(from, to, value);

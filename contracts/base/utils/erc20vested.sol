@@ -49,8 +49,10 @@ abstract contract ERC20Vested is ERC20Burnable {
     /// @notice Transfers tokens from the msg sender to another address
     /// overrides the transfer function of ERC20
     function transfer(address to, uint256 value) public override unlocked returns(bool) {
+        if (msg.sender == address(0)) revert IERC20Errors.ERC20InvalidSender(address(0));
+        if (to == address(0)) revert IERC20Errors.ERC20InvalidReceiver(address(0));
         uint256 releasableAmount = _releaseTokens(msg.sender, value);
-        require(releasableAmount >= value, "Vest err");
+        require(releasableAmount >= value, "E102");
 
         return super.transfer(to, value);
     }
@@ -58,8 +60,10 @@ abstract contract ERC20Vested is ERC20Burnable {
     /// @notice Transfers tokens from one address to another
     /// overrides the transferFrom function of ERC20
     function transferFrom(address from, address to, uint256 value) public override unlocked returns(bool) {
+        if (from == address(0)) revert IERC20Errors.ERC20InvalidSender(address(0));
+        if (to == address(0)) revert IERC20Errors.ERC20InvalidReceiver(address(0));
         uint256 releasableAmount = _releaseTokens(from, value);
-        require(releasableAmount >= value, "Vest err");
+        require(releasableAmount >= value, "E102");
 
         return super.transferFrom(from, to, value);
     }
@@ -157,7 +161,7 @@ abstract contract ERC20Vested is ERC20Burnable {
      */
     function _createVestingSchedule(address beneficiary, uint8 upfrontRelease, uint start, uint16 duration, DurationUnits durationUnit, uint256 amount) internal {
         // perform input checks
-        require(beneficiary != address(0) && amount > 0 && start >= block.timestamp && duration > 0, "Vesting Err");
+        require(beneficiary != address(0) && amount > 0 && start >= block.timestamp && duration > 0, "E101");
 
         // if beneficiary already has a vesting schedule, we just add the amount to the existing schedule
         if (_hasVestingSchedule[beneficiary]) {

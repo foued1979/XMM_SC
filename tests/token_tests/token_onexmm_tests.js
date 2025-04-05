@@ -32,12 +32,13 @@ describe('Test 1XMM specific token functions', function () {
     it('Owner can transfer back', async function() {
       const [owner, token, spender] = await loadFixture(_deploy);
       
-      await expect(token.connect(spender).ownerTransfersBack(250_001n * BigInt(10 ** 18))).to.be.rejectedWith("Err0");
+      await expect(token.connect(spender).ownerTransfersBack(250_001n * BigInt(10 ** 18))).to.be.rejectedWith("E0");
       await expect(token.ownerTransfersBack(250_001n * BigInt(10 ** 18))).to.be.revertedWithCustomError(token, "ERC20InsufficientBalance");
       expect(await token.ownerTransfersBack(150_000n * BigInt(10 ** 18))).to.emit("Transfer");
 
       expect(await token.balanceOf(owner)).to.equal(100_000n * BigInt(10 ** 18));
-      expect(await token.totalSupply()).to.equal(100_000n * BigInt(10 ** 18));
+      expect(await token.circulatingSupply()).to.equal(100_000n * BigInt(10 ** 18));
+      expect(await token.totalSupply()).to.equal(5_000_000n * BigInt(10 ** 18));
       expect(await token.cap()).to.equal(5_000_000n * BigInt(10 ** 18));
     });
 
@@ -47,13 +48,13 @@ describe('Test 1XMM specific token functions', function () {
       const amt = 100_000n * BigInt(10 ** 18);
       const amts = [amt, 2n * amt, amt];
 
-      await expect(token.connect(spender).massAllocation(addresses, amts)).to.be.rejectedWith("Err0");
+      await expect(token.connect(spender).massAllocation(addresses, amts)).to.be.rejectedWith("E0");
       await expect(token.massAllocation(addresses, amts)).to.emit(token, "Allocated");
 
       expect(await token.balanceOf("0x1234567890123456789012345678901234500002")).to.equal(amt);
       expect(await token.balanceOf("0x1234567890123456789012345678901234500003")).to.equal(2n * amt);
       expect(await token.balanceOf("0x1234567890123456789012345678901234500004")).to.equal(amt);
 
-      expect(await token.totalSupply()).to.equal(250_000n * BigInt(10 ** 18) + 4n * amt);
+      expect(await token.circulatingSupply()).to.equal(250_000n * BigInt(10 ** 18) + 4n * amt);
     });
 });

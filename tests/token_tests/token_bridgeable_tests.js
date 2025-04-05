@@ -32,7 +32,7 @@ function findEventArgs(logs, eventName) {
         await token.setCCIPAdmin(ccipAdmin);
 
         expect (await token.getCCIPAdmin()).to.equal(ccipAdmin);
-        await expect(token.connect(spender).allowlistDestinationChain(151, true)).to.be.rejectedWith("Err0");
+        await expect(token.connect(spender).allowlistDestinationChain(151, true)).to.be.rejectedWith("E0");
 
         await token.allowlistDestinationChain(151, true);
         expect (await token.connect(spender).isChainIdAllowed(151)).to.equal(true);
