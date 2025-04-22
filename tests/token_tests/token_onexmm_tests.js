@@ -7,13 +7,16 @@ const ratePrecision = 10_000n;
 
 async function _deploy() {
   const [owner, spender] = await ethers.getSigners();
-
   const contractFactory = await ethers.getContractFactory("OneXMM");
-  // Initial supply is 5 mios
-  // Allocation to owner is 250k
-  const token = await contractFactory.deploy("TEST", "Test token", 5_000_000, 250_000);
 
-  return [ owner, token, spender ];
+  const token = await contractFactory.deploy("TEST", "Test token");
+
+  // Initial supply is 5 mios
+  await token.allocate(token, 5_000_000n * BigInt(10 ** 18));
+  // Allocation to owner is 250k
+  await token.allocate(owner, 250_000n * BigInt(10 ** 18));
+
+  return [owner, token, spender];
 }
 
 async function _deployERC20() {
@@ -29,6 +32,11 @@ async function _deployERC20_6() {
 }
 
 describe('Test 1XMM specific token functions', function () {
+    it ('Only owner can unlock token', async function () {
+      const [owner, token, spender] = await loadFixture(_deploy);
+      await expect(token.connect(spender).unlockTransfers()).to.be.rejectedWith("E0");
+    });
+
     it('Owner can transfer back', async function() {
       const [owner, token, spender] = await loadFixture(_deploy);
       
@@ -56,5 +64,17 @@ describe('Test 1XMM specific token functions', function () {
       expect(await token.balanceOf("0x1234567890123456789012345678901234500004")).to.equal(amt);
 
       expect(await token.circulatingSupply()).to.equal(250_000n * BigInt(10 ** 18) + 4n * amt);
+    });
+
+    it('Can grant authorization for transfer', async function() {
+      const [owner, token, spender] = await loadFixture(_deploy);
+
+      await token.allocate(spender, 250_000n * BigInt(10 ** 18));
+      await expect(token.connect(spender).transfer("0x1234567890123456789012345678901234500002", 150_000n * BigInt(10 ** 18))).to.be.revertedWith("Locked");
+      
+      await expect(token.connect(spender).changeTransferAuthorization(spender, true, "test")).to.be.revertedWith("E0");
+      expect(await token.changeTransferAuthorization(spender, true, "test")).to.emit("TransferAuthorized");
+
+      expect(await token.connect(spender).transfer("0x1234567890123456789012345678901234500002", 150_000n * BigInt(10 ** 18))).to.emit("Transfer");
     });
 });

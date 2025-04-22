@@ -8,9 +8,13 @@ const ratePrecision = 10_000n;
 async function _deploy() {
   const [owner, spender, ccipAdmin] = await ethers.getSigners();
   const contractFactory = await ethers.getContractFactory("OneXMM");
+
+  const token = await contractFactory.deploy("TEST", "Test token");
+
   // Initial supply is 5 mios
+  await token.allocate(token, 5_000_000n * BigInt(10 ** 18));
   // Allocation to owner is 250k
-  const token = await contractFactory.deploy("TEST", "Test token", 5_000_000, 250_000);
+  await token.allocate(owner, 250_000n * BigInt(10 ** 18));
 
   return [owner, token, spender, ccipAdmin];
 }
@@ -27,19 +31,11 @@ function findEventArgs(logs, eventName) {
 }
 
   describe('Test bridge functions', function () {
-    it('can bridge as expected', async function () {
+    it('can set / get ccipAdmin', async function () {
         const [ owner, token, spender, ccipAdmin ] = await loadFixture(_deploy);
         await token.setCCIPAdmin(ccipAdmin);
 
         expect (await token.getCCIPAdmin()).to.equal(ccipAdmin);
-        await expect(token.connect(spender).allowlistDestinationChain(151, true)).to.be.rejectedWith("E0");
-
-        await token.allowlistDestinationChain(151, true);
-        expect (await token.connect(spender).isChainIdAllowed(151)).to.equal(true);
-        expect (await token.connect(spender).isChainIdAllowed(150)).to.equal(false);
-
-        await token.allowlistDestinationChain(151, false);
-        expect (await token.connect(spender).isChainIdAllowed(151)).to.equal(false);
     });
 
     it('CCIPAdmin can mint and burn as expected', async function() {

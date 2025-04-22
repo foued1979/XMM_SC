@@ -6,29 +6,41 @@ const decimalAdjustment = BigInt(10 ** 18);
 const ratePrecision = 10_000n;
 
 async function _deploy() {
+  const [owner, spender] = await ethers.getSigners();
   const contractFactory = await ethers.getContractFactory("OneXMM");
+
+  const token = await contractFactory.deploy("TEST", "Test token");
+
   // Initial supply is 5 mios
+  await token.allocate(token, 5_000_000n * BigInt(10 ** 18));
   // Allocation to owner is 250k
-  return await contractFactory.deploy("TEST", "Test token", 5_000_000, 250_000);
+  await token.allocate(owner, 250_000n * BigInt(10 ** 18));
+
+  return [owner, token, spender];
 }
 
 async function _deployERC20() {
   const owner = await ethers.getSigners();
   const contractFactory = await ethers.getContractFactory("ERC20Allocatable");
-  return await contractFactory.deploy(owner[0].address, 100_000, "COIN1", "COIN1", 18);
+  const token = await contractFactory.deploy(owner[0].address, "COIN1", "COIN1", 18);
+
+  await token.allocate(token, 5_000_000n * BigInt(10 ** 18));
+  return token;
 }
 
 async function _deployERC20_6() {
   const owner = await ethers.getSigners();
   const contractFactory = await ethers.getContractFactory("ERC20Allocatable");
-  return await contractFactory.deploy(owner[0].address, 50_000, "COIN2", "COIN2", 6);
+  const token = await contractFactory.deploy(owner[0].address, "COIN2", "COIN2", 6);
+
+  await token.allocate(token, 5_000_000n * BigInt(10 ** 18));
+  return token;
 }
 
 describe('Test exchangeable token functions', function () {
     it('Exchange functions work properly for Coin', async function() {
-      const token = await loadFixture(_deploy);
+      const [owner, token, spender] = await loadFixture(_deploy);
       const tokenAddress = await token.getAddress()
-      const [ owner, spender ] = await ethers.getSigners();
 
       const approvedToken = await loadFixture(_deployERC20);
       const approvedTokenAddress = await approvedToken.getAddress();
@@ -100,9 +112,8 @@ describe('Test exchangeable token functions', function () {
     });
 
     it('Exchanges only max amount of Coin available', async function() {
-      const token = await loadFixture(_deploy);
+      const [owner, token, spender] = await loadFixture(_deploy);
       const tokenAddress = await token.getAddress()
-      const [ owner, spender ] = await ethers.getSigners();
 
       const approvedToken = await loadFixture(_deployERC20);
       const approvedTokenAddress = await approvedToken.getAddress();
@@ -139,9 +150,8 @@ describe('Test exchangeable token functions', function () {
 
     it('Add approved token with 6 decimals is working', async function() {
       const decimals = 6;
-      const token = await loadFixture(_deploy);
+      const [owner, token, spender] = await loadFixture(_deploy);
       const tokenAddress = await token.getAddress()
-      const [ owner, spender ] = await ethers.getSigners();
 
       const approvedToken = await loadFixture(_deployERC20_6);
       const approvedTokenAddress = await approvedToken.getAddress();
@@ -188,8 +198,7 @@ describe('Test exchangeable token functions', function () {
     });
 
     it('Can sell back against ETH', async function() {
-      const token  = await loadFixture(_deploy);
-      const [ owner, spender ] = await ethers.getSigners();
+      const [owner, token, spender] = await loadFixture(_deploy);
 
       await owner.sendTransaction({
         to: await token.getAddress(),
@@ -249,8 +258,7 @@ describe('Test exchangeable token functions', function () {
     });
 
     it('Can buy back tokens from user', async function () {
-      const token  = await loadFixture(_deploy);
-      const [ owner, spender ] = await ethers.getSigners();
+      const [owner, token, spender] = await loadFixture(_deploy);
 
       // We allocate some ERC20 to token
       await token.allocate(spender, 1_500n * BigInt(10 ** 18));
@@ -283,8 +291,7 @@ describe('Test exchangeable token functions', function () {
     });
 
     it('Can buy back tokens from user with limited ETH', async function () {
-        const token  = await loadFixture(_deploy);
-        const [ owner, spender ] = await ethers.getSigners();
+      const [owner, token, spender] = await loadFixture(_deploy);
 
         // We allocate some ERC20 to token
       await token.allocate(spender, 1_500n * BigInt(10 ** 18));
@@ -314,8 +321,7 @@ describe('Test exchangeable token functions', function () {
     });
 
     it('Can sell back tokens with limited ETH', async function () {
-      const token  = await loadFixture(_deploy);
-      const [ owner, spender ] = await ethers.getSigners();
+      const [owner, token, spender] = await loadFixture(_deploy);
 
       await owner.sendTransaction({
         to: await token.getAddress(),
@@ -333,8 +339,7 @@ describe('Test exchangeable token functions', function () {
     });
 
     it('Can set ETH deposit rate and auth', async function () {
-      const token  = await loadFixture(_deploy);
-      const [ owner, spender ] = await ethers.getSigners();
+      const [owner, token, spender] = await loadFixture(_deploy);
 
       expect(await token.EthDepositIsAllowed()).to.equal(false);
       await expect(token.connect(spender).setEthDepositExchangeRate(150 * 10_000)).to.revertedWith("E0");

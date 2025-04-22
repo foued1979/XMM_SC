@@ -6,14 +6,17 @@ const { boolean } = require('hardhat/internal/core/params/argumentTypes');
 const decimalAdjustment = BigInt(10 ** 18);
 
 async function _deploy() {
-  const [owner] = await ethers.getSigners();
-
+  const [owner, spender] = await ethers.getSigners();
   const contractFactory = await ethers.getContractFactory("OneXMM");
-  // Initial supply is 5 mios
-  // Allocation to owner is 250k
-  const token = await contractFactory.deploy("TEST", "Test token", 5_000_000, 250_000);
 
-  return [ owner, token ];
+  const token = await contractFactory.deploy("TEST", "Test token");
+
+  // Initial supply is 5 mios
+  await token.allocate(token, 5_000_000n * BigInt(10 ** 18));
+  // Allocation to owner is 250k
+  await token.allocate(owner, 250_000n * BigInt(10 ** 18));
+
+  return [owner, token, spender];
 }
 
 describe('Test ERC20 methods', function () {
@@ -30,13 +33,15 @@ describe('Test ERC20 methods', function () {
     });
   
     it('Should properly transfer tokens', async function() {
-      const [ owner, token ] = await loadFixture(_deploy);
-      await expect(token.transfer("0x1234567890123456789012345678901234567890", 100n * decimalAdjustment)).to.be.revertedWith("Locked");
+      const [ owner, token, spender ] = await loadFixture(_deploy);
+
+      await expect(token.connect(spender).transfer("0x1234567890123456789012345678901234567890", 100n * decimalAdjustment)).to.be.revertedWith("Locked");
+      await expect(token.transfer("0x1234567890123456789012345678901234567365", 100n * decimalAdjustment)).to.emit(token, 'Transfer');
       await token.unlockTransfers();
-  
+      
       await expect(token.transfer("0x1234567890123456789012345678901234567890", 100n * decimalAdjustment)).to.emit(token, 'Transfer');
       expect(await token.balanceOf("0x1234567890123456789012345678901234567890")).to.equal(100n * decimalAdjustment);
-      expect(await token.balanceOf(owner)).to.equal(249_900n * decimalAdjustment);
+      expect(await token.balanceOf(owner)).to.equal(249_800n * decimalAdjustment);
     });
   
     it('Should not allow transfer if amount exceeds balance', async function() {
@@ -56,6 +61,7 @@ describe('Test ERC20 methods', function () {
       expect(await token.allowance(owner, spender)).to.equal(1_000n * decimalAdjustment);
       
       await expect(token.connect(spender).transferFrom(owner, spender, 550n * decimalAdjustment)).to.emit(token, 'Transfer');
+      await expect(token.connect(spender).transferFrom(owner, ethers.ZeroAddress, 550n * decimalAdjustment)).to.be.revertedWithCustomError(token, 'ERC20InvalidReceiver');
       
       const balanceOwner = await token.balanceOf(owner);
       const balanceSpender = await token.balanceOf(spender);

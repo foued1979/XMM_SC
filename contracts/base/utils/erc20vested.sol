@@ -19,13 +19,15 @@ abstract contract ERC20Vested is ERC20Burnable {
     event TokensAddedToVestingSchedule(address indexed beneficiary, uint256 amount);
     /// @notice Emitted when tokens are released
     event TokensReleased(address indexed beneficiary, uint256 amount);
+    /// @notice Emitted when an authorization for transfer has been granted
+    event TransferAuthorized(address indexed account, bool status, string reason);
 
     /*************
      * Modifiers *
      *************/
     /// @notice Modifier that checks if the contract is unlocked
-    modifier unlocked() {
-        require(_unlocked, "Locked");
+    modifier unlocked(address sender) {
+        require(_unlocked || sender == _owner || _authorizedAddresses[sender], "Locked");
         _;
     }
 
@@ -36,19 +38,23 @@ abstract contract ERC20Vested is ERC20Burnable {
     mapping(address beneficiary => VestingSchedule) private _vestingSchedules;
     mapping(address beneficiary => bool) private _hasVestingSchedule;
 
+    // The list of addresses which are authorized to transfer
+    // even if token is locked.
+    mapping(address => bool) internal _authorizedAddresses;
+
     // Private properties
     bool private _unlocked = false;
 
     /***************
      * Constructor *
      ***************/
-    constructor(address owner_, uint32 initialSupply_, string memory name_, string memory symbol_, uint8 decimals_)
-        ERC20Burnable(owner_, initialSupply_, name_, symbol_, decimals_)
+    constructor(address owner_, string memory name_, string memory symbol_, uint8 decimals_)
+        ERC20Burnable(owner_, name_, symbol_, decimals_)
     {}
 
     /// @notice Transfers tokens from the msg sender to another address
     /// overrides the transfer function of ERC20
-    function transfer(address to, uint256 value) public override unlocked returns(bool) {
+    function transfer(address to, uint256 value) public override unlocked(msg.sender) returns(bool) {
         if (msg.sender == address(0)) revert IERC20Errors.ERC20InvalidSender(address(0));
         if (to == address(0)) revert IERC20Errors.ERC20InvalidReceiver(address(0));
         uint256 releasableAmount = _releaseTokens(msg.sender, value);
@@ -59,7 +65,7 @@ abstract contract ERC20Vested is ERC20Burnable {
 
     /// @notice Transfers tokens from one address to another
     /// overrides the transferFrom function of ERC20
-    function transferFrom(address from, address to, uint256 value) public override unlocked returns(bool) {
+    function transferFrom(address from, address to, uint256 value) public override unlocked(msg.sender) returns(bool) {
         if (from == address(0)) revert IERC20Errors.ERC20InvalidSender(address(0));
         if (to == address(0)) revert IERC20Errors.ERC20InvalidReceiver(address(0));
         uint256 releasableAmount = _releaseTokens(from, value);
@@ -81,6 +87,16 @@ abstract contract ERC20Vested is ERC20Burnable {
     /// @notice Gets the amount of vested tokens which can be withdrawn by the msg.sender
     function getReleasableAmount() external view returns(uint256 releasableAmt) {
         (releasableAmt, ) = _getReleasableAmount(msg.sender);
+    }
+
+    /// @notice Sets the authorization status for `account` to transfer tokens before the unlock
+    /// @param account The beneficiary account
+    /// @param status The authorization status: true or false
+    /// @param reason The reason for providing or removing the authorization
+    /// @dev This functionality has been implemented mainly to allow bridges when the contract is locked
+    function changeTransferAuthorization(address account, bool status, string memory reason) external onlyOwner {
+        _authorizedAddresses[account] = status;
+        emit TransferAuthorized(account, status, reason);
     }
 
     /// @notice Unlocks the contract and allows transfers to be made

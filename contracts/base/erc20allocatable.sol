@@ -20,29 +20,25 @@ contract ERC20Allocatable is ERC20Vested, IGetCCIPAdmin, IBurnMint {
         _;
     }
 
+    /**************
+     * Properties *
+     **************/
+    // The address of the CCIP Admin
+    address internal _ccipAdmin;
+
     /**********
      * Events *
      **********/
     /// @notice Event emitted when CCIP Admin is transferred to a new address
     event CCIPAdminTransferred(address indexed previousAdmin, address indexed newAdmin);
-    /// @notice The Allocated event is triggered when Owner allocates some token to
-    /// a beneficiary
+    /// @notice The Allocated event is triggered when Owner allocates some token to a beneficiary
     event Allocated(address indexed beneficiary, uint256 amount);
-
-    /**************
-     * Properties *
-     **************/
-    // Mapping to keep track of allowlisted destination chains.
-    mapping(uint64 chainId => bool) private _allowlistedChains;
-
-    // The address of the CCIP Admin
-    address private _ccipAdmin;
 
     /***************
      * Constructor *
      ***************/
-    constructor(address owner_, uint32 initialSupply_, string memory name_, string memory symbol_, uint8 decimals_)
-        ERC20Vested(owner_, initialSupply_, name_, symbol_, decimals_)
+    constructor(address owner_, string memory name_, string memory symbol_, uint8 decimals_)
+        ERC20Vested(owner_, name_, symbol_, decimals_)
     { }
 
     /// @notice Allocates a number of token to a beneficiary
@@ -74,27 +70,19 @@ contract ERC20Allocatable is ERC20Vested, IGetCCIPAdmin, IBurnMint {
         _createVestingSchedule(to,upfrontRelease, cliffEnd, vestingDuration, vestingDurationUnit, amount);
     }
 
-    /// @notice Gets whether a chain id is allowed
-    function isChainIdAllowed(uint64 chainId) external view returns(bool) {
-        return _allowlistedChains[chainId];
-    }
-
-    /// @notice Updates the allowlist status of a destination chain for transactions.
-    /// @dev This function can only be called by the owner.
-    /// @param _destinationChainSelector The selector of the destination chain to be updated.
-    /// @param allowed The allowlist status to be set for the destination chain.
-    function allowlistDestinationChain(uint64 _destinationChainSelector, bool allowed) external onlyOwner {
-        _allowlistedChains[_destinationChainSelector] = allowed;
-    }
-
     /// @notice Allocates a number of token to a beneficiary
     /// @param to The beneficiary
     /// @param amount The amount
     function allocate(address to, uint256 amount) public onlyOwner {
         require(to != address(0), "E103");
-        if (amount > balanceOf(address(this))) revert IERC20Errors.ERC20AllocationFailed(amount, totalSupply());
-
-        _update(address(this), to, amount);
+        if (to == address(this)) {
+            if (amount + totalSupply() > _cap) revert IERC20Errors.ERC20AllocationFailed(amount, _cap);
+            _update(address(0), to, amount);
+        } else {
+            if (amount > _availableTokens) revert IERC20Errors.ERC20AllocationFailed(amount, totalSupply());
+            _update(address(this), to, amount);
+        }
+        
         emit Allocated(to, amount);
     }
 
@@ -127,9 +115,9 @@ contract ERC20Allocatable is ERC20Vested, IGetCCIPAdmin, IBurnMint {
      *  IBurnMintImpl  *
      *******************/
     /// @notice Mints 'value' amount of tokens when a cross-chain transfer is performed
+    /// @dev This function can only be called by the ccipAdmin.
     /// @param account The account to receive the tokens
     /// @param value The amount of tokens to be minted
-    /// @dev this function increases the cap.
     function mint(address account, uint256 value) public onlyMinter {
         if (totalSupply() + value > _cap) revert ERC20ExceededCap(totalSupply(), _cap);
         _mint(account, value);
@@ -140,9 +128,9 @@ contract ERC20Allocatable is ERC20Vested, IGetCCIPAdmin, IBurnMint {
 
     /// @inheritdoc ERC20Burnable
     function burn(uint256 amount) public override(ERC20Burnable) {
-        // Owner or CCIPAdmin cannot burn non-allocated tokens
+        // Owner cannot burn non-allocated tokens
         if (msg.sender == _owner) {
-            require(amount <= _availableTokens, "E1");
+            require(amount <= balanceOf(address(this)), "E1");
             super._update(address(this), address(0), amount);
         }
         else {

@@ -8,9 +8,13 @@ const ratePrecision = 10_000n;
 async function _deploy() {
   const [owner, spender] = await ethers.getSigners();
   const contractFactory = await ethers.getContractFactory("OneXMM");
+
+  const token = await contractFactory.deploy("TEST", "Test token");
+
   // Initial supply is 5 mios
+  await token.allocate(token, 5_000_000n * BigInt(10 ** 18));
   // Allocation to owner is 250k
-  const token = await contractFactory.deploy("TEST", "Test token", 5_000_000, 250_000);
+  await token.allocate(owner, 250_000n * BigInt(10 ** 18));
 
   return [owner, token, spender];
 }

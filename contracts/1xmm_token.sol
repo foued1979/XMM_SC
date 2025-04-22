@@ -31,17 +31,10 @@ contract OneXMM is ERC20Allocatable, ERC20Exchangeable {
      * @dev Constructor
      * @param symbol_ The symbol of the token
      * @param name_ The name of the token
-     * @param initialSupply_ The initial supply
-     * @param initialOwnerAllocation_ The initial allocation to the owner
      */
-    constructor(string memory symbol_, string memory name_, uint32 initialSupply_, uint32 initialOwnerAllocation_)
-        ERC20Allocatable(msg.sender, initialSupply_, name_, symbol_, 18)
-        ERC20Exchangeable(msg.sender) payable {
-
-        // Owners is allocated with his share of the initial supply
-        uint256 amount = uint256(initialOwnerAllocation_) * (10 ** 18);
-        allocate(msg.sender, amount);
-    }
+    constructor(string memory symbol_, string memory name_)
+        ERC20Allocatable(msg.sender, name_, symbol_, 18)
+        ERC20Exchangeable(msg.sender) payable { }
 
     receive() external payable {
         emit Deposited(msg.sender, msg.value, 0);
@@ -54,7 +47,7 @@ contract OneXMM is ERC20Allocatable, ERC20Exchangeable {
     }
 
     /// @notice Enables a user to deposit ETH and receive Tokens in exchange
-    /// The conversion rate applies at a fixed rate, updated by Owner
+    /// @dev The conversion rate applies at a fixed rate, updated by Owner
     function depositEther() external payable ethDepositIsAllowed isApproved(msg.sender) returns(uint256 amountToken) {
         uint256 amountETH = msg.value;
         if (amountETH == 0) return 0;
@@ -77,15 +70,15 @@ contract OneXMM is ERC20Allocatable, ERC20Exchangeable {
         emit Allocated(msg.sender, amountToken);
     }
 
-    /// @dev Enables owner to send back some tokens to the Token contract
+    /// @notice Enables owner to send back some tokens to the Token contract
     function ownerTransfersBack(uint256 amount) external onlyOwner {
         if (amount > balanceOf(_owner)) revert IERC20Errors.ERC20InsufficientBalance(_owner, balanceOf(_owner), amount);
         _update(_owner, address(this), amount);
     }
 
-    /// @dev Enables a user to sell back an amount of Tokens against ETH
+    /// @notice Enables a user to sell back an amount of Tokens against ETH
     /// if there is enough ETH available, and if the change is authorized.
-    /// Sold-back tokens are automatically burnt.
+    /// @dev Sold-back tokens are automatically burnt.
     /// @param amountToken The amount of tokens to be exchanged
     function sellBack(uint128 amountToken) external ethExchangeIsAllowed {
         if (balanceOf(msg.sender) < uint256(amountToken)) revert IERC20Errors.ERC20InsufficientBalance(msg.sender, balanceOf(msg.sender), amountToken);
@@ -108,9 +101,9 @@ contract OneXMM is ERC20Allocatable, ERC20Exchangeable {
         emit Withdrawn(msg.sender, amountToken);
     }
 
-    /// @dev Enables a user to sell back an amount of Tokens against a preferred token
+    /// @notice Enables a user to sell back an amount of Tokens against a preferred token
     /// if there is enough token available, and if the change is authorized.
-    /// Sold-back tokens are automatically burnt.
+    /// @dev Sold-back tokens are automatically burnt.
     /// @param amountToken The amount of tokens to be exchanged
     /// @param tokenToBeReceived The address of the token to be exchanged for
     function sellBackAgainst(uint128 amountToken, address tokenToBeReceived) external exchangeIsAllowedForToken(tokenToBeReceived) {
@@ -141,8 +134,7 @@ contract OneXMM is ERC20Allocatable, ERC20Exchangeable {
         emit Withdrawn(msg.sender, amountToken);
     }
 
-    /// @dev Enables the Owner to buy back tokens from a user, in exchange of ETH
-    /// and at a specified rate
+    /// @notice Enables the Owner to buy back tokens from a user, in exchange of ETH and at a specified rate
     /// @param from The beneficiary
     /// @param amountToken The amount of tokens
     /// @param rate The conversion rate

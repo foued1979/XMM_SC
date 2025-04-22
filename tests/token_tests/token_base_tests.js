@@ -5,17 +5,23 @@ const { expect } = require('chai');
 const decimalAdjustment = BigInt(10 ** 18);
 const ratePrecision = 10_000n;
 
-async function _deploy() {
+async function deploy() {
+  const [owner, spender] = await ethers.getSigners();
   const contractFactory = await ethers.getContractFactory("OneXMM");
+
+  const token = await contractFactory.deploy("TEST", "Test token");
+
   // Initial supply is 5 mios
+  await token.allocate(token, 5_000_000n * BigInt(10 ** 18));
   // Allocation to owner is 250k
-  return await contractFactory.deploy("TEST", "Test token", 5_000_000, 250_000);
+  await token.allocate(owner, 250_000n * BigInt(10 ** 18));
+
+  return [owner, token, spender];
 }
 
 describe('Test base token functions', function () {
     it('Cannot transfer if locked', async function () {
-      const [owner, spender] = await ethers.getSigners();
-      const token = await loadFixture(_deploy);
+      const [owner, token, spender] = await loadFixture(deploy);
       
       const amount1 = 100n * BigInt(10 ** 18);
       await expect(token.allocate(spender, amount1)).to.emit(token, 'Allocated');
@@ -26,7 +32,7 @@ describe('Test base token functions', function () {
     });
 
     it('Allocation is done properly and is reflected in AllocatedAmount', async function () {
-      const token = await loadFixture(_deploy);
+      const [owner, token, spender] = await loadFixture(deploy);
 
       const ownerAmount = 250_000n * BigInt(10 ** 18);
       const amount1 = 100n * BigInt(10 ** 18);
@@ -43,8 +49,7 @@ describe('Test base token functions', function () {
     });
 
     it('Can allocate to different users', async function() {
-      const [owner, spender] = await ethers.getSigners();
-      const token = await loadFixture(_deploy);
+      const [owner, token, spender] = await loadFixture(deploy);
 
       const amount1 = 200n * BigInt(10 ** 18);
       await expect(token.connect(spender).allocate(spender, amount1)).to.be.rejectedWith("E0");
@@ -61,8 +66,7 @@ describe('Test base token functions', function () {
     });
 
     it('Cannot allocate more than available', async function() {
-      const token = await loadFixture(_deploy);
-      const [ owner, spender ] = await ethers.getSigners();
+      const [owner, token, spender] = await loadFixture(deploy);
 
       const cap = await token.totalSupply();
       const ownerBalance = await token.balanceOf(owner.address);
@@ -80,8 +84,7 @@ describe('Test base token functions', function () {
     });
 
     it('Approve and Allowance work as expected', async function() {
-      const token = await loadFixture(_deploy);
-      const [ owner, spender ] = await ethers.getSigners();
+      const [owner, token, spender] = await loadFixture(deploy);
       await token.unlockTransfers();
   
       const newBalance = 2_500n * BigInt(10 ** 18);
@@ -103,8 +106,7 @@ describe('Test base token functions', function () {
     });
 
     it('Can change ownership', async function() {
-      const token = await loadFixture(_deploy);
-      const [ owner, spender ] = await ethers.getSigners();
+      const [owner, token, spender] = await loadFixture(deploy);
       
       await expect(token.connect(spender).changeOwnership(spender)).to.be.revertedWith("E0");
       expect(await token.changeOwnership(spender)).to.emit("OwnerChanged");
@@ -113,8 +115,7 @@ describe('Test base token functions', function () {
     });
 
     it ('Can mass allocate', async function() {
-      const token = await loadFixture(_deploy);
-      const [ owner, spender ] = await ethers.getSigners();
+      const [owner, token, spender] = await loadFixture(deploy);
 
       const allocateTo = ["0x1234567890123456789012345678901234567890", "0x1234567890123456789012345678901234567891"];
       const wrongAllocateTo = ["0x1234567890123456789012345678901234567890", "0x1234567890123456789012345678901234567891", "0x1234567890123456789012345678901234567892"];
@@ -137,16 +138,17 @@ describe('Test base token functions', function () {
     });
 
     it ('Cannot allocate/transfer to, or approve address 0', async function() {
-      const token = await loadFixture(_deploy);
-      const [ owner, spender ] = await ethers.getSigners();
+      const [owner, token, spender] = await loadFixture(deploy);
 
-      await expect(token.transfer("0x0000000000000000000000000000000000000000", 1_000n * BigInt(10 ** 18))).to.be.revertedWith("Locked");
+      await expect(token.connect(spender).transfer("0x0000000000000000000000000000000000000000", 1_000n * BigInt(10 ** 18))).to.be.revertedWith("Locked");
 
       await token.unlockTransfers();
       
       await expect(token.allocate("0x0000000000000000000000000000000000000000", 1_000n * BigInt(10 ** 18))).to.be.revertedWith("E103");
       await expect(token.transfer("0x0000000000000000000000000000000000000000", 1_000n * BigInt(10 ** 18))).to.be.revertedWithCustomError(token, "ERC20InvalidReceiver");
       await expect(token.transferFrom("0x0000000000000000000000000000000000000000", spender, 1_000n * BigInt(10 ** 18))).to.be.revertedWithCustomError(token, "ERC20InvalidSender");
+      await expect(token.connect(spender).transfer("0x0000000000000000000000000000000000000000", 1_000n * BigInt(10 ** 18))).to.be.revertedWithCustomError(token, "ERC20InvalidReceiver");
+      await expect(token.connect(spender).transferFrom("0x0000000000000000000000000000000000000000", spender, 1_000n * BigInt(10 ** 18))).to.be.revertedWithCustomError(token, "ERC20InvalidSender");
       await expect(token.approve("0x0000000000000000000000000000000000000000", 1_000n * BigInt(10 ** 18))).to.be.revertedWithCustomError(token, "ERC20InvalidSpender");
     });
   });

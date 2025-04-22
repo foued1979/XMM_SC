@@ -6,14 +6,17 @@ const { boolean } = require('hardhat/internal/core/params/argumentTypes');
 const decimalAdjustment = BigInt(10 ** 18);
 
 async function _deploy() {
-  const [owner] = await ethers.getSigners();
-
+  const [owner, spender] = await ethers.getSigners();
   const contractFactory = await ethers.getContractFactory("OneXMM");
-  // Initial supply is 5 mios
-  // Allocation to owner is 250k
-  const token = await contractFactory.deploy("TEST", "Test token", 5_000_000, 250_000);
 
-  return [ owner, token ];
+  const token = await contractFactory.deploy("TEST", "Test token");
+
+  // Initial supply is 5 mios
+  await token.allocate(token, 5_000_000n * BigInt(10 ** 18));
+  // Allocation to owner is 250k
+  await token.allocate(owner, 250_000n * BigInt(10 ** 18));
+
+  return [owner, token, spender];
 }
 
 describe('Test payable functions', function() {
@@ -22,8 +25,7 @@ describe('Test payable functions', function() {
     }
 
     it('Deposit is working properly', async function() {
-      const [ owner, token ] = await loadFixture(_deploy);
-      const [ owner1, spender1 ] = await ethers.getSigners();
+      const [ owner, token, spender1 ] = await loadFixture(_deploy);
 
       var eth = ethers.parseEther("0.5");
       const prevETHBalance = await ethers.provider.getBalance(spender1.address);
@@ -50,8 +52,7 @@ describe('Test payable functions', function() {
     });
 
     it ('Sell-back is working properly', async function() {
-      const [ owner, token ] = await loadFixture(_deploy);
-      const [ owner1, spender1 ] = await ethers.getSigners();
+      const [ owner, token, spender1 ] = await loadFixture(_deploy);
 
       var eth = ethers.parseEther("0.5");
       await token.setEthDepositExchangeRate(30_000_000);
@@ -76,8 +77,7 @@ describe('Test payable functions', function() {
     });
 
     it ('Deposit is limited to available tokens', async function() {
-      const [ owner, token ] = await loadFixture(_deploy);
-      const [ owner1, spender1 ] = await ethers.getSigners();
+      const [ owner, token, spender1 ] = await loadFixture(_deploy);
 
       var eth = ethers.parseEther("2500");
       await token.setEthDepositExchangeRate(30_000_000);
@@ -96,8 +96,7 @@ describe('Test payable functions', function() {
     });
 
     it ('Cannot sell back more than available', async function() {
-      const [ owner, token ] = await loadFixture(_deploy);
-      const [ owner1, spender1 ] = await ethers.getSigners();
+      const [ owner, token, spender1 ] = await loadFixture(_deploy);
 
       var eth = ethers.parseEther("0.5");
       await token.setEthDepositExchangeRate(30_000_000);
